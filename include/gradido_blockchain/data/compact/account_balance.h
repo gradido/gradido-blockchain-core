@@ -11,7 +11,7 @@ extern "C" {
 
 typedef struct grdc_account_balance
 {
-  grdl_unit balance;
+  grdd_unit balance;
   grdc_public_key_index publicKeyIndex;
 } grdc_account_balance;
 

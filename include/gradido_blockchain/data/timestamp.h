@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+struct grdd_timestamp_seconds;
+
 typedef struct grdd_timestamp 
 {
   int64_t seconds;
@@ -26,15 +28,13 @@ static inline bool grdd_timestamp_gt(const grdd_timestamp* t1, const grdd_timest
 static inline bool grdd_timestamp_lt(const grdd_timestamp* t1, const grdd_timestamp* t2) {
   return t1->seconds < t2->seconds || t1->seconds == t2->seconds && t1->nanos < t2->nanos;
 }
-static inline grdd_timestamp grdd_timestamp_sub(const grdd_timestamp* t1, grdd_timestamp* t2) {
-  return (grdd_timestamp){.seconds = t1->seconds - t2->seconds, .nanos = t1->nanos - t2->nanos};
-}
-static inline grdd_timestamp grdd_timestamp_add(const grdd_timestamp* t1, grdd_timestamp* t2) {
-  return (grdd_timestamp){.seconds = t1->seconds + t2->seconds, .nanos = t1->nanos + t2->nanos};
-}
+grdd_timestamp grdd_timestamp_minus(const grdd_timestamp* t1, grdd_timestamp* t2);
+grdd_timestamp grdd_timestamp_plus(const grdd_timestamp* t1, grdd_timestamp* t2);
 static inline grdd_timestamp grdd_timestamp_from_seconds(int64_t seconds) {
   return (grdd_timestamp){.seconds = seconds, .nanos = 0};
 }
+grdd_timestamp grdd_timestamp_from_timestamp_seconds(const grdd_timestamp_seconds* timestamp_seconds);
+
 #ifdef __cplusplus
 }
 #endif

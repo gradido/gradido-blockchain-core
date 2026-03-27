@@ -45,17 +45,17 @@ typedef struct grdc_confirmed_tx
     // common fields for most transactions
     union { // 24 Bytes
       struct {
-        grdl_unit amount; // 8 Bytes
+        grdd_unit amount; // 8 Bytes
         grdc_public_key_index recipientPublicKeyIndex; // 8 Bytes
         uint64_t targetDate; // 8 Bytes
       } creation;
       struct {
-        grdl_unit amount; // 8 Bytes
+        grdd_unit amount; // 8 Bytes
         grdc_public_key_index senderPublicKeyIndex; // 8 Bytes
         grdc_public_key_index recipientPublicKeyIndex; // 8 Bytes
       } transfer; // also used for redeem deferred transfer, and deferredTransferTransactionNr is stored in extra dictionary
       struct {
-        grdl_unit amount; // 8 Bytes
+        grdd_unit amount; // 8 Bytes
         // work only on local, take communityIdIndex from txId
         uint32_t senderPublicKeyIndex; // 4 Bytes
         uint32_t recipientPublicKeyIndex; // 4 Bytes

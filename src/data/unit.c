@@ -1,5 +1,6 @@
-#include "include/gradido_blockchain/data/timestamp.h"
-#include "include/gradido_blockchain/lib/unit.h"
+#include "include/gradido_blockchain/data/duration_seconds.h"
+#include "include/gradido_blockchain/data/timestamp_seconds.h"
+#include "include/gradido_blockchain/data/unit.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -14,27 +15,27 @@ double roundToPrecision(double gdd, uint8_t precision)
 	return round(gdd * factor) / factor;
 }
 
-grdl_unit grdl_unit_from_decimal(double gdd)
+grdd_unit grdd_unit_from_decimal(double gdd)
 {
-  grdl_unit gradidoUnit = {
+  grdd_unit gradidoUnit = {
     (int64_t)(roundToPrecision(gdd, 4) * 10000.0)
   };
   return gradidoUnit;
 }
 
-grdl_unit grdl_unit_from_string(const char* gdd_string)
+grdd_unit grdd_unit_from_string(const char* gdd_string)
 {
-  if (!gdd_string) return (grdl_unit){0};
+  if (!gdd_string) return (grdd_unit){0};
   char* end;
   double gdd_double = strtod(gdd_string, &end);
   if (end == gdd_string || *end != '\0') {
     // invalid string 
-    return (grdl_unit){0};
+    return (grdd_unit){0};
   }
-  return grdl_unit_from_decimal(gdd_double);
+  return grdd_unit_from_decimal(gdd_double);
 }
 
-int grdl_unit_to_string(const grdl_unit* u, char* buffer, size_t bufferSize, uint8_t precision)
+int grdd_unit_to_string(const grdd_unit* u, char* buffer, size_t bufferSize, uint8_t precision)
 {
   if (precision > 4) return 1; // C hat keine Exceptions
 
@@ -59,9 +60,9 @@ int grdl_unit_to_string(const grdl_unit* u, char* buffer, size_t bufferSize, uin
   return bufferSize - written;
 }
 
-grdl_unit grdl_unit_calculate_decay(const grdl_unit* u, int64_t seconds)
+grdd_unit grdd_unit_calculate_decay(const grdd_unit* u, grdd_duration_seconds* duration)
 {
-  if (seconds == 0) return (grdl_unit){u->gradidoCent};
+  if (duration->seconds == 0) return (grdd_unit){u->gradidoCent};
 	
 	// decay for one year is 50%
 	/*
@@ -72,13 +73,13 @@ grdl_unit grdl_unit_calculate_decay(const grdl_unit* u, int64_t seconds)
 	*/
 	int64_t gradidoCent = u->gradidoCent;
 	// optimize version from above
-	if (seconds >= SECONDS_PER_YEAR) {
-		uint64_t times = (uint64_t)(seconds / SECONDS_PER_YEAR);
-		seconds = seconds - times * SECONDS_PER_YEAR;
+	if (duration->seconds >= SECONDS_PER_YEAR) {
+		uint64_t times = (uint64_t)(duration->seconds / SECONDS_PER_YEAR);
+		duration->seconds = duration->seconds - times * SECONDS_PER_YEAR;
 		gradidoCent = u->gradidoCent >> times;
-		if (!seconds) return (grdl_unit){gradidoCent};
+		if (!duration->seconds) return (grdd_unit){gradidoCent};
 	}
-//	*/
+
 	/*!
 	 *  calculate decay factor with compound interest formula converted to q <br>
 	 *  n = (lg Kn - lg K0) / lg q => <br>
@@ -99,26 +100,55 @@ grdl_unit grdl_unit_calculate_decay(const grdl_unit* u, int64_t seconds)
 	 */
 	// https://www.wolframalpha.com/input?i=%28e%5E%28lg%282%29+%2F+31556952%29%29%5Ex&assumption=%7B%22FunClash%22%2C+%22lg%22%7D+-%3E+%7B%22Log%22%7D
 	// from wolframalpha, based on the interest rate formula
-	return (grdl_unit){((int64_t)((double)(gradidoCent) * pow(2.0, (double)((double)(-seconds) / SECONDS_PER_YEAR))))};
+	return (grdd_unit){((int64_t)((double)(gradidoCent) * pow(2.0, (double)((double)(-duration->seconds) / SECONDS_PER_YEAR))))};
 }
 
-bool grdl_unit_calculate_duration_seconds(
+grdd_unit grdd_unit_calculate_compound_interest(const grdd_unit* u, grdd_duration_seconds* duration) {
+  return grdd_unit_calculate_decay(u, duration);
+}
+
+grdd_unit grdd_unit_calculate_compound_interest_timestamp(
+  const grdd_unit* u, 
+  const grdd_timestamp_seconds* startTime, 
+  const grdd_timestamp_seconds* endTime
+) {
+  grdd_duration_seconds duration;
+  if(!grdd_unit_calculate_duration_seconds(startTime, endTime, &duration)) {
+    return (grdd_unit){0};
+  }
+  return grdd_unit_calculate_compound_interest(u, &duration);
+}
+
+
+grdd_unit grdd_unit_calculate_decay_timestamp(
+  const grdd_unit* u, 
+  const grdd_timestamp_seconds* startTime, 
+  const grdd_timestamp_seconds* endTime
+) {
+  grdd_duration_seconds duration;
+  if(!grdd_unit_calculate_duration_seconds(startTime, endTime, &duration)) {
+    return (grdd_unit){0};
+  }
+  return grdd_unit_calculate_decay(u, &duration);
+}
+
+bool grdd_unit_calculate_duration_seconds(
   const grdd_timestamp* startTime, 
   const grdd_timestamp* endTime,
-  int64_t* outSeconds
+  grdd_duration_seconds* outDuration
 ) {
-	if (!outSeconds) {
+	if (!outDuration) {
 		return false;
 	}
-  if(grdd_timestamp_gt(startTime, endTime) {
+  if(grdd_timestamp_gt(startTime, endTime)) {
 		return false;
 	}
 	grdd_timestamp start = grdd_timestamp_gt(startTime, &DECAY_START_TIME) ? *startTime : DECAY_START_TIME;
 	grdd_timestamp end = grdd_timestamp_gt(endTime, &DECAY_START_TIME) ? *endTime : DECAY_START_TIME;
 	if (grdd_timestamp_eq(&start, &end)) {
-		*outSeconds = 0;
+		*outDuration = (grdd_duration_seconds){0};
 		return true;
 	}
-	*outSeconds = grdd_timestamp_sub(&end, &start).seconds;
+	*outDuration = grdd_timestamp_sub(&end, &start);
 	return true;
 }
