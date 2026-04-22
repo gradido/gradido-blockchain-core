@@ -1,7 +1,7 @@
-#include "include/gradido_blockchain/data/timestamp.h"
-#include "include/gradido_blockchain/data/timestamp_seconds.h"
+#include "gradido_blockchain_core/data/timestamp.h"
+#include "gradido_blockchain_core/data/types.h"
 
 grdd_timestamp_seconds grdd_timestamp_seconds_from_timestamp(const grdd_timestamp* timestamp)
 {
-  return (grdd_timestamp_seconds){.seconds = timestamp->seconds};
+  return timestamp->seconds;
 }

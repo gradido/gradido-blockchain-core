@@ -1,14 +1,15 @@
-#ifndef GRADIDO_BLOCKCHAIN_C_DATA_TIMESTAMP_H
-#define GRADIDO_BLOCKCHAIN_C_DATA_TIMESTAMP_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_TIMESTAMP_H
+#define GRADIDO_BLOCKCHAIN_CORE_DATA_TIMESTAMP_H
+
+#include "types.h"
 
 #include <stdbool.h> 
 #include <stdint.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct grdd_timestamp_seconds;
 
 typedef struct grdd_timestamp 
 {
@@ -33,10 +34,10 @@ grdd_timestamp grdd_timestamp_plus(const grdd_timestamp* t1, grdd_timestamp* t2)
 static inline grdd_timestamp grdd_timestamp_from_seconds(int64_t seconds) {
   return (grdd_timestamp){.seconds = seconds, .nanos = 0};
 }
-grdd_timestamp grdd_timestamp_from_timestamp_seconds(const grdd_timestamp_seconds* timestamp_seconds);
+grdd_timestamp grdd_timestamp_from_timestamp_seconds(const grdd_timestamp_seconds timestamp_seconds);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_C_DATA_TIMESTAMP_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_DATA_TIMESTAMP_H

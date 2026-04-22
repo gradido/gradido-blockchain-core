@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "public_key_index.h"
-#include "../../lib/unit.h"
+#include "../unit.h"
 
 #ifdef __cplusplus
 extern "C" {
