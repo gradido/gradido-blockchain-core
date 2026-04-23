@@ -16,9 +16,10 @@ static const grdd_timestamp_seconds DECAY_START_TIME = 1620927991;
 // precalculated decay factor for deterministic decay calculation across platforms, 2^64 / SECONDS_PER_YEAR
 // static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564941ULL; // TypeScript Decimal.js
 static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564940ULL;
+static const uint64_t GROW_FACTOR_PER_SECOND =    405181995575ULL; // for low, and 1 for hi
 
 // precalculated powers of 10 for fast rounding
-static const uint64_t POW10[] = { 1, 10, 100, 1000 };
+static const uint64_t POW10[] = { 1, 10, 100, 1000, 10000 };
 
 static double round_to_precision(double gdd, uint8_t precision)
 {
@@ -196,7 +197,7 @@ int grdd_unit_to_string(char* buffer, size_t bufferSize, grdd_unit value, uint8_
 	// pad with 0
 	if (numberPlacesCount < 5) {
 		size_t paddingCount = 5 - numberPlacesCount;
-		memmove(&buffer[paddingCount + cursor], &buffer[cursor], numberPlacesCount);
+		memmove(&buffer[paddingCount + cursor], &buffer[cursor], numberPlacesCount + 1);
 		memset(&buffer[cursor], '0', paddingCount);
 		cursor += paddingCount;
 	}
@@ -274,7 +275,15 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 
 	R128 factor = { .lo = 0, .hi = 1 };
 	R128 base = { .lo = DECAY_FACTOR_PER_SECOND, .hi = 0 };
+	bool negative = false;
 	uint64_t exp = duration;
+
+	if (duration < 0) {
+		negative = true;
+		exp = -duration;
+		base.lo = GROW_FACTOR_PER_SECOND;
+		base.hi = 1;
+	}
 
 	while (exp > 0) {
 			if ((exp & 1) == 1) {
@@ -288,7 +297,12 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	// Final: balance * factor
 	r128Mul(&gdd128, &gdd128, &factor);
 	r128Round(&gdd128, &gdd128); // round to nearest integer
-	return r128ToInt(&gdd128);
+	grdd_unit decayed = r128ToInt(&gdd128);
+	if (negative && gdd > 0 && decayed < 0) {
+		// sign flip/overflow detected
+		decayed = INT64_MAX;
+	}
+	return decayed;
 }
 
 bool grdd_unit_calculate_duration_seconds(grdd_timestamp_seconds startTime, grdd_timestamp_seconds endTime, grdd_duration_seconds* outSeconds)
