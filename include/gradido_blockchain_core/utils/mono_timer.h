@@ -9,26 +9,25 @@
 extern "C" {
 #endif
 
-typedef struct {
-    uint64_t start;
-} grbn_mono_timer;
+typedef int64_t grdu_mono_timer;
 
 //! need to be called at start if used on windows with multiple threads
 //! \return false if on Windows Query Performance Frequency init failed
-bool grbn_mono_timer_init();
-
+bool grdu_mono_timer_init();
 //! use also for first init
-void grbn_mono_timer_reset(grbn_mono_timer* p);
+void grdu_mono_timer_reset(grdu_mono_timer start);
 
-double grbn_mono_timer_seconds(const grbn_mono_timer* p);
-double grbn_mono_timer_millis(const grbn_mono_timer* p);
-double grbn_mono_timer_micros(const grbn_mono_timer* p);
-uint64_t grbn_mono_timer_nanos(const grbn_mono_timer* p);
+double grdu_mono_timer_seconds(grdu_mono_timer start);
+double grdu_mono_timer_millis(grdu_mono_timer start);
+double grdu_mono_timer_micros(grdu_mono_timer start);
+int64_t grdu_mono_timer_nanos(grdu_mono_timer start);
 
+//! set start to current time and write duration since start to buffer
 //! will write to buffer only if enough space
 //! buffer need to be at least buffer_size (inclusive null terminator)
-//! \return how many character would be written to buffer - inclusive null terminator, if buffer was large enough
-int grbn_mono_timer_string(char* buffer, size_t buffer_size, const grbn_mono_timer* p);
+//! \return how many character would be written to buffer - not counting the terminating null character, if buffer was large enough
+int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer* start);
+
 
 #ifdef __cplusplus
 }

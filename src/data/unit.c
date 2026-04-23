@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/data/unit.h"
+#include "gradido_blockchain_core/utils/converter.h"
 
 #define R128_IMPLEMENTATION
 #include "r128/r128.h"
@@ -13,65 +14,206 @@
 static const grdd_duration_seconds SECONDS_PER_YEAR = 31556952; // seconds in a year in gregorian calender
 static const grdd_timestamp_seconds DECAY_START_TIME = 1620927991;
 // precalculated decay factor for deterministic decay calculation across platforms, 2^64 / SECONDS_PER_YEAR
-//static const uint64_t DECAY_FACTOR_PER_SECOND = 18446743668527564800ULL;
-static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564953ULL;
-// precalculated powers of 10 for fast rounding
-static const uint64_t POW10[] = { 
-	1, 
-	10, 
-	100, 
-	1000, 
-	10000, 
-	100000, 
-	1000000, 
-	10000000, 
-	100000000,
-	1000000000,
-	10000000000,
-	100000000000,
-	1000000000000,
-	10000000000000,
-	100000000000000,
-	1000000000000000,
-	10000000000000000,
-	100000000000000000,
-	1000000000000000000,
-	10000000000000000000ULL
- };
+// static const uint64_t DECAY_FACTOR_PER_SECOND = 18446743668527564800ULL;
+// static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564941ULL; // TypeScript Decimal.js
+static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564940ULL;
 
-void grdd_unit_round(grdd_unit* result, grdd_unit* value, uint8_t precision)
-{	
-	if (precision > 19) {
-		r128Copy(result, value);
-		return;
+
+// precalculated powers of 10 for fast rounding
+static const uint64_t POW10[] = { 1, 10, 100, 1000 };
+
+static double round_to_precision(double gdd, uint8_t precision)
+{
+	if (precision > 4) {
+		precision = 4;
 	}
-	if (precision == 0) {
-		r128Round(result, value);
-		return;
-	}
-	R128 scale_factor;
-	r128FromInt(&scale_factor, POW10[precision]);
-	R128 scaled_value;
-	r128Mul(&scaled_value, value, &scale_factor);
-	R128 rounded_scaled_value;
-	r128Round(&rounded_scaled_value, &scaled_value);
-	r128Div(result, &rounded_scaled_value, &scale_factor);
+
+	double factor = POW10[precision];
+	return round(gdd * factor) / factor;
 }
 
-
-int grdd_unit_to_string(char* buffer, size_t buffer_size, grdd_unit* value, uint8_t precision)
+bool grdd_unit_round_to_precision(grdd_unit* result, grdd_unit value, uint8_t precision)
 {
-	if (precision > 19) precision = 19;
+	if (!result || precision > 4) {
+		return false;
+	}
+	if (precision == 4) {
+		*result = value;
+		return true;
+	}
 
-	R128ToStringFormat options = {
-		.sign = R128ToStringSign_Default,
-		.width = 0,
-		.precision = precision,
-		.zeroPad = 0,
-		.decimal = precision > 0,
-		.leftAlign = 0 // right align
-	};
-	return r128ToStringOpt(buffer, buffer_size, value, &options);	
+	int shift = 4 - precision;
+	uint64_t divisor = POW10[shift];
+
+	// half-up rounding
+	uint64_t half = divisor / 2;
+	uint64_t rounded = 0;
+	uint64_t gdd = value;
+	if (value < 0) {
+		gdd = -value;
+	}
+	rounded = ((gdd + half) / divisor) * divisor;
+	if (rounded > 9223372036854775807u) {
+		return false;
+	}
+	if (value < 0) {
+		*result = -rounded;
+	} else {
+		*result = rounded;
+	}
+	return true;
+}
+
+grdd_unit grdd_unit_from_decimal(double gdd)
+{
+  return (grdd_unit)(round_to_precision(gdd, 4) * 10000.0);
+}
+
+double grdd_unit_to_decimal(grdd_unit u)
+{
+	return (double)u / 10000.0;
+}
+
+bool grdd_unit_from_string(grdd_unit* resultGdd, const char* gdd_string)
+{
+    if (!gdd_string || !resultGdd) return false;
+
+    const char* p = gdd_string;
+    bool negative = false;
+
+    if (*p == '-') {
+			negative = true;
+			++p;
+    }
+
+    // --- integer part ---
+    char* end;
+    int64_t integerPart = strtoll(p, &end, 10);
+    if (end == p && *p != '.') {
+			return false;
+		}
+
+    int64_t fractionalPart = 0;
+    int digits = 0;
+
+    p = end;
+
+    // --- fractional part ---
+    if (*p == '.') {
+        ++p;
+
+        // first 4 digits
+        while (isdigit(*p) && digits < 4) {
+            fractionalPart = fractionalPart * 10 + (*p - '0');
+            ++p;
+            ++digits;
+        }
+
+        // pad with zeros
+        while (digits < 4) {
+            fractionalPart *= 10;
+            ++digits;
+        }
+
+        // --- rounding digit (5th) ---
+        if (isdigit(*p)) {
+            int roundDigit = *p - '0';
+
+            if (roundDigit >= 5) {
+                fractionalPart += 1;
+
+                // handle carry (e.g. 0.99995 -> 1.0000)
+                if (fractionalPart >= 10000) {
+                    fractionalPart = 0;
+                    integerPart += 1;
+                }
+            }
+
+            // skip remaining digits
+            while (isdigit(*p)) ++p;
+        }
+    }
+
+    if (*p != '\0') {
+			return false;
+		}
+		// int64 max:  9,223,372,036,854,775,807
+		// int64 min: -9,223,372,036,854,775,807
+		// int64 max for integer part (without fractional part): 922,337,203,685,476
+    if (integerPart > 922337203685476 || integerPart < -922337203685476) {
+			return false;
+		}
+
+		int64_t result = 0;
+		if (negative) {
+			integerPart *= -1;
+			fractionalPart *= -1;
+		}
+		result = integerPart * 10000 + fractionalPart;
+
+    *resultGdd = result;
+    return true;
+}
+
+int grdd_unit_to_string(char* buffer, size_t bufferSize, grdd_unit value, uint8_t precision)
+{
+	if (!buffer || bufferSize == 0) {
+		return -1;
+	}
+	if (precision > 4) precision = 4;
+
+	grdd_unit rounded = 0;
+	if (!grdd_unit_round_to_precision(&rounded, value, precision)) {
+		return -2;
+	}
+
+	bool negative = rounded < 0;
+
+	size_t cursor = 0;
+
+	if (negative) {
+		rounded *= -1;
+		buffer[cursor++] = '-';
+	}
+	if (!precision) {
+		int64_t integerPart = rounded / 10000;
+		size_t integerPartStringSize = grdu_uint64_to_string_size(integerPart);
+		if (bufferSize < cursor + integerPartStringSize + 1) {
+			return cursor + integerPartStringSize; // return required size without null terminator
+		}
+		cursor += grdu_uint64_to_string_known_string_size(&buffer[cursor], integerPart, integerPartStringSize);
+		return cursor;
+	}
+	size_t numberPlacesCount = grdu_uint64_to_string_size(rounded);
+	if (numberPlacesCount < 5 && bufferSize < cursor + 7) {
+		return cursor + 6; // return required size without null terminator
+	}
+	if (bufferSize < cursor + numberPlacesCount + 2) {
+		return cursor + numberPlacesCount + 1; // return required size without null terminator
+	}
+	size_t stringSize = grdu_uint64_to_string_known_string_size(&buffer[cursor], rounded, numberPlacesCount);
+	if (numberPlacesCount != stringSize) {
+		return -3; // this should never happen, but just in case
+	}
+	// pad with 0
+	if (numberPlacesCount < 5) {
+		size_t paddingCount = 5 - numberPlacesCount;
+		memmove(&buffer[paddingCount + cursor], &buffer[cursor], numberPlacesCount);
+		memset(&buffer[cursor], '0', paddingCount);
+		cursor += paddingCount;
+	}
+	cursor += numberPlacesCount;
+	// make room for .
+	memmove(&buffer[cursor - 3], &buffer[cursor - 4], 5);
+	cursor++;
+	buffer[cursor - 5] = '.';
+
+	if (precision != 4) {
+		cursor -= 4 - precision;
+		buffer[cursor] = '\0';
+	}
+
+	return cursor;
 }
 
 grdd_timestamp_seconds grdd_unit_decay_start_time()
@@ -79,13 +221,12 @@ grdd_timestamp_seconds grdd_unit_decay_start_time()
 	return DECAY_START_TIME;
 }
 
-void grdd_unit_calculate_decay(grdd_unit* result, grdd_unit* value, grdd_duration_seconds duration)
+grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
 {
   if (duration == 0) {
-		r128Copy(result, value);
-		return;
+		return gdd;
 	}
-	
+
 	// decay for one year is 50%
 	/*
 	* while (seconds >= SECONDS_PER_YEAR) {
@@ -93,24 +234,22 @@ void grdd_unit_calculate_decay(grdd_unit* result, grdd_unit* value, grdd_duratio
 		seconds -= SECONDS_PER_YEAR;
 	}
 	*/
-	grdd_unit gradido_cent;
-	
+	grdd_unit gdd_temp;
+
 	// optimizing with bit shift for whole years
 	if (duration >= SECONDS_PER_YEAR) {
 		uint64_t times = (uint64_t)(duration / SECONDS_PER_YEAR);
 		if (times > 63) {
 				// after more than 63 years, all gradidos are decayed
-				r128FromInt(result, 0);
-				return;
+				return 0;
 		}
 		duration = duration - times * SECONDS_PER_YEAR;
-		r128Shr(&gradido_cent, value, times);
+		gdd_temp =  gdd >> times; // equivalent to gdd / (2^times)
 		if (!duration) {
-			r128Copy(result, &gradido_cent);
-			return;
+			return gdd_temp;
 		}
 	} else {
-		r128Copy(&gradido_cent, value);
+		gdd_temp = gdd;
 	}
 
 	/*!
@@ -143,12 +282,15 @@ void grdd_unit_calculate_decay(grdd_unit* result, grdd_unit* value, grdd_duratio
 			if ((exp & 1) == 1) {
 					r128Mul(&factor, &factor, &base);  // factor *= base
 			}
-			r128Mul(&base, &base, &base);        // base *= base  
+			r128Mul(&base, &base, &base);        // base *= base
 			exp >>= 1;
 	}
-	
+	R128 gdd128;
+	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
-	r128Mul(result, &gradido_cent, &factor);
+	r128Mul(&gdd128, &gdd128, &factor);
+	r128Round(&gdd128, &gdd128); // round to nearest integer
+	return r128ToInt(&gdd128);
 }
 
 bool grdd_unit_calculate_duration_seconds(grdd_timestamp_seconds startTime, grdd_timestamp_seconds endTime, grdd_duration_seconds* outSeconds)

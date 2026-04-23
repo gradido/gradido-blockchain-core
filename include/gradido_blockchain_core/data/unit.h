@@ -13,42 +13,68 @@
 extern "C" {
 #endif
 
-typedef R128 grdd_unit;
+typedef int64_t grdd_unit;
 
- /**
+/**
  * @brief Rounds a fixed-point grdd_unit value to a specified decimal precision.
+ *
+ * This function performs deterministic HALF-UP rounding using integer arithmetic.
+ * The input value is assumed to use a fixed scale of 4 decimal places.
+ *
+ * Rounding is applied by reducing the number of fractional digits to the
+ * requested precision (0–4). Values are rounded away from zero at the midpoint.
+ *
+ * The implementation avoids floating-point arithmetic entirely, ensuring
+ * reproducible and platform-independent results, which is essential for
+ * financial or consensus-critical calculations.
+ *
+ * @param[in]  value
+ *   The input value in fixed-point representation (scaled by 10^4).
+ *
+ * @param[in]  precision
+ *   Target number of decimal places (0–3). 4 will return the value as is and > 4 will return false.
  *
  * @param[out] result
  *   Pointer to store the rounded result. Must not be NULL.
- * 
- * @param[in]  value
- *   The input value in fixed-point representation Q64,64
- * 
- * @param[in]  precision
- *   Target number of decimal places. *
+ *
+ * @return
+ *   true  - rounding succeeded
+ *   false - result pointer is NULL, precision out of range, or result would overflow int64_t
+ *           (< -922337203685476 or > 922337203685476)
  */
-void grdd_unit_round(grdd_unit* result, grdd_unit* value, uint8_t precision);
+bool grdd_unit_round_to_precision(grdd_unit* result, grdd_unit value, uint8_t precision);
 
-inline void grdd_unit_from_decimal(grdd_unit* result, double gdd) {
-  r128FromFloat(result, gdd);
-}
-inline double grdd_unit_to_decimal(grdd_unit* value) {
-  return r128ToFloat(value);
-}
+grdd_unit grdd_unit_from_decimal(double gdd);
+double grdd_unit_to_decimal(grdd_unit value);
 
-inline void grdd_unit_from_string(grdd_unit* result, const char* gdd_string, char **endptr) {
-  r128FromString(result, gdd_string, endptr);
-}
-
-// flip sign
-inline void grdd_unit_negate(grdd_unit* result, grdd_unit* value) {
-  r128Neg(result, value);
-}
-
-//! \return 0 for equal, 1 = a > b and -1 = a < b
-inline int grdd_unit_compare(grdd_unit* a, grdd_unit* b) {
-  return r128Cmp(a, b);
-}
+/**
+ * @brief Parses a decimal string into a fixed-point grdd_unit (scaled by 10,000)
+ *        using integer arithmetic with explicit HALF-UP rounding.
+ *
+ * This function is intentionally implemented without using floating-point
+ * parsing (e.g. strtod) to guarantee deterministic and precise results.
+ *
+ * Floating-point types cannot exactly represent most decimal fractions,
+ * which may introduce rounding errors. In financial or consensus-critical
+ * systems, even the smallest deviation (0.0001 GDD) is unacceptable.
+ *
+ * Instead, this function performs controlled HALF-UP rounding at the 5th
+ * decimal place and directly converts the value into the internal fixed-point
+ * representation.
+ *
+ * @param[in]  gdd_string
+ *   Null-terminated decimal string to parse.
+ *
+ * @param[out] resultGdd
+ *   Output pointer. If not NULL and parsing succeeds, the parsed
+ *   value (in GDD cents) will be written here.
+ *
+ * @return
+ *   true  - parsing succeeded
+ *   false - input or output is NULL, invalid format, or integer part out of range
+ *           (< -922337203685476 or > 922337203685476)
+ */
+bool grdd_unit_from_string(grdd_unit* resultGdd, const char* gdd_string);
 
 grdd_timestamp_seconds grdd_unit_decay_start_time();
 
@@ -60,49 +86,35 @@ bool grdd_unit_calculate_duration_seconds(grdd_timestamp_seconds startTime, grdd
  * @brief Converts a fixed-point grdd_unit value to its string representation.
  *
  * This function formats a grdd_unit value (scaled by 10^4) into a human-readable
- * decimal string with the specified precision (0–4 fractional digits).
- *
- * The value is first rounded using HALF-UP rounding to the requested precision.
- * If the requested precision is greater than 19, it is clamped to 19.
+ * decimal string with the specified precision (0–4 fractional digits). Rounded.
  *
  * The resulting string:
  * - Includes a leading '-' sign for negative values
  * - Uses a '.' as decimal separator if precision > 0
  * - Omits the fractional part entirely if precision == 0
  *
- * The conversion is performed using integer arithmetic only, ensuring
- * deterministic and platform-independent results.
- *
- * @param[in]  u
- *   The input value in fixed-point representation (scaled by 10^4).
- *
  * @param[out] buffer
  *   Destination buffer to store the resulting null-terminated string.
- *   The caller must ensure that the buffer is large enough. Will write at most 42 bytes (including NUL) to dst.
+ *   The caller must ensure that the buffer is large enough. Maximal possible size should be 22 characters.
+ *
+ * @param[in] bufferSize
+ *   The size of the destination buffer in characters.
+ *
+ * @param[in] value
+ *   The input value in fixed-point representation (scaled by 10^4).
  *
  * @param[in]  precision
- *   Number of digits after the decimal point (0–19). Values greater than 19
- *   are clamped to 19.
+ *   Number of digits after the decimal point (0–4). Values greater than 4
+ *   are clamped to 4.
  *
  * @return
  *   >= 0 - number of characters written (excluding null terminator)
- *   -1   - rounding failed (e.g. due to overflow)
+ *   -1   - invalid buffer or buffer size
+ *   -2   - invalid precision or rounding error
  */
-int grdd_unit_to_string(char* buffer, size_t buffer_size, grdd_unit* value, uint8_t precision);
+int grdd_unit_to_string(char* buffer, size_t bufferSize, grdd_unit value, uint8_t precision);
 
-void grdd_unit_calculate_decay(grdd_unit* result, grdd_unit* value, grdd_duration_seconds duration);
-
-inline void grdd_unit_add(grdd_unit* result, grdd_unit* a, grdd_unit* b) {
-  r128Add(result, a, b);
-}
-
-inline void grdd_unit_subtract(grdd_unit* result, grdd_unit* a, grdd_unit* b) {
-  r128Sub(result, a, b);
-}
-
-inline void grdd_unit_multiplicate(grdd_unit* result, grdd_unit* a, grdd_unit* b) {
-  r128Mul(result, a, b);
-}
+grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration);
 
 #ifdef __cplusplus
 }
