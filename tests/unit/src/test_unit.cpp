@@ -30,6 +30,36 @@ TEST(TestUnit, fromToString)
 }
 
 
+TEST(GradidoUnitTest, TestWithManyDifferentDuration)
+{
+  // 2^(x/31556952)
+  // calculate for every 32. second until two years are full
+  grdd_unit prevValue = 0;
+  grdd_unit prevDistance = 0;
+  for (int i = 1; i < 31556952 * 2; i += 32) {
+    grdd_unit decayed = grdd_unit_calculate_decay(100000000, i);
+    if (prevValue) {
+      ASSERT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
+      auto distance = prevValue - decayed;
+      if (prevDistance) {
+        ASSERT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
+      }
+      prevDistance = distance;
+    }
+    prevValue = decayed;
+  }
+}
+
+TEST(GradidoUnitTest, TestReverseDecay)
+{
+  const grdd_unit startValue = 1000000;
+  for (int i = 1; i < 31556952 * 2; i += 32) {
+    auto valueWithDecay = grdd_unit_calculate_decay(startValue, -i);
+    auto decay = grdd_unit_calculate_decay(valueWithDecay, i);
+    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1);
+  }
+}
+
 TEST(GradidoUnitTest, toString_AllCases)
 {
   constexpr int bufferSize = 32;
