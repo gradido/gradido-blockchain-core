@@ -53,7 +53,7 @@ bool grdd_unit_round_to_precision(grdd_unit* result, grdd_unit value, uint8_t pr
 		gdd = -value;
 	}
 	rounded = ((gdd + half) / divisor) * divisor;
-	if (rounded > 9223372036854775807u) {
+	if (rounded > INT64_MAX) {
 		return false;
 	}
 	if (value < 0) {

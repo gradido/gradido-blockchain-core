@@ -12,10 +12,10 @@ size_t grdu_uint64_to_string_size(uint64_t value)
     1000000000000000000, 10000000000000000000u
   };
   int i = 0;
-  while (value >= powers[i] && i < 19) {
+  while (value >= powers[i] && i < 18) {
     ++i;
   }
-  return i;
+  return i + 1;
 }
 
 size_t grdu_uint64_to_string_known_string_size(char* buffer, uint64_t value, size_t stringSize)
@@ -78,12 +78,14 @@ size_t grdu_uint64_to_string_known_string_size(char* buffer, uint64_t value, siz
 
 size_t grdu_uint64_to_string(char* buffer, size_t bufferSize, uint64_t value)
 {
-  grdu_uint64_to_string_size(value);
   size_t requiredSize = grdu_uint64_to_string_size(value);
   if (bufferSize < requiredSize + 1) {
+    // better safe then sorry
+    if (bufferSize) {
+      buffer[0] = '\0';
+    }
     return requiredSize; // return required size without null terminator
   }
   return grdu_uint64_to_string_known_string_size(buffer, value, requiredSize);
 }
-
 

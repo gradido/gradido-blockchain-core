@@ -22,6 +22,9 @@ target_link_libraries(test_unit gradido_blockchain_core GTest::gtest_main)
 add_executable(test_duration src/test_duration.cpp)
 target_link_libraries(test_duration gradido_blockchain_core GTest::gtest_main)
 
+add_executable(test_converter src/test_converter.cpp)
+target_link_libraries(test_converter gradido_blockchain_core GTest::gtest_main)
+
 enable_testing()
 
 include(GoogleTest)
@@ -29,4 +32,5 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   message(STATUS "Enable test_unit tests")
   add_test(NAME test_unit COMMAND test_unit)
   add_test(NAME test_duration COMMAND test_duration)
+  add_test(NAME test_converter COMMAND test_converter)
 endif()

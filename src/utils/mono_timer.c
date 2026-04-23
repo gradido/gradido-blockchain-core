@@ -16,7 +16,7 @@ static LARGE_INTEGER freq = { .QuadPart = 0 };
 static int64_t get_time_ns()
 {
     if (freq.QuadPart == 0) {
-        grbn_mono_timer_init();
+      grdu_mono_timer_init();
     }
 
     LARGE_INTEGER counter;
@@ -50,30 +50,28 @@ bool grdu_mono_timer_init()
     return true;
 }
 
-void grdu_mono_timer_reset(grdu_mono_timer start) {
-    start = get_time_ns();
+void grdu_mono_timer_reset(grdu_mono_timer* start) {
+    *start = get_time_ns();
 }
 
-int64_t grdu_mono_timer_nanos(grdu_mono_timer start) {
+int64_t grdu_mono_timer_nanos(grdu_mono_timer* start) {
     int64_t current = get_time_ns();
-    return current - start;
-}
-
-double grdu_mono_timer_micros(grdu_mono_timer start) {
-    return grdu_mono_timer_nanos(start) / 1e3;
-}
-
-double grdu_mono_timer_millis(grdu_mono_timer start) {
-    return grdu_mono_timer_nanos(start) / 1e6;
-}
-
-double grdu_mono_timer_seconds(grdu_mono_timer start) {
-    return grdu_mono_timer_nanos(start) / 1e9;
-}
-int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer* start)
-{
-    int64_t current = get_time_ns();
-    grdu_duration diff = current - *start;
+    int64_t diff = current - *start;
     *start = current;
-    return grdu_duration_string(buffer, buffer_size, diff, 4);
+    return diff;
+}
+
+double grdu_mono_timer_micros(grdu_mono_timer* start) {
+    return (double)grdu_mono_timer_nanos(start) / 1e3;
+}
+
+double grdu_mono_timer_millis(grdu_mono_timer* start) {
+    return (double)grdu_mono_timer_nanos(start) / 1e6;
+}
+
+double grdu_mono_timer_seconds(grdu_mono_timer* start) {
+    return (double)grdu_mono_timer_nanos(start) / 1e9;
+}
+int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer* start) {
+    return grdu_duration_string(buffer, buffer_size, grdu_mono_timer_nanos(start), 4);
 }

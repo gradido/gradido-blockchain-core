@@ -15,7 +15,6 @@ typedef int64_t grdu_duration;
 //! buffer need to be at least buffer_size (inclusive null terminator)
 //! \return how many character would be written to buffer - not counting the terminating null character, if buffer was large enough
 int grdu_duration_string(char* buffer, size_t buffer_size, grdu_duration duration, uint8_t precision);
-int grdu_duration_string_simple(char* buffer, size_t buffer_size, grdu_duration duration);
 
 #ifdef __cplusplus
 }

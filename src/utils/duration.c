@@ -47,29 +47,3 @@ int grdu_duration_string(char* buffer, size_t buffer_size, grdu_duration duratio
     memcpy(buffer + written, suffix, suffix_length);
     return written + suffix_length;
 }
-
-int grdu_duration_string_simple(char* buffer, size_t buffer_size, grdu_duration duration)
-{
-    uint64_t ns = (uint64_t)duration;
-    if (ns < 1000ULL) {
-        return snprintf(buffer, buffer_size, "%llu ns", (unsigned long long)ns);
-    }
-    else if (ns < 1000000ULL) {
-        return snprintf(buffer, buffer_size, "%.3f us", ns / 1000.0);
-    }
-    else if (ns < 1000000000ULL) {
-        return snprintf(buffer, buffer_size, "%.3f ms", ns / 1000000.0);
-    }
-    else if (ns < 60ULL * 1000000000ULL) {
-        return snprintf(buffer, buffer_size, "%.3f s", ns / 1000000000.0);
-    }
-    else if (ns < 60ULL * 60ULL * 1000000000ULL) {
-        return snprintf(buffer, buffer_size, "%.3f m", ns / (60.0 * 1000000000.0));
-    }
-    else if (ns < 24ULL * 60ULL * 60ULL * 1000000000ULL) {
-        return snprintf(buffer, buffer_size, "%.3f h", ns / (3600.0 * 1000000000.0));
-    }
-    else {
-        return snprintf(buffer, buffer_size, "%.3f d", ns / (86400.0 * 1000000000.0));
-    }
-}

@@ -15,12 +15,12 @@ typedef int64_t grdu_mono_timer;
 //! \return false if on Windows Query Performance Frequency init failed
 bool grdu_mono_timer_init();
 //! use also for first init
-void grdu_mono_timer_reset(grdu_mono_timer start);
+void grdu_mono_timer_reset(grdu_mono_timer* start);
 
-double grdu_mono_timer_seconds(grdu_mono_timer start);
-double grdu_mono_timer_millis(grdu_mono_timer start);
-double grdu_mono_timer_micros(grdu_mono_timer start);
-int64_t grdu_mono_timer_nanos(grdu_mono_timer start);
+double grdu_mono_timer_seconds(grdu_mono_timer* start);
+double grdu_mono_timer_millis(grdu_mono_timer* start);
+double grdu_mono_timer_micros(grdu_mono_timer* start);
+int64_t grdu_mono_timer_nanos(grdu_mono_timer* start);
 
 //! set start to current time and write duration since start to buffer
 //! will write to buffer only if enough space
