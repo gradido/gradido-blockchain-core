@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-typedef uint64_t grdd_timestamp_seconds;
+typedef int64_t grdd_timestamp_seconds;
 typedef int64_t grdd_duration_seconds;
 
 

@@ -14,10 +14,8 @@
 static const grdd_duration_seconds SECONDS_PER_YEAR = 31556952; // seconds in a year in gregorian calender
 static const grdd_timestamp_seconds DECAY_START_TIME = 1620927991;
 // precalculated decay factor for deterministic decay calculation across platforms, 2^64 / SECONDS_PER_YEAR
-// static const uint64_t DECAY_FACTOR_PER_SECOND = 18446743668527564800ULL;
 // static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564941ULL; // TypeScript Decimal.js
 static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564940ULL;
-
 
 // precalculated powers of 10 for fast rounding
 static const uint64_t POW10[] = { 1, 10, 100, 1000 };
