@@ -16,7 +16,7 @@ static LARGE_INTEGER freq = { .QuadPart = 0 };
 static int64_t get_time_ns()
 {
     if (freq.QuadPart == 0) {
-      grdu_mono_timer_init();
+        grdu_mono_timer_init();
     }
 
     LARGE_INTEGER counter;

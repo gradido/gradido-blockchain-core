@@ -20,7 +20,7 @@ TEST(Duration, Milliseconds)
     char buffer[10];
     grdu_duration_string(buffer, sizeof(buffer), (grdu_duration)1500000LL, 3);
     EXPECT_STREQ(buffer, "1.500 ms");
-} 
+}
 
 TEST(Duration, Seconds)
 {
@@ -52,4 +52,12 @@ TEST(Duration, Days)
     grdu_duration ns = 36ULL * 3600ULL * 1000000000ULL; // 36 hours -> 1.5 days
     grdu_duration_string(buffer, sizeof(buffer), ns, 1);
     EXPECT_STREQ(buffer, "1.5 d");
+}
+
+TEST(Duration, DaysMoreDecimal)
+{
+    char buffer[25];
+    grdu_duration ns = 36ULL * 3600ULL * 1500700030ULL; // 36 hours -> 1.5 days
+    grdu_duration_string(buffer, sizeof(buffer), ns, 10);
+    EXPECT_STREQ(buffer, "2.2510500449 d");
 }

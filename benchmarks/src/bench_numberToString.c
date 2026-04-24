@@ -92,14 +92,14 @@ static void test_r128_round(int stepCount)
   r128FromInt(&div, 100);
 
   for (int i = 0; i < stepCount; ++i) {
-    v.hi = getNextTestValue();  
+    v.hi = getNextTestValue();
     r128Div(&v, &v, &div);
     r128Round(&v, &v);
     r128Mul(&v, &v, &div);
   }
 }
 
-static void prepare_test_data() 
+static void prepare_test_data()
 {
   srand(12812);
   for (int i = 0; i < TEST_VALUES_COUNT; ++i) {
@@ -137,11 +137,11 @@ int main(void)
   bench_step(test_snprintf_integer, stepCount, "snprintf integer");
   bench_step(test_lr_algo_integer, stepCount, "lr algo integer");
   bench_step(test_r128_integer, stepCount, "r128 integer");
-  bench_step(test_unit_fixed, stepCount, "grdd unit fixed point integer");  
+  bench_step(test_unit_fixed, stepCount, "grdd unit fixed point integer");
   bench_step(test_duration_to_string, stepCount, "duration to string r128");
   bench_step(test_unit_round, stepCount, "unit round");
-  bench_step(test_r128_round, stepCount, "r128 round");  
-  
+  bench_step(test_r128_round, stepCount, "r128 round");
+
   grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, &timeUsed);
   printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
 
