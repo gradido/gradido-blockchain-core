@@ -5,4 +5,7 @@ project(GradidoBlockchainCoreBenchmarks C)
 # one binary per unit
 add_executable(bench_numberToString src/bench_numberToString.c)
 target_link_libraries(bench_numberToString gradido_blockchain_core)
+if(NOT WIN32)
+  target_link_libraries(bench_numberToString m)
+endif()
 

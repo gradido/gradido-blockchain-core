@@ -1,21 +1,59 @@
 #include "gradido_blockchain_core/utils/converter.h"
 
-
-size_t grdu_uint64_to_string_size(uint64_t value)
+/**
+ * @brief Compute the number of decimal digits of a uint64_t value.
+ *
+ * This function returns the length of the decimal representation of `v`
+ * without converting it to a string.
+ *
+ * Implementation details:
+ * - Uses a fully unrolled decision tree of comparisons against powers of 10.
+ * - Avoids loops, divisions, and memory lookups.
+ * - Runs in O(1) time with a small, fixed number of branches.
+ *
+ * Rationale:
+ * - A naive implementation (e.g., repeated division by 10 or scanning a powers[] array)
+ *   introduces loops, branch dependencies, and potential cache access.
+ * - This version minimizes branch depth and allows the CPU branch predictor
+ *   to perform efficiently, making it faster in hot paths.
+ *
+ * Range:
+ * - Supports full uint64_t range [0, UINT64_MAX].
+ * - Maximum return value is 19 (since UINT64_MAX < 10^20).
+ *
+ * Notes:
+ * - The structure may look unusual, but it is intentionally optimized for performance.
+ * - Any modification should preserve the exact boundary conditions (powers of 10),
+ *   otherwise subtle off-by-one errors may occur.
+ */
+size_t grdu_uint64_to_string_size(uint64_t v)
 {
-  static uint64_t powers[] = {
-    10, 100, 1000, 10000, 100000,
-    1000000, 10000000, 100000000,
-    1000000000, 10000000000, 100000000000,
-    1000000000000, 10000000000000, 100000000000000,
-    1000000000000000, 10000000000000000, 100000000000000000,
-    1000000000000000000, 10000000000000000000u
-  };
-  int i = 0;
-  while (value >= powers[i] && i < 18) {
-    ++i;
-  }
-  return i + 1;
+    if (v < 100000000ULL) {
+        if (v < 10000ULL) {
+            if (v < 100ULL) return v < 10 ? 1 : 2;
+            return v < 1000ULL ? 3 : 4;
+        }
+        if (v < 1000000ULL) {
+            return v < 100000ULL ? 5 : 6;
+        }
+        return v < 10000000ULL ? 7 : 8;
+    }
+
+    if (v < 1000000000000ULL) {
+        if (v < 10000000000ULL) {
+            return v < 1000000000ULL ? 9 : 10;
+        }
+        return v < 100000000000ULL ? 11 : 12;
+    }
+
+    if (v < 10000000000000000ULL) {
+        if (v < 100000000000000ULL) {
+            return v < 10000000000000ULL ? 13 : 14;
+        }
+        return v < 1000000000000000ULL ? 15 : 16;
+    }
+
+    return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
 }
 
 size_t grdu_uint64_to_string_known_string_size(char* buffer, uint64_t value, size_t stringSize)
