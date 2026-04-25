@@ -1,33 +1,133 @@
 # AGENTS.md – Gradido Blockchain Core
 
-## Commenting Guidelines for AI Agents
+## C Modules (Doxygen)
 
-This document defines the expected style and tone for all code comments in the Gradido Blockchain Core project. When generating, editing, or reviewing comments – especially Doxygen blocks for public functions – follow the rules below.
-
-### General Tone (Applicable to All Functions)
-
-- **Precise and calm**: State what the function does, its parameters, return values, and edge cases. No hype, no drama.
-- **Lightly poetic, never missionizing**: A gentle image or rhythm is welcome (“every bit lands exactly where it should”, “no sneaky reallocations here”). Avoid moral judgments (“should”, “must”, “good”, “fair”, “nourish all participants”).
-- **No you‑address**: Write “the value decays” not “you should see your value decay”.
-- **Technical details are mandatory**: Fixed‑point scaling (10^4), R128 usage, overflow behavior, precision limits, buffer sizes – all must be clearly stated.
-- **Every `@whisper` is required**: End some Doxygen comment with a short, poetic one‑liner. No period at the end. Keep it subtle, almost like a breath.
-
-### Standard Comment Structure (for most functions)
+- Every public C header MUST define exactly one module using `@defgroup`.
+- The module MUST wrap the API using `@{` … `@}`.
 
 ```c
-/**
- * @brief One-line summary.
- *
- * A few sentences (1–3 paragraphs) explaining what the function does,
- * how it handles edge cases, and any relevant implementation choices.
- *
- * @param[in/out] name   Description.
- * @return               Exact meaning of return values (e.g., number of bytes,
- *                       true/false, error codes).
- * @note (optional)      Important but not critical detail.
- * @whisper A quiet poetic line.
- */
+/** @defgroup grdd_unit grdd_unit
+  *  @ingroup data
+  *  @brief Fixed-point GDD (scale 10^4)
+  *  @{
+  */
+
+// API here
+
+/** @} */
 ```
+
+- Modules MUST belong to a parent via `@ingroup` with there folder name (`data`, `utils`, etc).
+- If the parent does not exist, DEFINE it once:
+
+```c
+/** @defgroup data Primary Data Structures */
+```
+
+----------
+
+### Rules
+
+- One module per header
+- All public API must be inside the module block
+- Use flat, stable identifiers (`grdd_unit`)
+
+----------
+
+### Goal
+
+Ensure all APIs appear in Doxygen “Modules” with a clear hierarchy.
+
+## Commenting Guidelines for AI Agents, Poetic Precision – Dual-Layer Commenting Standard
+
+## Core Model
+
+All comments consist of two aligned layers:
+
+### 1. Technical Layer (Ground Truth)
+
+Hard, verifiable specification.
+
+Must include:
+
+- parameters, types, constraints
+- scaling rules (e.g. fixed-point 10^4)
+- edge cases
+- return behavior
+- overflow / limits
+- deterministic rules
+
+Rules:
+
+- no ambiguity
+- no metaphor instead of facts
+- fully sufficient for implementation without poetic layer
+
+----------
+
+### 2. Semantic Layer (Poetic Precision)
+
+Describes system behavior as **natural process perception**.
+
+Allowed:
+
+- flow, cycle, rhythm, transition
+- dissolve, emerge, settle, converge
+- stream, season, tide, growth, decay
+- backward projection / forward preparation
+
+Constraints:
+
+- must not change technical meaning
+- must not introduce moral framing
+- must not replace constraints with imagery
+- must stay fact-consistent
+
+Purpose:
+
+- reduce cognitive load
+- improve conceptual continuity
+- express system behavior as continuous process
+
+----------
+
+## Forbidden Transformations
+
+Do NOT convert:
+
+- constraints → metaphors only
+- limits → value judgments
+- edge cases → poetic ambiguity
+- precision → narrative softness
+
+----------
+
+## Writing Principle
+
+Each comment is:
+
+> deterministic logic + natural process description
+
+Never:
+
+- poetry instead of specification
+- specification without semantic flow
+
+----------
+
+## Internal Objective
+
+Increase:
+
+- readability of complex systems
+- continuity of mental model
+- semantic coherence across codebases
+
+Without reducing:
+
+- precision
+- determinism
+- auditability
 
 ## The `@whisper` Tag – Optional Poetic Signature
 
@@ -57,113 +157,57 @@ The `@whisper` is an optional, poetic one‑liner at the end of a Doxygen commen
 - **Never delete** an existing `@whisper` unless it is completely unrelated to the current function’s behavior.
 - **Updating** is allowed only when the function itself has changed so much that the old whisper no longer fits. In that case, rewrite it to match the new purpose while preserving the poetic tone.
 
-### Examples
+### Respect Existing `@whisper` Lines
 
-**Good (poetic description):**
+- **Never delete** an existing `@whisper` unless it has become completely unrelated to the function’s current behavior.
+- **Updating** is allowed only when the function itself has changed so much that the old whisper no longer fits. In that case, rewrite it to match the new purpose while preserving the poetic tone.
+- Do not change a `@whisper` just for stylistic preference. If it works, let it be.
 
-```c
-/**
- * @whisper Value likes to travel. Let it wander a little.
- */
-```
+### Standard Comment Structure (Flexible)
 
-**Good (famous quote, attributed):**
+The structure is a suggestion, not a straitjacket. Adapt length and order as needed.
 
 ```c
 /**
- * @whisper “The only thing that is constant is change.” – Heraclitus
+ * @brief One-line summary (poetic but clear).
+ *
+ * A few sentences explaining what the function does. Use calm, image‑rich
+ * language. Mention technical details naturally within the flow.
+ *
+ * @param[in/out] name   Description.
+ * @return               Exact return values (e.g., true/false, number of bytes).
+ * @note (optional)      Important constraints.
+ * @whisper (optional)   Short poetic line, no period.
  */
 ```
 
-**Avoid (moralizing):**
+### Core Functions – Reference to Gradido Philosophy Allowed
 
-```c
-/**
- * @whisper You must not hoard value, it is wrong.
- */
-```
+The following functions implement Gradido’s foundational concepts. For these only, comments may explicitly mention the relevant natural laws, pillars, or the triple good.
 
-**Avoid (loud, dramatic):**
+#### Which Concepts Exist?
 
-```c
-/**
- * @whisper Value decays!!! Forever!!!
- */
-```
+- **Three Natural Laws**: Symbiosis & Cooperation, Cycle of Becoming and Passing Away (decay), Support of the Living.
+- **Three Pillars**: Active Basic Income, State Income, Equalisation and Environment Fund.
+- **Triple Good**: Individual, Community, and Whole wellbeing.
 
-### Core Functions – Gradido's Foundational Concepts
+When documenting a core function (e.g., `grdd_unit_calculate_decay`), you are free to say: *“Gradido’s second natural law – the cycle of becoming and passing away – guides this function.”* This signals to readers that they are looking at a central piece of the economic model.
 
-The following functions implement Gradido's core economic principles. When documenting these functions, comments may explicitly reference the relevant concepts below. This signals to readers that they are looking at a foundational piece of the economic model.
+**Even for core functions:** Do not preach. Describe the law, do not praise it.
 
-#### Gradido's Three Natural Laws
+### What to Avoid (Short List)
 
-| Law | Description |
-| --- | --- |
-| **1. Symbiosis & Cooperation (Plus‑Sum Principle)** | Cooperation creates more value than competition. The system encourages mutual support. |
-| **2. Cycle of Becoming and Passing Away (Decay)** | Everything in nature flows, decays, and renews. Value follows the same rhythm – stored value softens over time, making space for new contribution. |
-| **3. Support of the Living (Vitality)** | Money should serve life, not accumulate as dead capital. The system prioritises active participation and environmental regeneration. |
-
-#### The Three Pillars of Monthly Money Creation
-
-Each month, 3,000 GDD are created per person and distributed as:
-
-| Pillar | Amount | Purpose |
-| --- | --- | --- |
-| **Active Basic Income** | 1,000 GDD | For common‑good‑oriented activities (e.g., volunteering, care work). |
-| **State Income / National Budget** | 1,000 GDD | For public tasks without traditional taxes. |
-| **Equalisation and Environment Fund** | 1,000 GDD | For repairing environmental damage and restoring nature. |
-
-#### The Triple Good (Triple Wellbeing) – Ethical Guideline
-
-Every action must simultaneously serve:
-
-- **Individual wellbeing** – personal flourishing and dignity.
-- **Community wellbeing** – shared prosperity and cooperation.
-- **Whole wellbeing** – the health of nature and the ecosystem.
-
-#### Commenting Rules for Core Functions
-
-- You **may** reference the relevant natural law, pillar, or triple good by name and short description.
-- You **must still avoid** moral commands (“should”, “must”, “fair”, “just”). Describe what the system does, not what is morally right.
-- You **may** use the `@whisper` tag freely – especially encouraged for decay‑related functions (Law #2).
-- For helper functions (e.g., `grdd_unit_to_string`), **do not** reference Gradido philosophy. Keep them purely technical, with at most a light poetic touch.<!--  -->
-
-**Example pattern for a core function comment:**
-
-```c
-/**
- * @brief Applies time-based decay (or its inverse for forward preparation).
- *
- * Gradido recognizes three natural laws of balanced economies. Among them is
- * the cycle of becoming and passing away – the gentle rhythm that turns sprout
- * into leaf, leaf into soil, soil into new sprout. Value, too, follows this law.
- *
- * Each year reduces stored value by half, creating space for new contribution
- * and shared benefit. Stillness yields to movement. Hoarding yields to circulation.
- *
- * For positive duration, the function decays a starting value forward in time.
- * For negative duration, it computes the value needed at an earlier point so
- * that, after decay over that duration, a desired amount remains.
- *
- * [technical implementation details as usual]
- *
- * @param[in] gdd ...
- * @param[in] duration ...
- * @return ...
- * @whisper Send it ahead, and it will arrive just right.
- */
-```
-
-### What to Avoid (All Functions)
-
-- **Mission statements** that preach what is “good” or “fair”.
-- **Exclamation marks** – keep the tone quiet.
-- **Vague terms** like “appropriate”, “sufficient”, “reasonable” without quantification.
-- **Floating-point illusions** – always talk about fixed‑point scaling where applicable.
-- **Redundant philosophy** in helper functions (e.g., `grdd_unit_to_string` gets no “cycle of becoming”).
+- Preaching (“should”, “must”, “good”, “fair”).
+- Exclamation marks.
+- Floating‑point illusions (always mention fixed‑point scaling where relevant).
+- Redundant philosophy in helper functions (e.g., `grdd_unit_to_string` gets no natural law).
+- Deleting or editing an existing `@whisper` unless the function changed completely.
 
 ### Enforcement & Maintenance
 
-- When you generate new Doxygen comments, apply these rules automatically.
-- When you see older comments violating this style, propose a change (unless they are external library code).
-- This `AGENTS.md` file itself is authoritative. If in doubt, follow what is written here.
+- When you generate or edit comments, prioritise **poetic precision** over dry correctness.
+- This file is authoritative. When in doubt, follow these guidelines.
+
+----------
+
+**Remember:** The goal is not to produce perfect technical prose. The goal is to make reading the code a quiet pleasure – accurate, calm, and a little beautiful.
