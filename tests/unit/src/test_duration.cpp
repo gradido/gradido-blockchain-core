@@ -34,7 +34,7 @@ TEST(Duration, Minutes)
     char buffer[10];
     grdu_duration ns = 90LL * 1000000000LL; // 90 seconds -> 1.5 minutes
     grdu_duration_string(buffer, sizeof(buffer), ns, 3);
-    EXPECT_STREQ(buffer, "1.500 m");
+    EXPECT_STREQ(buffer, "1.500 min");
 }
 
 
@@ -51,13 +51,31 @@ TEST(Duration, Days)
     char buffer[10];
     grdu_duration ns = 36ULL * 3600ULL * 1000000000ULL; // 36 hours -> 1.5 days
     grdu_duration_string(buffer, sizeof(buffer), ns, 1);
-    EXPECT_STREQ(buffer, "1.5 d");
+    EXPECT_STREQ(buffer, "1.5 days");
 }
 
 TEST(Duration, DaysMoreDecimal)
 {
     char buffer[25];
-    grdu_duration ns = 36ULL * 3600ULL * 1500700030ULL; // 36 hours -> 1.5 days
+    grdu_duration ns = 36ULL * 3600ULL * 1500700030ULL;
     grdu_duration_string(buffer, sizeof(buffer), ns, 10);
-    EXPECT_STREQ(buffer, "2.2510500449 d");
+    EXPECT_STREQ(buffer, "2.2510500449 days");
+}
+
+TEST(Duration, CombinedDurations)
+{
+    grdu_duration duration = (grdu_duration)1 * 24ULL * 3600ULL * 1000000000ULL + // 1 day
+                        (grdu_duration)2 * 3600ULL * 1000000000ULL + // 2 hours
+                        (grdu_duration)3 * 60ULL * 1000000000ULL + // 3 minutes
+                        (grdu_duration)4 * 1000000000ULL; // 4 seconds
+    EXPECT_EQ(duration, 93784000000000ULL);
+    char buffer[20];
+    grdu_duration_string(buffer, sizeof(buffer), duration, 2);
+    EXPECT_STREQ(buffer, "1.08 days");
+    grdu_duration_string(buffer, sizeof(buffer), duration, 3);
+    EXPECT_STREQ(buffer, "1.085 days");
+    grdu_duration_string(buffer, sizeof(buffer), duration, 4);
+    EXPECT_STREQ(buffer, "1.0854 days");
+    grdu_duration_string(buffer, sizeof(buffer), duration, 8);
+    EXPECT_STREQ(buffer, "1.08546296 days");
 }
