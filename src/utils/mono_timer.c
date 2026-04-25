@@ -54,24 +54,21 @@ void grdu_mono_timer_reset(grdu_mono_timer* start) {
     *start = get_time_ns();
 }
 
-int64_t grdu_mono_timer_nanos(grdu_mono_timer* start) {
-    int64_t current = get_time_ns();
-    int64_t diff = current - *start;
-    *start = current;
-    return diff;
+int64_t grdu_mono_timer_nanos(grdu_mono_timer start) {
+    return get_time_ns() - start;
 }
 
-double grdu_mono_timer_micros(grdu_mono_timer* start) {
+double grdu_mono_timer_micros(grdu_mono_timer start) {
     return (double)grdu_mono_timer_nanos(start) / 1e3;
 }
 
-double grdu_mono_timer_millis(grdu_mono_timer* start) {
+double grdu_mono_timer_millis(grdu_mono_timer start) {
     return (double)grdu_mono_timer_nanos(start) / 1e6;
 }
 
-double grdu_mono_timer_seconds(grdu_mono_timer* start) {
+double grdu_mono_timer_seconds(grdu_mono_timer start) {
     return (double)grdu_mono_timer_nanos(start) / 1e9;
 }
-int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer* start) {
+int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer start) {
     return grdu_duration_string(buffer, buffer_size, grdu_mono_timer_nanos(start), 4);
 }
