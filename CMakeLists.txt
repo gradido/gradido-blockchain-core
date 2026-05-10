@@ -10,10 +10,11 @@ set(CMAKE_C_STANDARD 11)
 option(ENABLE_BENCHMARKS "Enable benchmark module" OFF)
 option(ENABLE_TESTS "Enable test module" OFF)
 
+FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB DATA "src/data/*.c" "include/gradido_blockchain_core/data/*.h")
 FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 
-set(GRADIDO_BLOCKCHAIN_CORE_SRC ${DATA} ${UTILS})
+set(GRADIDO_BLOCKCHAIN_CORE_SRC ${SRC} ${DATA} ${UTILS})
 
 if(MSVC)
   source_group("data" FILES ${DATA} )
@@ -35,4 +36,3 @@ endif()
 if(ENABLE_TESTS)
     add_subdirectory(tests)
 endif()
-
