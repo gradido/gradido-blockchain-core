@@ -1,8 +1,8 @@
 #include "gradido_blockchain_core/utils/duration.h"
 #include "gradido_blockchain_core/utils/converter.h"
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 int grdu_duration_string(char* buffer, size_t buffer_size, grdu_duration duration, uint8_t precision)
 {

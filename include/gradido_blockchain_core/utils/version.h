@@ -1,0 +1,17 @@
+#ifndef GRADIDO_BLOCKCHAIN_CORE_UTILS_VERSION_H
+#define GRADIDO_BLOCKCHAIN_CORE_UTILS_VERSION_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Version encoding: major in high 16 bits, minor in low 16 bits
+#define VERSION_MAKE(major, minor) (((uint32_t)(major) << 16) | (uint32_t)(minor))
+#define VERSION_MAJOR(ver) ((uint32_t)(ver) >> 16)
+#define VERSION_MINOR(ver) ((uint32_t)(ver) & 0xFFFF)
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // GRADIDO_BLOCKCHAIN_CORE_UTILS_VERSION_H
