@@ -27,8 +27,7 @@
 
 static grd_result community_uuid_from_wire(
     struct pbtools_bytes_t *dst, const uint8_t community_uuid[16], grd_memory *allocator
-)
-{
+) {
   if (!community_uuid || !dst) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result = grd_memory_buffer_alloc(&dst->buf_p, allocator, 16);
@@ -41,8 +40,7 @@ static grd_result community_uuid_from_wire(
 
 static grd_result memory_block_from_wire(
     struct pbtools_bytes_t *dst, const grd_memory_block *bytes, grd_memory *allocator
-)
-{
+) {
   if (!dst || !bytes || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!bytes->size) { return GRD_ERROR_INVALID_PARAM; }
 
@@ -58,8 +56,7 @@ static grd_result account_balance_from_wire(
     struct proto_gradido_account_balance_t *pb_account_balance,
     const grdw_account_balance *account_balance,
     grd_memory *allocator
-)
-{
+) {
   if (!account_balance || !pb_account_balance) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result = grd_memory_buffer_alloc(&pb_account_balance->pubkey.buf_p, allocator, 32);
@@ -78,8 +75,7 @@ static grd_result encrypted_memo_from_wire(
     struct proto_gradido_encrypted_memo_t *pb_encrypted_memo,
     const grdw_encrypted_memo *encrypted_memo,
     grd_memory *allocator
-)
-{
+) {
   if (!encrypted_memo || !pb_encrypted_memo || !allocator) { return GRD_ERROR_NULL_POINTER; }
   pb_encrypted_memo->type = (enum proto_gradido_encrypted_memo_memo_key_type_e)encrypted_memo->type;
   if (encrypted_memo->memo.size > 0) {
@@ -95,8 +91,7 @@ static grd_result signature_pair_from_wire(
     struct proto_gradido_signature_pair_t *pb_signature_pair,
     const grdw_signature_pair *signature_pair,
     grd_memory *allocator
-)
-{
+) {
   if (!signature_pair || !pb_signature_pair) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result = grd_memory_buffer_alloc(&pb_signature_pair->pubkey.buf_p, allocator, 32);
@@ -114,8 +109,7 @@ static grd_result signature_pair_from_wire(
 
 static grd_result timestamp_from_wire(
     struct proto_gradido_timestamp_t *pb_timestamp, const grdw_timestamp *timestamp
-)
-{
+) {
   if (!timestamp || !pb_timestamp) { return GRD_ERROR_NULL_POINTER; }
   pb_timestamp->nanos = timestamp->nanos;
   pb_timestamp->seconds = timestamp->seconds;
@@ -125,8 +119,7 @@ static grd_result timestamp_from_wire(
 static grd_result timestamp_seconds_from_wire(
     struct proto_gradido_timestamp_seconds_t *pb_timestamp_seconds,
     const grdw_timestamp_seconds *timestamp_seconds
-)
-{
+) {
   if (!timestamp_seconds || !pb_timestamp_seconds) { return GRD_ERROR_NULL_POINTER; }
   pb_timestamp_seconds->seconds = timestamp_seconds->seconds;
   return GRD_SUCCESS;
@@ -136,8 +129,7 @@ static grd_result transfer_amount_from_wire(
     struct proto_gradido_transfer_amount_t *pb_transfer_amount,
     const grdw_transfer_amount *transfer_amount,
     grd_memory *allocator
-)
-{
+) {
   if (!transfer_amount || !pb_transfer_amount) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = grd_memory_buffer_alloc(&pb_transfer_amount->pubkey.buf_p, allocator, 32);
   if (GRD_SUCCESS != result) { return result; }
@@ -154,8 +146,7 @@ static grd_result transfer_amount_from_wire(
 static grd_result hiero_account_id_from_wire(
     struct proto_gradido_account_id_t *pb_hiero_account_id,
     const grdw_hiero_account_id *hiero_account_id
-)
-{
+) {
   if (!hiero_account_id || !pb_hiero_account_id) { return GRD_ERROR_NULL_POINTER; }
   pb_hiero_account_id->account = proto_gradido_account_id_account_account_num_e;
   pb_hiero_account_id->account_num = hiero_account_id->accountNum;
@@ -168,8 +159,7 @@ static grd_result hiero_transaction_id_from_wire(
     struct proto_gradido_transaction_id_t *pb_hiero_transaction_id,
     const grdw_hiero_transaction_id *hiero_transaction_id,
     grd_memory *allocator
-)
-{
+) {
   if (!hiero_transaction_id || !pb_hiero_transaction_id) { return GRD_ERROR_NULL_POINTER; }
   pb_hiero_transaction_id->nonce = 0;
   pb_hiero_transaction_id->scheduled = false;
@@ -188,8 +178,7 @@ static grd_result ledger_anchor_from_wire(
     struct proto_gradido_ledger_anchor_t *pb_ledger_anchor,
     const grdw_ledger_anchor *ledger_anchor,
     grd_memory *allocator
-)
-{
+) {
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   if (!ledger_anchor || !pb_ledger_anchor) { return GRD_ERROR_NULL_POINTER; }
 
@@ -211,8 +200,7 @@ static grd_result ledger_anchor_from_wire(
 static grd_result community_friends_update_from_wire(
     struct proto_gradido_community_friends_update_t *pb_community_friends_update,
     const grdw_community_friends_update *community_friends_update
-)
-{
+) {
   if (!community_friends_update || !pb_community_friends_update) { return GRD_ERROR_NULL_POINTER; }
   pb_community_friends_update->color_fusion = community_friends_update->color_fusion;
   return GRD_SUCCESS;
@@ -222,8 +210,7 @@ static grd_result community_root_from_wire(
     struct proto_gradido_community_root_t *pb_community_root,
     const grdw_community_root *community_root,
     grd_memory *allocator
-)
-{
+) {
   if (!community_root || !pb_community_root) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result = grd_memory_buffer_alloc(&pb_community_root->pubkey.buf_p, allocator, 32);
@@ -248,15 +235,20 @@ static grd_result gradido_creation_from_wire(
     struct proto_gradido_gradido_creation_t *pb_gradido_creation,
     const grdw_gradido_creation *gradido_creation,
     grd_memory *allocator
-)
-{
+) {
   if (!gradido_creation || !pb_gradido_creation) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
+
+  if (proto_gradido_gradido_creation_recipient_alloc(pb_gradido_creation)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   result = transfer_amount_from_wire(
       pb_gradido_creation->recipient_p, &gradido_creation->recipient, allocator
   );
   if (GRD_SUCCESS != result) { return result; }
-
+  if (proto_gradido_gradido_creation_target_date_alloc(pb_gradido_creation)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   return timestamp_seconds_from_wire(
       pb_gradido_creation->target_date_p, &gradido_creation->target_date
   );
@@ -266,15 +258,16 @@ static grd_result gradido_transfer_from_wire(
     struct proto_gradido_gradido_transfer_t *pb_gradido_transfer,
     const grdw_gradido_transfer *gradido_transfer,
     grd_memory *allocator
-)
-{
+) {
   if (!gradido_transfer || !pb_gradido_transfer) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result = grd_memory_buffer_alloc(&pb_gradido_transfer->recipient.buf_p, allocator, 32);
   if (GRD_SUCCESS != result) { return result; }
   memcpy(pb_gradido_transfer->recipient.buf_p, gradido_transfer->recipient, 32);
   pb_gradido_transfer->recipient.size = 32;
-
+  if (proto_gradido_gradido_transfer_sender_alloc(pb_gradido_transfer)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   return transfer_amount_from_wire(
       pb_gradido_transfer->sender_p, &gradido_transfer->sender, allocator
   );
@@ -284,13 +277,21 @@ static grd_result gradido_deferred_transfer_from_wire(
     struct proto_gradido_gradido_deferred_transfer_t *pb_gradido_deferred_transfer,
     const grdw_gradido_deferred_transfer *gradido_deferred_transfer,
     grd_memory *allocator
-)
-{
+) {
   if (!gradido_deferred_transfer || !pb_gradido_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
+  if (proto_gradido_gradido_deferred_transfer_timeout_duration_alloc(
+          pb_gradido_deferred_transfer
+      )) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   pb_gradido_deferred_transfer->timeout_duration_p->seconds =
       gradido_deferred_transfer->timeout_duration;
+
+  if (proto_gradido_gradido_deferred_transfer_transfer_alloc(pb_gradido_deferred_transfer)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
 
   return gradido_transfer_from_wire(
       pb_gradido_deferred_transfer->transfer_p, &gradido_deferred_transfer->transfer, allocator
@@ -301,15 +302,18 @@ static grd_result gradido_redeem_deferred_transfer_from_wire(
     struct proto_gradido_gradido_redeem_deferred_transfer_t *pb_gradido_redeem_deferred_transfer,
     const grdw_gradido_redeem_deferred_transfer *gradido_redeem_deferred_transfer,
     grd_memory *allocator
-)
-{
+) {
   if (!gradido_redeem_deferred_transfer || !pb_gradido_redeem_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   pb_gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr =
       gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr;
-
+  if (proto_gradido_gradido_redeem_deferred_transfer_transfer_alloc(
+          pb_gradido_redeem_deferred_transfer
+      )) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   return gradido_transfer_from_wire(
       pb_gradido_redeem_deferred_transfer->transfer_p, &gradido_redeem_deferred_transfer->transfer,
       allocator
@@ -319,8 +323,7 @@ static grd_result gradido_redeem_deferred_transfer_from_wire(
 static grd_result gradido_timeout_deferred_transfer_from_wire(
     struct proto_gradido_gradido_timeout_deferred_transfer_t *pb_gradido_timeout_deferred_transfer,
     const grdw_gradido_timeout_deferred_transfer *gradido_timeout_deferred_transfer
-)
-{
+) {
   if (!gradido_timeout_deferred_transfer || !pb_gradido_timeout_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
@@ -333,8 +336,7 @@ static grd_result register_address_from_wire(
     struct proto_gradido_register_address_t *pb_register_address,
     const grdw_register_address *register_address,
     grd_memory *allocator
-)
-{
+) {
   if (!register_address || !pb_register_address) { return GRD_ERROR_NULL_POINTER; }
 
   grd_result result =
@@ -360,14 +362,13 @@ static grd_result register_address_from_wire(
   return GRD_SUCCESS;
 }
 
-grd_result grdm_transaction_body_to_pbtools(
+grd_result grdm_transaction_body_from_wire(
     struct proto_gradido_transaction_body_t *pb_transaction_body,
     const grdw_transaction_body *transaction_body,
     grd_memory *allocator
-)
-{
+) {
   if (!transaction_body || !pb_transaction_body || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  pb_transaction_body->version_number = PROTOCOL_VERSION;
+  pb_transaction_body->version_number = GRDU_GRADIDO_PROTOCOL_VERSION;
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
 
   if (transaction_body->memos_count > 0) {
@@ -476,20 +477,20 @@ grd_result grdm_transaction_body_to_pbtools(
   }
 }
 
-grd_result grdm_gradido_transaction_to_pb(
+grd_result grdm_gradido_transaction_from_wire(
     struct proto_gradido_gradido_transaction_t *pbtx,
     const grdw_gradido_transaction *tx,
     grd_memory *allocator
-)
-{
+) {
   if (!tx || !pbtx) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   if (tx->sig_map_count > 0) {
     int sig_map_count = tx->sig_map_count;
     if (sig_map_count >= 255) { return GRD_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
-
-    result = proto_gradido_signature_map_sig_pair_alloc(pbtx->sig_map_p, sig_map_count);
-    if (GRD_SUCCESS != result) { return result; }
+    if (proto_gradido_gradido_transaction_sig_map_alloc(pbtx)) { return GRD_ERROR_OUT_OF_MEMORY; }
+    if (proto_gradido_signature_map_sig_pair_alloc(pbtx->sig_map_p, sig_map_count)) {
+      return GRD_ERROR_OUT_OF_MEMORY;
+    }
 
     for (int i = 0; i < sig_map_count; ++i) {
       result = signature_pair_from_wire(
@@ -498,29 +499,38 @@ grd_result grdm_gradido_transaction_to_pb(
       if (GRD_SUCCESS != result) { return result; }
     }
   }
-  result = memory_block_from_wire(&pbtx->body_bytes, &tx->body_bytes, allocator);
-  if (GRD_SUCCESS != result) { return result; }
 
-  return ledger_anchor_from_wire(
-      pbtx->pairing_ledger_anchor_p, &tx->pairing_ledger_anchor, allocator
-  );
+  if (tx->pairing_ledger_anchor.type != GRDW_LEDGER_ANCHOR_TYPE_UNSPECIFIED) {
+    if (proto_gradido_gradido_transaction_pairing_ledger_anchor_alloc(pbtx)) {
+      return GRD_ERROR_OUT_OF_MEMORY;
+    }
+    result = ledger_anchor_from_wire(
+        pbtx->pairing_ledger_anchor_p, &tx->pairing_ledger_anchor, allocator
+    );
+    if (GRD_SUCCESS != result) { return result; }
+  }
+  return memory_block_from_wire(&pbtx->body_bytes, &tx->body_bytes, allocator);
 }
 
-grd_result grdm_confirmed_transaction_to_pb(
+grd_result grdm_confirmed_transaction_from_wire(
     struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
     const grdw_confirmed_transaction *confirmed_tx,
     grd_memory *allocator
-)
-{
+) {
   if (!confirmed_tx || !pb_confirmed_tx || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  pb_confirmed_tx->version_number = PROTOCOL_VERSION;
+  pb_confirmed_tx->version_number = GRDU_GRADIDO_PROTOCOL_VERSION;
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   pb_confirmed_tx->id = confirmed_tx->id;
-  result = grdm_gradido_transaction_to_pb(
+  if (proto_gradido_confirmed_transaction_transaction_alloc(pb_confirmed_tx)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
+  result = grdm_gradido_transaction_from_wire(
       pb_confirmed_tx->transaction_p, &confirmed_tx->transaction, allocator
   );
   if (GRD_SUCCESS != result) { return result; }
-
+  if (proto_gradido_confirmed_transaction_confirmed_at_alloc(pb_confirmed_tx)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   result = timestamp_from_wire(pb_confirmed_tx->confirmed_at_p, &confirmed_tx->confirmed_at);
   if (GRD_SUCCESS != result) { return result; }
 
@@ -529,6 +539,9 @@ grd_result grdm_confirmed_transaction_to_pb(
   if (GRD_SUCCESS != result) { return result; }
   memcpy(pb_confirmed_tx->running_hash.buf_p, confirmed_tx->running_hash, 32);
 
+  if (proto_gradido_confirmed_transaction_ledger_anchor_alloc(pb_confirmed_tx)) {
+    return GRD_ERROR_OUT_OF_MEMORY;
+  }
   result = ledger_anchor_from_wire(
       pb_confirmed_tx->ledger_anchor_p, &confirmed_tx->ledger_anchor, allocator
   );

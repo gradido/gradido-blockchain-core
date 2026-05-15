@@ -1,9 +1,9 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MAPPING_CROSS_GROUP_PB_COMPAT_H
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_CROSS_GROUP_PB_COMPAT_H
 
-#include <assert.h>
 #include "gradido_blockchain_core/data/cross_group_type.h"
 #include "gradido_blockchain_core/data/proto/gradido/transaction_body.h"
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,33 +24,29 @@ extern "C" {
  */
 
 #pragma warning(push)
-#pragma warning(disable: 5287)
+#pragma warning(disable : 5287)
 
 // LOCAL
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_LOCAL ==
-    proto_gradido_transaction_body_local_e,
+    GRDD_CROSS_GROUP_TYPE_LOCAL == proto_gradido_transaction_body_local_e,
     "CrossGroupType enum mismatch: LOCAL"
 );
 
 // INBOUND
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_INBOUND ==
-    proto_gradido_transaction_body_inbound_e,
+    GRDD_CROSS_GROUP_TYPE_INBOUND == proto_gradido_transaction_body_inbound_e,
     "CrossGroupType enum mismatch: INBOUND"
 );
 
 // OUTBOUND
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_OUTBOUND ==
-    proto_gradido_transaction_body_outbound_e,
+    GRDD_CROSS_GROUP_TYPE_OUTBOUND == proto_gradido_transaction_body_outbound_e,
     "CrossGroupType enum mismatch: OUTBOUND"
 );
 
 // CROSS
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_CROSS ==
-    proto_gradido_transaction_body_cross_e,
+    GRDD_CROSS_GROUP_TYPE_CROSS == proto_gradido_transaction_body_cross_e,
     "CrossGroupType enum mismatch: CROSS"
 );
 
@@ -60,4 +56,4 @@ static_assert(
 }
 #endif
 
-#endif //GRADIDO_BLOCKCHAIN_CORE_MAPPING_CROSS_GROUP_PB_COMPAT_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_MAPPING_CROSS_GROUP_PB_COMPAT_H

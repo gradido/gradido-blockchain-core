@@ -7,8 +7,7 @@
 
 int grdu_duration_string(
     char *buffer, size_t buffer_size, grdu_duration duration, uint8_t precision
-)
-{
+) {
   uint64_t ns = (uint64_t)duration;
 
   uint64_t divisor;

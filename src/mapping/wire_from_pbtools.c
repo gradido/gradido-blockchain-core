@@ -27,8 +27,7 @@
 
 static grd_result community_uuid_from_pbtools(
     uint8_t community_uuid[16], const struct pbtools_bytes_t *bytes
-)
-{
+) {
   if (!community_uuid || !bytes) { return GRD_ERROR_NULL_POINTER; }
   if (16 == bytes->size) {
     memcpy(community_uuid, bytes->buf_p, 16);
@@ -42,8 +41,7 @@ static grd_result community_uuid_from_pbtools(
 
 static grd_result memory_block_from_pbtools(
     grd_memory_block *dst, const struct pbtools_bytes_t *bytes, grd_memory *allocator
-)
-{
+) {
   if (!dst || !bytes || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!bytes->size) { return GRD_ERROR_INVALID_PARAM; }
   grd_result result = grd_memory_block_alloc(dst, allocator, bytes->size);
@@ -56,8 +54,7 @@ static grd_result memory_block_from_pbtools(
 static grd_result account_balance_from_pbtools(
     grdw_account_balance *account_balance,
     const struct proto_gradido_account_balance_t *pb_account_balance
-)
-{
+) {
   if (!account_balance || !pb_account_balance) { return GRD_ERROR_NULL_POINTER; }
   if (pb_account_balance->pubkey.size != 32) { return GRD_ERROR_INVALID_PARAM; }
   memcpy(account_balance->pubkey, pb_account_balance->pubkey.buf_p, 32);
@@ -71,8 +68,7 @@ static grd_result encrypted_memo_from_pbtools(
     grdw_encrypted_memo *encrypted_memo,
     const struct proto_gradido_encrypted_memo_t *pb_encrypted_memo,
     grd_memory *allocator
-)
-{
+) {
   if (!encrypted_memo || !pb_encrypted_memo || !allocator) { return GRD_ERROR_NULL_POINTER; }
   encrypted_memo->type = (grdw_memo_key_type)pb_encrypted_memo->type;
   if (pb_encrypted_memo->memo.size > 0) {
@@ -87,8 +83,7 @@ static grd_result encrypted_memo_from_pbtools(
 static grd_result signature_pair_from_pbtools(
     grdw_signature_pair *signature_pair,
     const struct proto_gradido_signature_pair_t *pb_signature_pair
-)
-{
+) {
   if (!signature_pair || !pb_signature_pair) { return GRD_ERROR_NULL_POINTER; }
   if (pb_signature_pair->pubkey.size != 32 || pb_signature_pair->signature.size != 64) {
     return GRD_ERROR_INVALID_PARAM;
@@ -100,8 +95,7 @@ static grd_result signature_pair_from_pbtools(
 
 static grd_result timestamp_from_pbtools(
     grdw_timestamp *timestamp, const struct proto_gradido_timestamp_t *pb_timestamp
-)
-{
+) {
   if (!timestamp || !pb_timestamp) { return GRD_ERROR_NULL_POINTER; }
   timestamp->nanos = pb_timestamp->nanos;
   timestamp->seconds = pb_timestamp->seconds;
@@ -111,8 +105,7 @@ static grd_result timestamp_from_pbtools(
 static grd_result timestamp_seconds_from_pbtools(
     grdw_timestamp_seconds *timestamp_seconds,
     const struct proto_gradido_timestamp_seconds_t *pb_timestamp_seconds
-)
-{
+) {
   if (!timestamp_seconds || !pb_timestamp_seconds) { return GRD_ERROR_NULL_POINTER; }
   timestamp_seconds->seconds = pb_timestamp_seconds->seconds;
   return GRD_SUCCESS;
@@ -121,8 +114,7 @@ static grd_result timestamp_seconds_from_pbtools(
 static grd_result transfer_amount_from_pbtools(
     grdw_transfer_amount *transfer_amount,
     const struct proto_gradido_transfer_amount_t *pb_transfer_amount
-)
-{
+) {
   if (!transfer_amount || !pb_transfer_amount) { return GRD_ERROR_NULL_POINTER; }
   if (pb_transfer_amount->pubkey.size != 32) { return GRD_ERROR_INVALID_PARAM; }
   memcpy(transfer_amount->pubkey, pb_transfer_amount->pubkey.buf_p, 32);
@@ -135,8 +127,7 @@ static grd_result transfer_amount_from_pbtools(
 static grd_result hiero_account_id_from_pbtools(
     grdw_hiero_account_id *hiero_account_id,
     const struct proto_gradido_account_id_t *pb_hiero_account_id
-)
-{
+) {
   if (!hiero_account_id || !pb_hiero_account_id) { return GRD_ERROR_NULL_POINTER; }
   if (proto_gradido_account_id_account_account_num_e != pb_hiero_account_id->account) {
     return GRD_ERROR_PB_UNHANDLED_ONEOF_BRANCH;
@@ -150,8 +141,7 @@ static grd_result hiero_account_id_from_pbtools(
 static grd_result hiero_transaction_id_from_pbtools(
     grdw_hiero_transaction_id *hiero_transaction_id,
     const struct proto_gradido_transaction_id_t *pb_hiero_transaction_id
-)
-{
+) {
   if (!hiero_transaction_id || !pb_hiero_transaction_id) { return GRD_ERROR_NULL_POINTER; }
   if (pb_hiero_transaction_id->nonce || pb_hiero_transaction_id->scheduled) {
     return GRD_ERROR_PB_UNHANDLED_PARAMETER;
@@ -169,8 +159,7 @@ static grd_result hiero_transaction_id_from_pbtools(
 
 static grd_result ledger_anchor_from_pbtools(
     grdw_ledger_anchor *ledger_anchor, const struct proto_gradido_ledger_anchor_t *pb_ledger_anchor
-)
-{
+) {
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   if (!ledger_anchor || !pb_ledger_anchor) { return GRD_ERROR_NULL_POINTER; }
 
@@ -193,8 +182,7 @@ static grd_result ledger_anchor_from_pbtools(
 static grd_result community_friends_update_from_pbtools(
     grdw_community_friends_update *community_friends_update,
     const struct proto_gradido_community_friends_update_t *pb_community_friends_update
-)
-{
+) {
   if (!community_friends_update || !pb_community_friends_update) { return GRD_ERROR_NULL_POINTER; }
   community_friends_update->color_fusion = pb_community_friends_update->color_fusion;
   return GRD_SUCCESS;
@@ -203,8 +191,7 @@ static grd_result community_friends_update_from_pbtools(
 static grd_result community_root_from_pbtools(
     grdw_community_root *community_root,
     const struct proto_gradido_community_root_t *pb_community_root
-)
-{
+) {
   if (!community_root || !pb_community_root) { return GRD_ERROR_NULL_POINTER; }
   if (pb_community_root->pubkey.size != 32 || pb_community_root->gmw_pubkey.size != 32 ||
       pb_community_root->auf_pubkey.size != 32) {
@@ -219,8 +206,7 @@ static grd_result community_root_from_pbtools(
 static grd_result gradido_creation_from_pbtools(
     grdw_gradido_creation *gradido_creation,
     const struct proto_gradido_gradido_creation_t *pb_gradido_creation
-)
-{
+) {
   if (!gradido_creation || !pb_gradido_creation) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   result =
@@ -235,8 +221,7 @@ static grd_result gradido_creation_from_pbtools(
 static grd_result gradido_transfer_from_pbtools(
     grdw_gradido_transfer *gradido_transfer,
     const struct proto_gradido_gradido_transfer_t *pb_gradido_transfer
-)
-{
+) {
   if (!gradido_transfer || !pb_gradido_transfer) { return GRD_ERROR_NULL_POINTER; }
 
   if (pb_gradido_transfer->recipient.size != 32) { return GRD_ERROR_INVALID_PARAM; }
@@ -248,8 +233,7 @@ static grd_result gradido_transfer_from_pbtools(
 static grd_result gradido_deferred_transfer_from_pbtools(
     grdw_gradido_deferred_transfer *gradido_deferred_transfer,
     const struct proto_gradido_gradido_deferred_transfer_t *pb_gradido_deferred_transfer
-)
-{
+) {
   if (!gradido_deferred_transfer || !pb_gradido_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
@@ -265,8 +249,7 @@ static grd_result gradido_redeem_deferred_transfer_from_pbtools(
     grdw_gradido_redeem_deferred_transfer *gradido_redeem_deferred_transfer,
     const struct proto_gradido_gradido_redeem_deferred_transfer_t
         *pb_gradido_redeem_deferred_transfer
-)
-{
+) {
   if (!gradido_redeem_deferred_transfer || !pb_gradido_redeem_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
@@ -283,8 +266,7 @@ static grd_result gradido_timeout_deferred_transfer_from_pbtools(
     grdw_gradido_timeout_deferred_transfer *gradido_timeout_deferred_transfer,
     const struct proto_gradido_gradido_timeout_deferred_transfer_t
         *pb_gradido_timeout_deferred_transfer
-)
-{
+) {
   if (!gradido_timeout_deferred_transfer || !pb_gradido_timeout_deferred_transfer) {
     return GRD_ERROR_NULL_POINTER;
   }
@@ -296,8 +278,7 @@ static grd_result gradido_timeout_deferred_transfer_from_pbtools(
 static grd_result register_address_from_pbtools(
     grdw_register_address *register_address,
     const struct proto_gradido_register_address_t *pb_register_address
-)
-{
+) {
   if (!register_address || !pb_register_address) { return GRD_ERROR_NULL_POINTER; }
   if (pb_register_address->user_pubkey.size != 32 || pb_register_address->name_hash.size != 32 ||
       pb_register_address->account_pubkey.size != 32) {
@@ -315,10 +296,9 @@ grd_result grdm_transaction_body_from_pbtools(
     grdw_transaction_body *transaction_body,
     const struct proto_gradido_transaction_body_t *pb_transaction_body,
     grd_memory *allocator
-)
-{
+) {
   if (!transaction_body || !pb_transaction_body || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  if (PROTOCOL_VERSION != pb_transaction_body->version_number) {
+  if (GRDU_GRADIDO_PROTOCOL_VERSION != pb_transaction_body->version_number) {
     return GRD_ERROR_PB_INCORRECT_VERSION;
   }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
@@ -341,11 +321,12 @@ grd_result grdm_transaction_body_from_pbtools(
       if (GRD_SUCCESS != result) { return result; }
     }
   }
-
-  result = community_uuid_from_pbtools(
-      transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
-  );
-  if (GRD_SUCCESS != result) { return result; }
+  if (pb_transaction_body->other_community_uuid.size) {
+    result = community_uuid_from_pbtools(
+        transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
+    );
+    if (GRD_SUCCESS != result) { return result; }
+  }
 
   result = timestamp_from_pbtools(&transaction_body->created_at, pb_transaction_body->created_at_p);
   if (GRD_SUCCESS != result) { return result; }
@@ -406,8 +387,7 @@ grd_result grdm_gradido_transaction_from_pb(
     grdw_gradido_transaction *tx,
     const struct proto_gradido_gradido_transaction_t *pbtx,
     grd_memory *allocator
-)
-{
+) {
   if (!tx || !pbtx) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   if (pbtx->sig_map_p->sig_pair.length > 0) {
@@ -427,20 +407,21 @@ grd_result grdm_gradido_transaction_from_pb(
       if (GRD_SUCCESS != result) { return result; }
     }
   }
-  result = memory_block_from_pbtools(&tx->body_bytes, &pbtx->body_bytes, allocator);
-  if (GRD_SUCCESS != result) { return result; }
+  if (pbtx->pairing_ledger_anchor_p) {
+    result = ledger_anchor_from_pbtools(&tx->pairing_ledger_anchor, pbtx->pairing_ledger_anchor_p);
+    if (GRD_SUCCESS != result) { return result; }
+  }
 
-  return ledger_anchor_from_pbtools(&tx->pairing_ledger_anchor, pbtx->pairing_ledger_anchor_p);
+  return memory_block_from_pbtools(&tx->body_bytes, &pbtx->body_bytes, allocator);
 }
 
 grd_result grdm_confirmed_transaction_from_pb(
     grdw_confirmed_transaction *confirmed_tx,
     const struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
     grd_memory *allocator
-)
-{
+) {
   if (!confirmed_tx || !pb_confirmed_tx || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  if (PROTOCOL_VERSION != pb_confirmed_tx->version_number) {
+  if (GRDU_GRADIDO_PROTOCOL_VERSION != pb_confirmed_tx->version_number) {
     return GRD_ERROR_PB_INCORRECT_VERSION;
   }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;

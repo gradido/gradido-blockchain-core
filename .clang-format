@@ -8,13 +8,15 @@ ColumnLimit: 100
 
 BinPackParameters: false
 AlignAfterOpenBracket: AlwaysBreak
-BreakBeforeBraces: Linux
+BreakBeforeBraces: Attach
 
 BreakBeforeCloseBracketBracedList: true
 BreakBeforeCloseBracketFunction: true
 AllowShortIfStatementsOnASingleLine: true
 AllowShortLoopsOnASingleLine: true
 AllowShortBlocksOnASingleLine: true
+AllowShortFunctionsOnASingleLine: false
+
 
 BreakAfterReturnType: Automatic
 PenaltyReturnTypeOnItsOwnLine: 200

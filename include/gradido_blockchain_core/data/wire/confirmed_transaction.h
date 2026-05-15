@@ -13,23 +13,23 @@ extern "C" {
 #endif
 
 typedef struct grdw_confirmed_transaction {
-    uint64_t id;
-    grdw_gradido_transaction transaction;
-    grdw_timestamp confirmed_at;
-    uint8_t running_hash[32];
-    grdw_ledger_anchor ledger_anchor;
-    grdw_account_balance* account_balances;
-    uint8_t account_balances_count;
-    grdd_balance_derivation_type balance_derivation;
+  uint64_t id;
+  grdw_gradido_transaction transaction;
+  grdw_timestamp confirmed_at;
+  uint8_t running_hash[32];
+  grdw_ledger_anchor ledger_anchor;
+  grdw_account_balance *account_balances;
+  uint8_t account_balances_count;
+  grdd_balance_derivation_type balance_derivation;
 } grdw_confirmed_transaction;
 
 grd_result grdw_confirmed_transaction_reserve_account_balances(
-    grdw_confirmed_transaction* tx, uint8_t account_balances_count,
-    grd_memory* allocator);
+    grdw_confirmed_transaction *tx, uint8_t account_balances_count, grd_memory *allocator
+);
 
 grd_result grdw_confirmed_transaction_copy_account_balance(
-    grdw_confirmed_transaction* tx, grdw_account_balance* account_balance,
-    uint8_t index);
+    grdw_confirmed_transaction *tx, grdw_account_balance *account_balance, uint8_t index
+);
 
 #ifdef __cplusplus
 }

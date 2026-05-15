@@ -8,11 +8,11 @@ extern "C" {
 #endif
 
 // Version encoding: major in high 16 bits, minor in low 16 bits
-#define VERSION_MAKE(major, minor) (((uint32_t)(major) << 16) | (uint32_t)(minor))
-#define VERSION_MAJOR(ver) ((uint32_t)(ver) >> 16)
-#define VERSION_MINOR(ver) ((uint32_t)(ver) & 0xFFFF)
+#define GRDU_VERSION_MAKE(major, minor) (((uint32_t)(major) << 16) | (uint32_t)(minor))
+#define GRDU_VERSION_MAJOR(ver) ((uint32_t)(ver) >> 16)
+#define GRDU_VERSION_MINOR(ver) ((uint32_t)(ver) & 0xFFFF)
 
-const uint32_t PROTOCOL_VERSION;
+extern const uint32_t GRDU_GRADIDO_PROTOCOL_VERSION;
 
 #ifdef __cplusplus
 }

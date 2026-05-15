@@ -1,9 +1,9 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MAPPING_DERIVATION_PB_COMPAT_H
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_DERIVATION_PB_COMPAT_H
 
-#include <assert.h>
 #include "gradido_blockchain_core/data/balance_derivation_type.h"
 #include "gradido_blockchain_core/data/proto/gradido/ledger_metadata.h"
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +23,6 @@ enum proto_gradido_balance_derivation_e {
 };
 */
 
-
 /*
  * C11 static assert fallback safety
  */
@@ -39,26 +38,24 @@ enum proto_gradido_balance_derivation_e {
  */
 
 #pragma warning(push)
-#pragma warning(disable: 5287)
+#pragma warning(disable : 5287)
 
 // UNSPECIFIED
 static_assert(
     GRDD_BALANCE_DERIVATION_UNSPECIFIED ==
-    proto_gradido_balance_derivation_e::proto_gradido_unspecified_e,
+        proto_gradido_balance_derivation_e::proto_gradido_unspecified_e,
     "BalanceDerivation enum mismatch: UNSPECIFIED"
 );
 
 // NODE
 static_assert(
-    GRDD_BALANCE_DERIVATION_NODE ==
-    proto_gradido_balance_derivation_e::proto_gradido_node_e,
+    GRDD_BALANCE_DERIVATION_NODE == proto_gradido_balance_derivation_e::proto_gradido_node_e,
     "BalanceDerivation enum mismatch: NODE"
 );
 
 // EXTERN
 static_assert(
-    GRDD_BALANCE_DERIVATION_EXTERN ==
-    proto_gradido_balance_derivation_e::proto_gradido_extern_e,
+    GRDD_BALANCE_DERIVATION_EXTERN == proto_gradido_balance_derivation_e::proto_gradido_extern_e,
     "BalanceDerivation enum mismatch: EXTERN"
 );
 

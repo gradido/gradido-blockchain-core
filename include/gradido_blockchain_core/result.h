@@ -12,6 +12,7 @@ extern "C" {
 
 typedef enum grd_result {
   GRD_SUCCESS = 0,
+  GRD_WARNING_USED_DYNAMIC_ALLOCATION_FALLBACK,
 
   GRD_ERROR_NOT_INITIALIZED,
   GRD_ERROR_INVALID_PARAM, // if parameter validation failed

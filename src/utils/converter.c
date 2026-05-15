@@ -26,8 +26,7 @@
  * - Any modification should preserve the exact boundary conditions (powers of 10),
  *   otherwise subtle off-by-one errors may occur.
  */
-size_t grdu_uint64_to_string_size(uint64_t v)
-{
+size_t grdu_uint64_to_string_size(uint64_t v) {
   if (v < 100000000ULL) {
     if (v < 10000ULL) {
       if (v < 100ULL) return v < 10 ? 1 : 2;
@@ -50,8 +49,7 @@ size_t grdu_uint64_to_string_size(uint64_t v)
   return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
 }
 
-size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize)
-{
+size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize) {
   if (value == 0) {
     if (stringSize < 1) {
       return 1; // return required size without null terminator
@@ -106,8 +104,7 @@ size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, siz
 
 // for easy use, one call
 
-size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value)
-{
+size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
   size_t requiredSize = grdu_uint64_to_string_size(value);
   if (bufferSize < requiredSize + 1) {
     // better safe then sorry

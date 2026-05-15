@@ -15,10 +15,13 @@ extern "C" {
  * @defgroup grdu_mono_timer grdu_mono_timer
  * @ingroup utils
  * @brief High-resolution monotonic timer for precise time measurements.
- * Provides a simple interface to capture a reference time and measure elapsed time in various units (seconds, milliseconds, microseconds, nanoseconds). Uses platform-specific high-resolution monotonic clocks:
+ * Provides a simple interface to capture a reference time and measure elapsed time in various units
+ * (seconds, milliseconds, microseconds, nanoseconds). Uses platform-specific high-resolution
+ * monotonic clocks:
  * - Windows: QueryPerformanceCounter
  * - Unix-like: CLOCK_MONOTONIC
- * @note On Windows, grdu_mono_timer_init must be called before using timers in multi-threaded applications.
+ * @note On Windows, grdu_mono_timer_init must be called before using timers in multi-threaded
+ * applications.
  * @whisper Time flows steadily — captured and measured with precision
  *
  * @{
@@ -32,7 +35,8 @@ typedef int64_t grdu_mono_timer;
  * On Windows, initializes performance counter frequency for high-resolution timing.
  * On other platforms (Linux, macOS), this is a no-op — they use CLOCK_MONOTONIC directly.
  *
- * Safe to call multiple times but not threadsafe. Must be called before using timers in multi-threaded
+ * Safe to call multiple times but not threadsafe. Must be called before using timers in
+ * multi-threaded
  *
  * @return
  *   true  - initialization successful (or already initialized)
@@ -55,7 +59,7 @@ bool grdu_mono_timer_init();
  *
  * @whisper Time is captured — the baseline is set
  */
-void grdu_mono_timer_reset(grdu_mono_timer* start);
+void grdu_mono_timer_reset(grdu_mono_timer *start);
 
 /**
  * @brief Measure elapsed time in seconds since the timer was reset.
@@ -117,7 +121,7 @@ int64_t grdu_mono_timer_nanos(grdu_mono_timer start);
  *
  * @whisper Time becomes words — durations flow into readability
  */
-int grdu_mono_timer_string(char* buffer, size_t buffer_size, grdu_mono_timer start);
+int grdu_mono_timer_string(char *buffer, size_t buffer_size, grdu_mono_timer start);
 
 /**
  * @}

@@ -24,16 +24,14 @@ static const uint64_t GROW_FACTOR_PER_SECOND = 405181995575ULL; // for low, and 
 // precalculated powers of 10 for fast rounding
 static const uint64_t POW10[] = {1, 10, 100, 1000, 10000};
 
-static double round_to_precision(double gdd, uint8_t precision)
-{
+static double round_to_precision(double gdd, uint8_t precision) {
   if (precision > 4) { precision = 4; }
 
   double factor = POW10[precision];
   return round(gdd * factor) / factor;
 }
 
-bool grdd_unit_round_to_precision(grdd_unit *result, grdd_unit value, uint8_t precision)
-{
+bool grdd_unit_round_to_precision(grdd_unit *result, grdd_unit value, uint8_t precision) {
   if (!result || precision > 4) { return false; }
   if (precision == 4) {
     *result = value;
@@ -58,13 +56,15 @@ bool grdd_unit_round_to_precision(grdd_unit *result, grdd_unit value, uint8_t pr
   return true;
 }
 
-grdd_unit grdd_unit_from_decimal(double gdd)
-{ return (grdd_unit)(round_to_precision(gdd, 4) * 10000.0); }
+grdd_unit grdd_unit_from_decimal(double gdd) {
+  return (grdd_unit)(round_to_precision(gdd, 4) * 10000.0);
+}
 
-double grdd_unit_to_decimal(grdd_unit u) { return (double)u / 10000.0; }
+double grdd_unit_to_decimal(grdd_unit u) {
+  return (double)u / 10000.0;
+}
 
-bool grdd_unit_from_string(grdd_unit *resultGdd, const char *gdd_string)
-{
+bool grdd_unit_from_string(grdd_unit *resultGdd, const char *gdd_string) {
   if (!gdd_string || !resultGdd) return false;
 
   const char *p = gdd_string;
@@ -138,8 +138,7 @@ bool grdd_unit_from_string(grdd_unit *resultGdd, const char *gdd_string)
   return true;
 }
 
-int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_t precision)
-{
+int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_t precision) {
   if (!buffer || bufferSize == 0) { return -1; }
   if (precision > 4) precision = 4;
 
@@ -198,10 +197,11 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
   return cursor;
 }
 
-grdd_timestamp_seconds grdd_unit_decay_start_time() { return DECAY_START_TIME; }
+grdd_timestamp_seconds grdd_unit_decay_start_time() {
+  return DECAY_START_TIME;
+}
 
-grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
-{
+grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration) {
   if (duration == 0) { return gdd; }
 
   // decay for one year is 50%
@@ -286,8 +286,7 @@ bool grdd_unit_calculate_duration_seconds(
     grdd_timestamp_seconds startTime,
     grdd_timestamp_seconds endTime,
     grdd_duration_seconds *outSeconds
-)
-{
+) {
   if (!outSeconds) { return false; }
   if (startTime > endTime) { return false; }
   grdd_timestamp_seconds start = startTime > DECAY_START_TIME ? startTime : DECAY_START_TIME;

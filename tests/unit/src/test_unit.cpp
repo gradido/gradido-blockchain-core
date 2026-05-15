@@ -8,14 +8,12 @@
 #include <math.h>
 #include <random>
 
-TEST(TestUnit, fromDouble)
-{
+TEST(TestUnit, fromDouble) {
   double gddD = 0.0;
   EXPECT_EQ(grdd_unit_from_decimal(gddD), 0);
 }
 
-TEST(TestUnit, fromToString)
-{
+TEST(TestUnit, fromToString) {
   const char *testString = "1029.1021";
   grdd_unit value;
   grdd_unit_from_string(&value, testString);
@@ -29,8 +27,7 @@ TEST(TestUnit, fromToString)
   EXPECT_STREQ("1029.10", buffer);
 }
 
-TEST(GradidoUnitTest, TestWithManyDifferentDuration)
-{
+TEST(GradidoUnitTest, TestWithManyDifferentDuration) {
   // 2^(x/31556952)
   // calculate for every 32. second until two years are full
   grdd_unit prevValue = 0;
@@ -49,8 +46,7 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
   }
 }
 
-TEST(GradidoUnitTest, TestReverseDecay)
-{
+TEST(GradidoUnitTest, TestReverseDecay) {
   const grdd_unit startValue = 1000000;
   for (int i = 1; i < 31556952 * 2; i += 32) {
     auto valueWithDecay = grdd_unit_calculate_decay(startValue, -i);
@@ -59,8 +55,7 @@ TEST(GradidoUnitTest, TestReverseDecay)
   }
 }
 
-TEST(GradidoUnitTest, toString_AllCases)
-{
+TEST(GradidoUnitTest, toString_AllCases) {
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
   // positive values
@@ -246,8 +241,7 @@ TEST(GradidoUnitTest, toString_AllCases)
   // number outside of double range
 }
 
-TEST(GradidoUnitTest, roundToPrecision_EdgeCases)
-{
+TEST(GradidoUnitTest, roundToPrecision_EdgeCases) {
   struct TestCase {
     int64_t raw; // GradidoCent (4 decimal places)
     int precision;
@@ -305,8 +299,7 @@ TEST(GradidoUnitTest, roundToPrecision_EdgeCases)
   }
 }
 
-TEST(GradidoUnitTest, roundToPrecision_BoundarySweep)
-{
+TEST(GradidoUnitTest, roundToPrecision_BoundarySweep) {
   for (int precision = 0; precision <= 4; ++precision) {
     int64_t factor = pow(10.0, 4 - precision);
 
@@ -330,8 +323,7 @@ TEST(GradidoUnitTest, roundToPrecision_BoundarySweep)
   }
 }
 
-TEST(GradidoUnitTest, toString_Randomized)
-{
+TEST(GradidoUnitTest, toString_Randomized) {
   std::mt19937_64 rng(42);                                // deterministisch
   std::uniform_real_distribution<double> dist(-1e9, 1e9); // innerhalb double-Bereich
   int countDiffBetweenDoubleInteger = 0;
@@ -370,8 +362,7 @@ TEST(GradidoUnitTest, toString_Randomized)
             << ANSI_TXT_DFT << std::endl;
 }
 
-TEST(GradidoUnitTest, toStringFast_RandomExact)
-{
+TEST(GradidoUnitTest, toStringFast_RandomExact) {
   std::mt19937_64 rng(42);
 
   std::uniform_int_distribution<int64_t> intDist(-1'000'000'000, 1'000'000'000);
@@ -452,8 +443,7 @@ struct ThreadResult {
   std::deque<std::tuple<int64_t, int64_t, int64_t>> errors; // amount, duration, diff
 };
 
-TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
-{
+TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom) {
   constexpr int64_t NUM_SAMPLES = 5000000; // 500k test cases
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
   constexpr int64_t MAX_AMOUNT_CENT = 1'000'000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
@@ -548,8 +538,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   EXPECT_EQ(exactMatches, totalTests);
 }
 
-TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
-{
+TEST(GradidoUnitTest, testManyCasesDecayRevertDecay) {
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
   grdu_mono_timer timeUsed;
@@ -735,8 +724,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   EXPECT_LE((100.0 * totalDiffOther / totalTests), 0.01);
 }
 
-TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
-{
+TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions) {
   using namespace std::chrono;
 
   // --- Define time points ---
@@ -794,8 +782,7 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
                      << "step=" << stepCent << " ref=" << refCent << " diff=" << diff;
 }
 
-TEST(GradidoUnitTest, testOverflowProvocation)
-{
+TEST(GradidoUnitTest, testOverflowProvocation) {
   using namespace std::chrono;
 
   // --- Time ---
@@ -819,8 +806,7 @@ TEST(GradidoUnitTest, testOverflowProvocation)
 }
 
 const uint64_t secondsPerYear = 31556952;
-TEST(TestUnit, decayAfterYear)
-{
+TEST(TestUnit, decayAfterYear) {
   grdd_unit gdd;
   grdd_unit_from_string(&gdd, "1000");
   grdd_unit result = grdd_unit_calculate_decay(gdd, secondsPerYear);

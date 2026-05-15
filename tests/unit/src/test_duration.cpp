@@ -1,68 +1,59 @@
 #include "gradido_blockchain_core/utils/duration.h"
 #include <gtest/gtest.h>
 
-TEST(Duration, Ns)
-{
+TEST(Duration, Ns) {
   char buffer[10];
   grdu_duration_string(buffer, sizeof(buffer), (grdu_duration)500, 0);
   EXPECT_STREQ(buffer, "500 ns");
 }
 
-TEST(Duration, Microseconds)
-{
+TEST(Duration, Microseconds) {
   char buffer[10];
   grdu_duration_string(buffer, sizeof(buffer), (grdu_duration)1234, 3);
   EXPECT_STREQ(buffer, "1.234 us");
 }
 
-TEST(Duration, Milliseconds)
-{
+TEST(Duration, Milliseconds) {
   char buffer[10];
   grdu_duration_string(buffer, sizeof(buffer), (grdu_duration)1500000LL, 3);
   EXPECT_STREQ(buffer, "1.500 ms");
 }
 
-TEST(Duration, Seconds)
-{
+TEST(Duration, Seconds) {
   char buffer[10];
   grdu_duration_string(buffer, sizeof(buffer), (grdu_duration)1500000000LL, 3);
   EXPECT_STREQ(buffer, "1.500 s");
 }
 
-TEST(Duration, Minutes)
-{
+TEST(Duration, Minutes) {
   char buffer[10];
   grdu_duration ns = 90LL * 1000000000LL; // 90 seconds -> 1.5 minutes
   grdu_duration_string(buffer, sizeof(buffer), ns, 3);
   EXPECT_STREQ(buffer, "1.500 min");
 }
 
-TEST(Duration, Hours)
-{
+TEST(Duration, Hours) {
   char buffer[10];
   grdu_duration ns = 3ULL * 3600ULL * 1000000000ULL; // 3 hours
   grdu_duration_string(buffer, sizeof(buffer), ns, 3);
   EXPECT_STREQ(buffer, "3.000 h");
 }
 
-TEST(Duration, Days)
-{
+TEST(Duration, Days) {
   char buffer[10];
   grdu_duration ns = 36ULL * 3600ULL * 1000000000ULL; // 36 hours -> 1.5 days
   grdu_duration_string(buffer, sizeof(buffer), ns, 1);
   EXPECT_STREQ(buffer, "1.5 days");
 }
 
-TEST(Duration, DaysMoreDecimal)
-{
+TEST(Duration, DaysMoreDecimal) {
   char buffer[25];
   grdu_duration ns = 36ULL * 3600ULL * 1500700030ULL;
   grdu_duration_string(buffer, sizeof(buffer), ns, 10);
   EXPECT_STREQ(buffer, "2.2510500449 days");
 }
 
-TEST(Duration, CombinedDurations)
-{
+TEST(Duration, CombinedDurations) {
   grdu_duration duration = (grdu_duration)1 * 24ULL * 3600ULL * 1000000000ULL + // 1 day
                            (grdu_duration)2 * 3600ULL * 1000000000ULL +         // 2 hours
                            (grdu_duration)3 * 60ULL * 1000000000ULL +           // 3 minutes

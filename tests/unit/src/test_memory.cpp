@@ -2,8 +2,7 @@
 #include "gradido_blockchain_core/result.h"
 #include <gtest/gtest.h>
 
-TEST(MemoryTest, DynamicAreaAllocation)
-{
+TEST(MemoryTest, DynamicAreaAllocation) {
   // init
   grd_memory mem;
   EXPECT_EQ(grd_memory_init_arena(&mem, 100), GRD_SUCCESS);
