@@ -81,6 +81,7 @@ static_assert(
     proto_gradido_ledger_anchor_legacy_gradido_db_transaction_link_id_e,
     "LedgerAnchor enum mismatch: LEGACY_TRANSACTION_LINK_ID"
 );
+
 #pragma warning(pop)
 
 #ifdef __cplusplus

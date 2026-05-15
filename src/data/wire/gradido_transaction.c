@@ -17,9 +17,8 @@ grd_result grdw_gradido_transaction_reserve_sig_map(grdw_gradido_transaction* tx
         return GRD_ERROR_INVALID_PARAM;
     }
     grd_result result = grd_memory_buffer_alloc((uint8_t**)&tx->sig_map, allocator, sizeof(grdw_signature_pair) * sig_map_count);
-    if (GRD_SUCCESS != result) {
-        return result;
-    }
+    if (GRD_SUCCESS != result) { return result; }
+
     tx->sig_map_count = sig_map_count;
     return GRD_SUCCESS;
 }
@@ -47,7 +46,7 @@ grd_result grdw_gradido_transaction_decode(grdw_gradido_transaction* tx, const g
     uint8_t buffer[STATIC_BUFFER_SIZE];
     //grd_memory_block buffer;
     //grd_memory_block_alloc(&buffer, allocator, 1024);
-    struct proto_gradido_gradido_transaction_t *proto_tx;
+    struct proto_gradido_gradido_transaction_t* proto_tx;
     proto_tx = proto_gradido_gradido_transaction_new(buffer, STATIC_BUFFER_SIZE);
     if (!proto_tx) {
         return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
@@ -57,7 +56,7 @@ grd_result grdw_gradido_transaction_decode(grdw_gradido_transaction* tx, const g
         printf("proto_gradido_gradido_transaction_decode return size < 0: %d\n", resultSize);
         return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
     }
-    printf("pbtools: %d, src: %d, alloc: %d, overflow: %d\n", resultSize, binarySrc->size, allocator->last_index, allocator->out_of_memory_capacity);
+    // printf("pbtools: %d, src: %d, alloc: %d, overflow: %d\n", resultSize, binarySrc->size, allocator->last_index, allocator->out_of_memory_capacity);
     return grdm_gradido_transaction_from_pb(tx, proto_tx, allocator);
 }
 

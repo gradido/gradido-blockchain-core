@@ -24,7 +24,7 @@ grd_result grd_memory_init_arena(grd_memory* memory, size_t capacity) {
 
 grd_result grd_memory_init_arena_static(grd_memory* memory, uint8_t* data, size_t capacity) {
     if (!memory || !data) {
-      return GRD_ERROR_NULL_POINTER;
+        return GRD_ERROR_NULL_POINTER;
     }
     if (!capacity) {
         return GRD_ERROR_INVALID_PARAM;
@@ -74,10 +74,10 @@ void grd_memory_free(grd_memory* memory) {
 
 size_t grd_memory_overflow_total(const grd_memory* memory)
 {
-  if (!memory) {
-    return 0;
-  }
-  return memory->out_of_memory_capacity;
+    if (!memory) {
+        return 0;
+    }
+    return memory->out_of_memory_capacity;
 }
 grd_result grd_memory_buffer_alloc(uint8_t** buffer, grd_memory* memory, size_t size)
 {
@@ -125,7 +125,7 @@ grd_result grd_memory_block_copy(grd_memory_block* dst, const grd_memory_block* 
         return GRD_ERROR_NULL_POINTER;
     }
     if (!src->size) {
-      return GRD_ERROR_INVALID_PARAM;
+        return GRD_ERROR_INVALID_PARAM;
     }
     grd_result result = grd_memory_block_alloc(dst, memory, src->size);
     if (GRD_SUCCESS != result) { return result; }

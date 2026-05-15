@@ -6,15 +6,15 @@ extern "C" {
 #endif
 
 /*!
- * \addtogroup enums
- * @{
- */
+    * \addtogroup enums
+    * @{
+    */
 
-/*!
- * \enum grdd_transaction_type
- * Enum for different transaction types
- * !!! don't change order
- */
+    /*!
+    * \enum grdd_transaction_type
+    * Enum for different transaction types
+    * !!! don't change order
+    */
 typedef enum grdd_transaction_type {
     //! Invalid or Empty Transaction
     GRDD_TRANSACTION_TYPE_NONE = 0,

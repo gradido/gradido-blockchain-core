@@ -13,10 +13,10 @@ extern "C" {
 typedef struct proto_gradido_gradido_transaction_t proto_gradido_gradido_transaction;
 
 typedef struct grdw_gradido_transaction {
-  grdw_signature_pair *sig_map;
-  grd_memory_block body_bytes;
-  grdw_ledger_anchor pairing_ledger_anchor;
-  uint8_t sig_map_count;
+    grdw_signature_pair* sig_map;
+    grd_memory_block body_bytes;
+    grdw_ledger_anchor pairing_ledger_anchor;
+    uint8_t sig_map_count;
 } grdw_gradido_transaction;
 
 grd_result grdw_gradido_transaction_reserve_sig_map(grdw_gradido_transaction* tx, uint8_t sig_map_count, grd_memory* allocator);

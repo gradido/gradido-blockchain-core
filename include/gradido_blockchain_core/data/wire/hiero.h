@@ -12,14 +12,14 @@ extern "C" {
 
 // hiero
 typedef struct grdw_hiero_account_id {
-  int64_t shardNum;
-  int64_t realmNum;
-  int64_t accountNum;
+    int64_t shardNum;
+    int64_t realmNum;
+    int64_t accountNum;
 } grdw_hiero_account_id;
 
 typedef struct grdw_hiero_transaction_id {
-  grdw_timestamp transactionValidStart;
-  grdw_hiero_account_id accountID;
+    grdw_timestamp transactionValidStart;
+    grdw_hiero_account_id accountID;
 } grdw_hiero_transaction_id;
 
 

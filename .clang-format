@@ -1,0 +1,20 @@
+BasedOnStyle: LLVM
+
+IndentWidth: 2
+UseTab: Never
+TabWidth: 2
+
+ColumnLimit: 100
+
+BinPackParameters: false
+AlignAfterOpenBracket: AlwaysBreak
+BreakBeforeBraces: Linux
+
+BreakBeforeCloseBracketBracedList: true
+BreakBeforeCloseBracketFunction: true
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: true
+
+BreakAfterReturnType: Automatic
+PenaltyReturnTypeOnItsOwnLine: 200

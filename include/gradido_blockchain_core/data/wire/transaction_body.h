@@ -13,24 +13,25 @@ extern "C" {
 #endif
 
 typedef struct grdw_transaction_body {
-  grdw_encrypted_memo *memos;
-  uint8_t other_community_uuid[16];
-  grdw_timestamp created_at;
-  union {
-    grdw_gradido_transfer transfer;
-    grdw_gradido_creation creation;
-    grdw_community_friends_update community_friends_update;
-    grdw_register_address register_address;
-    grdw_gradido_deferred_transfer deferred_transfer;
-    grdw_community_root community_root;
-    grdw_gradido_redeem_deferred_transfer redeem_deferred_transfer;
-    grdw_gradido_timeout_deferred_transfer timeout_deferred_transfer;
-  };
-  grdd_transaction_type transaction_type;
-  grdd_cross_group_type type;  
-  uint8_t memos_count;
+    grdw_encrypted_memo* memos;
+    uint8_t* other_community_uuid;
+    grdw_timestamp created_at;
+    union {
+        grdw_gradido_transfer transfer;
+        grdw_gradido_creation creation;
+        grdw_community_friends_update community_friends_update;
+        grdw_register_address register_address;
+        grdw_gradido_deferred_transfer deferred_transfer;
+        grdw_community_root community_root;
+        grdw_gradido_redeem_deferred_transfer redeem_deferred_transfer;
+        grdw_gradido_timeout_deferred_transfer timeout_deferred_transfer;
+    };
+    grdd_transaction_type transaction_type;
+    grdd_cross_group_type type;
+    uint8_t memos_count;
 } grdw_transaction_body;
 
+void grdw_transaction_body_init(grdw_transaction_body* body);
 grd_result grdw_transaction_body_reserve_memos(grdw_transaction_body* body, size_t memos_count, grd_memory* allocator);
 
 //! will move memo ptr, will overwrite memo if already exist at this index, need to be call grdw_transaction_body_reserve_memos first

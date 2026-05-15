@@ -1,15 +1,14 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 #define GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 
-#include "result.h"
-
 #include <stddef.h>
 #include <stdint.h>
+
+#include "result.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 /** @defgroup grd_memory grd_memory
  *  @ingroup utils
@@ -31,15 +30,16 @@ extern "C" {
  *  @{
  */
 
-
 /** @brief Operational mode for memory allocator.
  *
  *  Determines allocation strategy and ownership semantics.
  */
 typedef enum grd_memory_alloc_type {
-    GRD_MEMORY_ALLOC_TYPE_DEFAULT = 0,        /**< Individual malloc/free per allocation. */
-    GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED = 1,      /**< Bump allocator with heap-allocated buffer owned by the allocator. */
-    GRD_MEMORY_ALLOC_TYPE_ARENA_EXTERNAL = 2    /**< Bump allocator with caller-provided external buffer. */
+  GRD_MEMORY_ALLOC_TYPE_DEFAULT = 0, /**< Individual malloc/free per allocation. */
+  GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED =
+      1, /**< Bump allocator with heap-allocated buffer owned by the allocator. */
+  GRD_MEMORY_ALLOC_TYPE_ARENA_EXTERNAL =
+      2 /**< Bump allocator with caller-provided external buffer. */
 } grd_memory_alloc_type;
 
 /** @brief Memory allocator state container.
@@ -52,17 +52,16 @@ typedef enum grd_memory_alloc_type {
  *  total requested size beyond capacity in arena modes, useful for tuning.
  */
 typedef struct grd_memory {
-    uint8_t* data;                 /**< Base of the arena (owned or external). */
-    size_t last_index;             /**< Next free offset from @p data. */
-    size_t capacity;               /**< Total bytes available in the arena. */
-    size_t out_of_memory_capacity; /**< Accumulated overflow since last reset. */
-    grd_memory_alloc_type allocation_type;
+  uint8_t *data;                 /**< Base of the arena (owned or external). */
+  size_t last_index;             /**< Next free offset from @p data. */
+  size_t capacity;               /**< Total bytes available in the arena. */
+  size_t out_of_memory_capacity; /**< Accumulated overflow since last reset. */
+  grd_memory_alloc_type allocation_type;
 } grd_memory;
 
-
 typedef struct grd_memory_block {
-    uint8_t* data;
-    size_t   size;
+  uint8_t *data;
+  size_t size;
 } grd_memory_block;
 
 /** @brief Initialize arena mode with owned heap buffer.
@@ -81,7 +80,7 @@ typedef struct grd_memory_block {
  *  @note The allocator owns the heap buffer; use grd_memory_free() to release.
  *  @whisper Fresh soil prepared; seeds may now take root
  */
-grd_result grd_memory_init_arena(grd_memory* memory, size_t capacity);
+grd_result grd_memory_init_arena(grd_memory *memory, size_t capacity);
 
 /** @brief Initialize arena mode with external buffer.
  *
@@ -100,7 +99,7 @@ grd_result grd_memory_init_arena(grd_memory* memory, size_t capacity);
  *  @note The allocator must not outlive the external buffer it wraps.
  *  @whisper A river channel carved through known earth
  */
-grd_result grd_memory_init_arena_static(grd_memory* memory, uint8_t* data, size_t capacity);
+grd_result grd_memory_init_arena_static(grd_memory *memory, uint8_t *data, size_t capacity);
 
 /** @brief Initialize default mode using malloc/free.
  *
@@ -114,7 +113,7 @@ grd_result grd_memory_init_arena_static(grd_memory* memory, uint8_t* data, size_
  *  @retval GRD_ERROR_NULL_POINTER  @p memory is NULL.
  *  @whisper Open water; each drop finds its own level
  */
-grd_result grd_memory_init_default(grd_memory* memory);
+grd_result grd_memory_init_default(grd_memory *memory);
 
 /** @brief Reset arena position to initial state.
  *
@@ -130,7 +129,7 @@ grd_result grd_memory_init_default(grd_memory* memory);
  *  @note In arena modes, all prior allocations become invalid after reset.
  *  @whisper Waters recede; the basin returns to silence
  */
-grd_result grd_memory_reset(grd_memory* memory);
+grd_result grd_memory_reset(grd_memory *memory);
 
 /** @brief Release allocator resources.
  *
@@ -143,7 +142,7 @@ grd_result grd_memory_reset(grd_memory* memory);
  *  @post All internal state is zeroed; no dangling pointers remain in owned mode.
  *  @whisper Waters recede; the basin returns to silence
  */
-void grd_memory_free(grd_memory* memory);
+void grd_memory_free(grd_memory *memory);
 
 /** @brief Retrieve total accumulated overflow in arena modes.
  *
@@ -157,7 +156,7 @@ void grd_memory_free(grd_memory* memory);
  *  @note The counter resets to zero on grd_memory_reset() or re-initialization.
  *  @whisper The measure of need that exceeded the vessel
  */
-size_t grd_memory_overflow_total(const grd_memory* memory);
+size_t grd_memory_overflow_total(const grd_memory *memory);
 
 /** @brief Allocate raw memory buffer.
  *
@@ -177,7 +176,7 @@ size_t grd_memory_overflow_total(const grd_memory* memory);
  *  @note In arena modes, the returned pointer is valid until reset or free.
  *  @whisper Raw earth shaped by the hand of need
  */
-grd_result grd_memory_buffer_alloc(uint8_t** buffer, grd_memory* memory, size_t size);
+grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t size);
 
 /** @brief Free raw memory buffer.
  *
@@ -193,7 +192,7 @@ grd_result grd_memory_buffer_alloc(uint8_t** buffer, grd_memory* memory, size_t 
  *  @note In arena modes, this does not reclaim space; reset the arena instead.
  *  @whisper Form dissolves, substance returning to source
  */
-grd_result grd_memory_buffer_free(uint8_t* buffer, grd_memory* memory);
+grd_result grd_memory_buffer_free(uint8_t *buffer, grd_memory *memory);
 
 /** @brief Allocate a memory block with size tracking.
  *
@@ -217,9 +216,11 @@ grd_result grd_memory_buffer_free(uint8_t* buffer, grd_memory* memory);
  *  @note In arena modes, individual blocks cannot be freed separately.
  *  @whisper A vessel carved from the flowing stream
  */
-grd_result grd_memory_block_alloc(grd_memory_block* memory_block, grd_memory* memory, size_t size);
+grd_result grd_memory_block_alloc(grd_memory_block *memory_block, grd_memory *memory, size_t size);
 
-grd_result grd_memory_block_copy(grd_memory_block* dst, const grd_memory_block* src, grd_memory* memory);
+grd_result grd_memory_block_copy(
+    grd_memory_block *dst, const grd_memory_block *src, grd_memory *memory
+);
 
 /** @brief Free a memory block with size tracking.
  *
@@ -237,7 +238,7 @@ grd_result grd_memory_block_copy(grd_memory_block* dst, const grd_memory_block* 
  *  @note In arena modes, this does not reclaim space; reset the arena instead.
  *  @whisper The vessel returns to water, form dissolving
  */
-grd_result grd_memory_block_free(grd_memory_block* memory_block, grd_memory* memory);
+grd_result grd_memory_block_free(grd_memory_block *memory_block, grd_memory *memory);
 
 /** @} */
 

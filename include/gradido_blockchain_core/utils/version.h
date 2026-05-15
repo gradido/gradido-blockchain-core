@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_UTILS_VERSION_H
 #define GRADIDO_BLOCKCHAIN_CORE_UTILS_VERSION_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -9,6 +11,8 @@ extern "C" {
 #define VERSION_MAKE(major, minor) (((uint32_t)(major) << 16) | (uint32_t)(minor))
 #define VERSION_MAJOR(ver) ((uint32_t)(ver) >> 16)
 #define VERSION_MINOR(ver) ((uint32_t)(ver) & 0xFFFF)
+
+const uint32_t PROTOCOL_VERSION;
 
 #ifdef __cplusplus
 }
