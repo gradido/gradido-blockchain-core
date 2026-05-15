@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include <gtest/gtest.h>
 
 TEST(MemoryTest, DynamicAreaAllocation)
 {
