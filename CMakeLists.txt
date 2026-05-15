@@ -20,7 +20,9 @@ FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 set(GRADIDO_BLOCKCHAIN_CORE_SRC ${SRC} ${DATA} ${DATA_PROTO_GRADIDO} ${DATA_WIRE} ${MAPPING} ${UTILS})
 
 # Third Party
-set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC "third_party/pbtools/pbtools.c")
+FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
+FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${PBTOOLS} ${R128})
 
 if(MSVC)
     source_group("data/proto/gradido" FILES ${DATA_PROTO_GRADIDO} )
