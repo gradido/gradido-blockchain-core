@@ -24,9 +24,25 @@ typedef struct grdw_ledger_anchor {
   grdw_ledger_anchor_type type;
   union {
     grdw_hiero_transaction_id hiero_transaction_id;
-    uint64_t legacy_id;
+    uint64_t id;
   };
 } grdw_ledger_anchor;
+
+grd_result grdw_ledger_anchor_set_hiero_transaction_id(
+    grdw_ledger_anchor *ledger_anchor,
+    grdw_timestamp transaction_valid_start,
+    int64_t account_id_shard_num,
+    int64_t account_id_realm_num,
+    int64_t account_id_account_num
+);
+
+grd_result grdw_ledger_anchor_set_legacy_id(
+    grdw_ledger_anchor *ledger_anchor, grdw_ledger_anchor_type type, uint64_t legacy_id
+);
+
+grd_result grdw_ledger_anchor_set_node_trigger_transaction_id(
+    grdw_ledger_anchor *ledger_anchor, uint64_t node_trigger_transaction_id
+);
 
 #ifdef __cplusplus
 }

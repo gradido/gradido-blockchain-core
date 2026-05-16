@@ -1,4 +1,10 @@
+
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
+#include "gradido_blockchain_core/mapping/address_pb_compat.h"
+#include "gradido_blockchain_core/mapping/balance_derivation_pb_compat.h"
+#include "gradido_blockchain_core/mapping/cross_group_pb_compat.h"
+#include "gradido_blockchain_core/mapping/ledger_anchor_pb_compat.h"
+#include "gradido_blockchain_core/mapping/memo_key_pb_compat.h"
 
 #include <assert.h>
 #include <string.h>
@@ -163,7 +169,7 @@ static grd_result ledger_anchor_from_pbtools(
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
   if (!ledger_anchor || !pb_ledger_anchor) { return GRD_ERROR_NULL_POINTER; }
 
-  if (GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID == ledger_anchor->type) {
+  if (proto_gradido_ledger_anchor_hiero_transaction_id_e == pb_ledger_anchor->type) {
     assert(
         proto_gradido_ledger_anchor_anchor_id_hiero_transaction_id_e == pb_ledger_anchor->anchor_id
     );
@@ -174,7 +180,7 @@ static grd_result ledger_anchor_from_pbtools(
     ledger_anchor->type = GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID;
   } else {
     ledger_anchor->type = (grdw_ledger_anchor_type)pb_ledger_anchor->type;
-    ledger_anchor->legacy_id = pb_ledger_anchor->id;
+    ledger_anchor->id = pb_ledger_anchor->id;
   }
   return GRD_SUCCESS;
 }

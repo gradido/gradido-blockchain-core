@@ -1,20 +1,16 @@
 #include "gradido_blockchain_core/data/wire/gradido_transaction.h"
+#include "gradido_blockchain_core/data/proto/gradido/gradido_transaction.h"
 #include "gradido_blockchain_core/mapping/pbtools_from_wire.h"
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
-#include "gradido_transaction.h"
 
 #include <string.h>
 
 #define STATIC_BUFFER_SIZE 2048
 
 void grdw_gradido_transaction_init(grdw_gradido_transaction *tx) {
-  tx->sig_map = NULL;
-  tx->body_bytes.size = 0;
-  tx->body_bytes.data = NULL;
-  tx->pairing_ledger_anchor.type = GRDW_LEDGER_ANCHOR_TYPE_UNSPECIFIED;
-  tx->sig_map_count = 0;
+  memset(tx, 0, sizeof(grdw_gradido_transaction));
 }
 
 grd_result grdw_gradido_transaction_reserve_sig_map(

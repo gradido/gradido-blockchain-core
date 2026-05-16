@@ -2,12 +2,7 @@
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_PBTOOLS_FROM_WIRE_H
 
 // make sure, that generated protobuf enum is identical with grdw enum
-#include "address_pb_compat.h"
-#include "balance_derivation_pb_compat.h"
-#include "cross_group_pb_compat.h"
 #include "gradido_blockchain_core/result.h"
-#include "ledger_anchor_pb_compat.h"
-#include "memo_key_pb_compat.h"
 
 #ifdef __cplusplus
 extern "C" {

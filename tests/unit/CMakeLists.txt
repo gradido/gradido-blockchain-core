@@ -42,7 +42,7 @@ target_link_libraries(test_converter gradido_blockchain_core GTest::gtest_main)
 add_executable(test_memory src/test_memory.cpp)
 target_link_libraries(test_memory gradido_blockchain_core GTest::gtest_main)
 
-add_executable(test_pbtools src/test_pbtools.cpp src/key_pairs.cpp src/key_pairs.h)
+add_executable(test_pbtools src/test_pbtools.cpp src/key_pairs.cpp src/key_pairs.h terminal_colors.h)
 target_link_libraries(test_pbtools gradido_blockchain_core GTest::gtest_main sodium)
 
 enable_testing()

@@ -1,19 +1,14 @@
+#include "gradido_blockchain_core/data/proto/gradido/transaction_body.h"
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/mapping/pbtools_from_wire.h"
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
-#include "transaction_body.h"
 
 #include <string.h>
 
 void grdw_transaction_body_init(grdw_transaction_body *body) {
-  body->memos = NULL;
-  body->other_community_uuid = NULL;
-  body->created_at = (grdw_timestamp){.seconds = 0, .nanos = 0};
-  body->transaction_type = GRDD_TRANSACTION_TYPE_NONE;
-  body->type = GRDD_CROSS_GROUP_TYPE_LOCAL;
-  body->memos_count = 0;
+  memset(body, 0, sizeof(grdw_transaction_body));
 }
 
 grd_result grdw_transaction_body_reserve_memos(

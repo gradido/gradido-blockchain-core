@@ -1,4 +1,9 @@
+#include "../terminal_colors.h"
+#include "gradido_blockchain_core/data/wire/basic_types.h"
+#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/data/wire/gradido_transaction.h"
+#include "gradido_blockchain_core/data/wire/hiero.h"
+#include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
@@ -23,8 +28,8 @@ constexpr auto registerAddressTransactionBodyBase64 =
     "wUYiIAM";
 constexpr auto creationTransactionBodyBase64 = "OkMKOQog2w7WEloU8DCr7Rv8gx4KIYz5+r/"
                                                "O5+"
-                                               "zVgcDA54jwF8cQgK3iBBoQAZ4sMaMDdcCUHvNcWeT5eBoGCPD9u"
-                                               "P8FChEIAhINSGVsbG8gV29ybGQyABIGCIDMuf8FGIiADA==";
+                                               "zVgcDA54jwF8cQgK3iBBoQAZ4sMaMDdcCUHvNcWeT5eBoGCLjKu"
+                                               "f8FChEIAhINSGVsbG8gV29ybGQyABIGCIDMuf8FGIiADA==";
 constexpr auto transferTransactionBodyBase64 =
     "MlwKOAog2w7WEloU8DCr7Rv8gx4KIYz5+r/O5+zVgcDA54jwF8cQoI0GGhABniwxowN1wJQe81xZ5Pl4EiAkTSjXzFvo/"
     "o+w2OHRuQ3nYDOGCC15POiHT2NX5uUyrQoRCAISDUhlbGxvIFdvcmxkMgASCgiAzLn/BRC3lREYiIAM";
@@ -44,40 +49,23 @@ constexpr auto communityRootTransactionBase64 =
     "QQsQgxucGfLP3RSn9srLQl0EHOJWZ5GZn3wcEzulHauS7qT32gG78hSLe/"
     "eNlPpB4rhedsKJEAoSdFpmCiCBZwMplGmI7fRR9MQkaR2Dz1qQQ5BCiC1btyJD71Ue9BIg1+OooJCqRIcyRvXGrPwX/"
     "3TuF09W570qVf+4EEH22x0aIK2HB0oqpLwC03l/u0PIsr5u3Wyx1jRKlA/FKLzh4TCyEgYIgMy5/wUYiIAM";
-constexpr auto registeAddressTransactionBase64 =
-    "CrICCmQKIKrRK6gmuRFEV1VMTFV/"
-    "o6h4r58h+BYhsMPmFhUGESgpEkDdBYnw6FWxdQXZ+"
-    "K9cnXB3JDJFQT8KVhC1yqgnTKNuLgjiyxK6K9vzZEeFHiE6wXoxQ7o4wVPLnEd8QVItATQHCmQKILxxJbfkt7U00jLCFcL"
-    "LzjRAiGBKDoruOTLpv0FqBs/+EkDc28tzP3cvgcwM4xCEktvEhPw0ikUb2xTSUa3zG5N5dKxMJ5GPJS/"
-    "n78pLejfjQ8OiVm8NP7LP9YXZAyHlT8MFCmQKIO/ykZNQpTrID4mAYrfGf/gCgkX0zETgjvIviFFxVU87EkC4J/"
-    "ByDZPNlb6Jgi39rH+B3YgbgITV2kL0S6HmspFymCouglWwR24ym7+c6J0CSfOyFTiSNAqLhzsGxCmc6doOEnkSBgiAzLn/"
-    "BRoDMy41SmoKILxxJbfkt7U00jLCFcLLzjRAiGBKDoruOTLpv0FqBs/+EAEaIB/"
-    "kH3lmpLYaljiGoPpNE22FeUJNnAKidR77oOjlVZ9hIiDv8pGTUKU6yA+JgGK3xn/4AoJF9MxE4I7yL4hRcVVPOygBGgA=";
-constexpr auto creationTransactionBase64 =
-    "CmYKZAogyy3XdFIKQdmOo6znQO6zP6F5nXcyrbd24930wGPWAbwSQLoWkuWdqFViwdGaETYuCAGtASEcfNc9dMocRAylm7"
-    "S73bqNYsNuuqCp9fQeWNG4ZpIgO5ksd4b9Xq1gkKXV8wESXwodCAISGURlaW5lIGVyc3RlIFNjaG9lcGZ1bmcgOykSBgiA"
-    "zLn/BRoDMy41OjEKJwog7/KRk1ClOsgPiYBit8Z/+AKCRfTMROCO8i+IUXFVTzsQgK3iBBoGCLjKuf8FGgA=";
-constexpr auto transferTransactionBase64 =
-    "CmYKZAog7/KRk1ClOsgPiYBit8Z/+AKCRfTMROCO8i+IUXFVTzsSQE77i3/OM2356rKFJYaktfYQpVTj3a0U/"
-    "D+G5rYQ9L8mcU+OtSYG0sx/LLtBDB9gn/"
-    "9Pu6NlHkVLib4fj5BXywAScQoVCAISEUljaCB0ZWlsZSBtaXQgZGlyEgYIgMy5/wUaAzMuNTJLCicKIO/"
-    "ykZNQpTrID4mAYrfGf/gCgkX0zETgjvIviFFxVU87ELzBsQISIH71fuNOTK5eAUA0t/"
-    "gEO6ZA0aJvB9YirDQuZK11ufYNGgA=";
-constexpr auto deferredTransferTransactionBase64 =
-    "CmYKZAog7/KRk1ClOsgPiYBit8Z/+AKCRfTMROCO8i+IUXFVTzsSQLNxKNCE73Y/"
-    "6R6DCWPghfgrHGyI3j7SaDTDbRq2EJbrcDpMQbU7zNUffvatlheOJltUXy8++KFI0GFy/"
-    "0JMZAsSewoWCAISEkxpbmsgenVtIGVpbmxvZXNlbhIGCIDMuf8FGgMzLjVSVApLCicKIO/ykZNQpTrID4mAYrfGf/"
-    "gCgkX0zETgjvIviFFxVU87EKyK0wISIH71fuNOTK5eAUA0t/gEO6ZA0aJvB9YirDQuZK11ufYNEgUI1sLhAxoA";
-constexpr auto communityFriendsUpdateBase64 =
-    "CmYKZAogqtErqCa5EURXVUxMVX+jqHivnyH4FiGww+"
-    "YWFQYRKCkSQP7aJIvxwxyoUFMAOXQsI5tBWJtr5RxDMiUKJKNUOxJsY3aR8z16kzuYamk9/"
-    "kPuMVS8NHCEzVcbEFCqQTAqYQoSERIGCIDMuf8FGgMzLjVCAggBGgA=";
+
+// Confirmed Gradido Transaction
+constexpr auto confirmedCommunityRootTransactionBase64 =
+    "CHkS3gEKZgpkCiCBZwMplGmI7fRR9MQkaR2Dz1qQQ5BCiC1btyJD71Ue9BJAtT7yJ8kBub5BCxCDG5wZ8s/"
+    "dFKf2ystCXQQc4lZnkZmffBwTO6Udq5LupPfaAbvyFIt7942U+"
+    "kHiuF52wokQChJ0WmYKIIFnAymUaYjt9FH0xCRpHYPPWpBDkEKILVu3IkPvVR70EiDX46igkKpEhzJG9cas/Bf/"
+    "dO4XT1bnvSpV/7gQQfbbHRogrYcHSiqkvALTeX+7Q8iyvm7dbLHWNEqUD8UovOHhMLISBgiAzLn/BRiIgAwaBgjC8rn/"
+    "BSCIgAwqIGHF/azvYntEu9pwC3bmSL61/"
+    "Ob0pLcCTWspFwaJb4Q7MhQaEAoKCIDMuf8FELeVERICGHkIAjo3CiDbDtYSWhTwMKvtG/"
+    "yDHgohjPn6v87n7NWBwMDniPAXxxCQThoQAZ4sMaMDdcCUHvNcWeT5eEAC";
 
 constexpr auto communityUuidHex = "019e2c31a30375c0941ef35c59e4f978";
 
 grdw_timestamp createdAt1 = {.seconds = 1609459200, .nanos = 0};
 grdw_timestamp createdAt2 = {.seconds = 1609459200, .nanos = 281271};
-grdw_timestamp_seconds targetDate = {.seconds = 1609449200};
+grdw_timestamp confirmedAt = {.seconds = 1609464130, .nanos = 0};
+grdw_timestamp_seconds targetDate = {.seconds = 1609459000};
 constexpr size_t BUFFER_SIZE = 512;
 
 static grd_memory_block fromBase64(
@@ -623,7 +611,9 @@ TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
   free(bin.data);
 
   grdu_mono_timer_string(buffer, 256, timeUsed);
-  printf("time for decode community root %d times: %s\n", i, buffer);
+  // printf("time for decode community root %d times: %s\n", i, buffer);
+  std::cout << TIME_GTEST_BLUE << "time for decode community root " << i << " times: " << buffer
+            << ANSI_TXT_DFT << std::endl;
   grd_memory_free(&mem);
 }
 
@@ -632,8 +622,8 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   grd_memory mem;
 
   grdw_gradido_transaction tx{};
-  uint8_t staticBuffer[BUFFER_SIZE];
-  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, BUFFER_SIZE), GRD_SUCCESS);
+  uint8_t staticBuffer[128]{};
+  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, 128), GRD_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   // tx.body_bytes = fromBase64(communityRootTransactionBodyBase64,
   // strlen(communityRootTransactionBodyBase64));
@@ -655,25 +645,105 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   memcpy(body.community_root.auf_pubkey, g_KeyPairs[2].public_key, 32);
   body.transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT;
 
+  uint8_t staticBuffer2[300]{};
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
   grd_memory mem2;
-  ASSERT_EQ(grd_memory_init_arena(&mem2, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena_static(&mem2, staticBuffer2, 300), GRD_SUCCESS);
   int i = 0;
   grdu_mono_timer_reset(&timeUsed);
   for (; i < 1000; ++i) {
     grd_memory_reset(&mem2);
-    grd_memory_block_alloc(&tx.body_bytes, &mem2, 256);
+    grd_memory_block_alloc(&tx.body_bytes, &mem2, 128);
     ASSERT_EQ(grdw_transaction_body_encode(&tx.body_bytes, &finalSize, &body, &mem2), GRD_SUCCESS);
-    tx.body_bytes.size = finalSize;
+    grd_memory_block_free_part(&tx.body_bytes, &mem2, tx.body_bytes.size - finalSize);
     ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem2), GRD_SUCCESS);
+    grd_memory_block_free(&tx.body_bytes, &mem2);
   }
   char timerBuffer[256];
   grdu_mono_timer_string(timerBuffer, 256, timeUsed);
-  printf("time for encode community root %d times: %s\n", i, timerBuffer);
-  bufferPtr.size = finalSize;
-  free(tx.body_bytes.data);
-  tx.body_bytes.data = nullptr;
+  std::cout << TIME_GTEST_BLUE << "time for encode community root " << i
+            << " times: " << timerBuffer << ANSI_TXT_DFT << std::endl;
+  // printf("time for encode community root %d times: %s\n", i, timerBuffer);
   grdw_gradido_transaction_free(&tx, &mem);
+}
+
+// ###############  Confirmed Transaction    ############################################
+TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
+  grd_memory mem;
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE * 2), GRD_SUCCESS);
+
+  grdw_confirmed_transaction tx;
+  grdw_confirmed_transaction_init(&tx);
+  tx.id = 121;
+  tx.transaction.body_bytes =
+      fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
+  ASSERT_EQ(grdw_gradido_transaction_reserve_sig_map(&tx.transaction, 1, &mem), GRD_SUCCESS);
+  grdw_signature_pair signature{};
+  memcpy(signature.public_key, g_KeyPairs[0].public_key, 32);
+  size_t sig_len = 64;
+  crypto_sign_detached(
+      signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
+      strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
+  );
+  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx.transaction, &signature, 0), GRD_SUCCESS);
+  uint8_t buffer[512]{};
+  grd_memory_block bufferPtr = {.data = buffer, .size = 512};
+  size_t finalSize = 0;
+  tx.confirmed_at = confirmedAt;
+  crypto_generichash_state state;
+  crypto_generichash_init(&state, nullptr, 0, crypto_generichash_BYTES);
+  crypto_generichash_update(&state, tx.transaction.body_bytes.data, tx.transaction.body_bytes.size);
+  crypto_generichash_final(&state, tx.running_hash, 32);
+  ASSERT_EQ(
+      grdw_ledger_anchor_set_hiero_transaction_id(&tx.ledger_anchor, createdAt2, 0, 0, 121),
+      GRD_SUCCESS
+  );
+  ASSERT_EQ(grdw_confirmed_transaction_reserve_account_balances(&tx, 1, &mem), GRD_SUCCESS);
+  grdw_account_balance accountBalance;
+  accountBalance.balance = 10000;
+  memcpy(accountBalance.pubkey, g_KeyPairs[4].public_key, 32);
+  grd_memory_block communityUuid = fromHex(communityUuidHex);
+  memcpy(accountBalance.community_uuid, communityUuid.data, 16);
+  free(communityUuid.data);
+  ASSERT_EQ(grdw_confirmed_transaction_copy_account_balance(&tx, &accountBalance, 0), GRD_SUCCESS);
+  tx.balance_derivation = GRDD_BALANCE_DERIVATION_EXTERN;
+
+  ASSERT_EQ(grdw_confirmed_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
+  bufferPtr.size = finalSize;
+  auto base64 = toBase64(&bufferPtr);
+  ASSERT_EQ(base64, confirmedCommunityRootTransactionBase64);
+  // printf("complete confirmed community root tx: %s\n", base64.c_str());
+  auto hex = toHex(&bufferPtr);
+  // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
+  free(tx.transaction.body_bytes.data);
+  tx.transaction.body_bytes.data = nullptr;
+  grdw_confirmed_transaction_free(&tx, &mem);
+}
+
+TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
+  grd_memory mem;
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE * 2), GRD_SUCCESS);
+
+  grdw_confirmed_transaction tx;
+  grdw_confirmed_transaction_init(&tx);
+  auto base64 = fromBase64(
+      confirmedCommunityRootTransactionBase64, strlen(confirmedCommunityRootTransactionBase64)
+  );
+  ASSERT_EQ(grdw_confirmed_transaction_decode(&tx, &base64, &mem), GRD_SUCCESS);
+  EXPECT_EQ(tx.id, 121);
+  auto bodyBytesBase64 = toBase64(&tx.transaction.body_bytes);
+  EXPECT_EQ(bodyBytesBase64, communityRootTransactionBodyBase64);
+  EXPECT_EQ(tx.confirmed_at.seconds, confirmedAt.seconds);
+  EXPECT_EQ(tx.confirmed_at.nanos, confirmedAt.nanos);
+  EXPECT_EQ(tx.account_balances_count, 1);
+  EXPECT_EQ(tx.account_balances[0].balance, 10000);
+  EXPECT_EQ(tx.ledger_anchor.type, GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID);
+  EXPECT_EQ(
+      tx.ledger_anchor.hiero_transaction_id.transactionValidStart.seconds, createdAt2.seconds
+  );
+  EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.transactionValidStart.nanos, createdAt2.nanos);
+  EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.accountID.accountNum, 121);
+  EXPECT_EQ(tx.balance_derivation, GRDD_BALANCE_DERIVATION_EXTERN);
 }
