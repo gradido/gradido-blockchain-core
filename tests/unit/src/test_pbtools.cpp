@@ -1,4 +1,5 @@
 #include "../terminal_colors.h"
+#include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/data/wire/gradido_transaction.h"
@@ -62,9 +63,9 @@ constexpr auto confirmedCommunityRootTransactionBase64 =
 
 constexpr auto communityUuidHex = "019e2c31a30375c0941ef35c59e4f978";
 
-grdw_timestamp createdAt1 = {.seconds = 1609459200, .nanos = 0};
-grdw_timestamp createdAt2 = {.seconds = 1609459200, .nanos = 281271};
-grdw_timestamp confirmedAt = {.seconds = 1609464130, .nanos = 0};
+grdd_timestamp createdAt1 = {.seconds = 1609459200, .nanos = 0};
+grdd_timestamp createdAt2 = {.seconds = 1609459200, .nanos = 281271};
+grdd_timestamp confirmedAt = {.seconds = 1609464130, .nanos = 0};
 grdw_timestamp_seconds targetDate = {.seconds = 1609459000};
 constexpr size_t BUFFER_SIZE = 512;
 

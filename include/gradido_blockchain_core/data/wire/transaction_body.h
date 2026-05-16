@@ -15,7 +15,7 @@ extern "C" {
 typedef struct grdw_transaction_body {
   grdw_encrypted_memo *memos;
   uint8_t *other_community_uuid;
-  grdw_timestamp created_at;
+  grdd_timestamp created_at;
   union {
     grdw_gradido_transfer transfer;
     grdw_gradido_creation creation;

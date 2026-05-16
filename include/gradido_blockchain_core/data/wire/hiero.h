@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include "basic_types.h"
+#include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/result.h"
 
 #include <stdint.h>
@@ -18,7 +19,7 @@ typedef struct grdw_hiero_account_id {
 } grdw_hiero_account_id;
 
 typedef struct grdw_hiero_transaction_id {
-  grdw_timestamp transactionValidStart;
+  grdd_timestamp transactionValidStart;
   grdw_hiero_account_id accountID;
 } grdw_hiero_transaction_id;
 

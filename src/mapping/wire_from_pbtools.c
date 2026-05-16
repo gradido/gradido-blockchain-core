@@ -20,6 +20,7 @@
 #include "gradido_blockchain_core/data/proto/gradido/ledger_metadata.h"
 #include "gradido_blockchain_core/data/proto/gradido/register_address.h"
 #include "gradido_blockchain_core/data/proto/gradido/transaction_body.h"
+#include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/data/wire/gradido_transaction.h"
@@ -100,7 +101,7 @@ static grd_result signature_pair_from_pbtools(
 }
 
 static grd_result timestamp_from_pbtools(
-    grdw_timestamp *timestamp, const struct proto_gradido_timestamp_t *pb_timestamp
+    grdd_timestamp *timestamp, const struct proto_gradido_timestamp_t *pb_timestamp
 ) {
   if (!timestamp || !pb_timestamp) { return GRD_ERROR_NULL_POINTER; }
   timestamp->nanos = pb_timestamp->nanos;

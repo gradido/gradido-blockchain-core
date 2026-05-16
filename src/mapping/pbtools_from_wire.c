@@ -19,6 +19,7 @@
 #include "gradido_blockchain_core/data/proto/gradido/ledger_metadata.h"
 #include "gradido_blockchain_core/data/proto/gradido/register_address.h"
 #include "gradido_blockchain_core/data/proto/gradido/transaction_body.h"
+#include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/data/wire/gradido_transaction.h"
@@ -89,7 +90,7 @@ static void signature_pair_from_wire(
 }
 
 static void timestamp_from_wire(
-    struct proto_gradido_timestamp_t *pb_timestamp, const grdw_timestamp *timestamp
+    struct proto_gradido_timestamp_t *pb_timestamp, const grdd_timestamp *timestamp
 ) {
   if (!timestamp || !pb_timestamp) { return; }
 

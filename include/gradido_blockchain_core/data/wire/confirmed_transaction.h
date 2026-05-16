@@ -15,7 +15,7 @@ extern "C" {
 typedef struct grdw_confirmed_transaction {
   uint64_t id;
   grdw_gradido_transaction transaction;
-  grdw_timestamp confirmed_at;
+  grdd_timestamp confirmed_at;
   uint8_t running_hash[32];
   grdw_ledger_anchor ledger_anchor;
   grdw_account_balance *account_balances;

@@ -1,8 +1,9 @@
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
+#include "gradido_blockchain_core/data/timestamp.h"
 
 grd_result grdw_ledger_anchor_set_hiero_transaction_id(
     grdw_ledger_anchor *ledger_anchor,
-    grdw_timestamp transaction_valid_start,
+    grdd_timestamp transaction_valid_start,
     int64_t account_id_shard_num,
     int64_t account_id_realm_num,
     int64_t account_id_account_num

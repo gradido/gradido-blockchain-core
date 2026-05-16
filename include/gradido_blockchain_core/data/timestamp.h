@@ -36,7 +36,10 @@ grdd_timestamp grdd_timestamp_minus(const grdd_timestamp *t1, grdd_timestamp *t2
 grdd_timestamp grdd_timestamp_plus(const grdd_timestamp *t1, grdd_timestamp *t2);
 
 static inline grdd_timestamp grdd_timestamp_from_seconds(int64_t seconds) {
-  return (grdd_timestamp){.seconds = seconds, .nanos = 0};
+  grdd_timestamp timestamp;
+  timestamp.seconds = seconds;
+  timestamp.nanos = 0;
+  return timestamp;
 }
 
 grdd_timestamp grdd_timestamp_from_timestamp_seconds(

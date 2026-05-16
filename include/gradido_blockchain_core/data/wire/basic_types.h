@@ -32,11 +32,6 @@ typedef struct grdw_signature_pair {
   uint8_t signature[64];
 } grdw_signature_pair;
 
-typedef struct grdw_timestamp {
-  int64_t seconds;
-  int32_t nanos;
-} grdw_timestamp;
-
 typedef struct grdw_timestamp_seconds {
   int64_t seconds;
 } grdw_timestamp_seconds;
