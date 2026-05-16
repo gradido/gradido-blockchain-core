@@ -162,9 +162,12 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
-  memcpy(body.community_root.pubkey, g_KeyPairs[0].public_key, 32);
-  memcpy(body.community_root.gmw_pubkey, g_KeyPairs[1].public_key, 32);
-  memcpy(body.community_root.auf_pubkey, g_KeyPairs[2].public_key, 32);
+
+  grdw_community_root_assemble(
+      &body.community_root, g_KeyPairs[0].public_key, g_KeyPairs[1].public_key,
+      g_KeyPairs[2].public_key
+  );
+
   body.transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
@@ -207,11 +210,14 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
-  memcpy(body.register_address.user_pubkey, g_KeyPairs[3].public_key, 32);
-  memcpy(body.register_address.account_pubkey, g_KeyPairs[4].public_key, 32);
-  body.register_address.address_type = GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN;
-  body.register_address.derivation_index = 1;
-  crypto_generichash(body.register_address.name_hash, 32, g_KeyPairs[3].public_key, 32, NULL, 0);
+
+  uint8_t nameHash[32];
+  crypto_generichash(nameHash, 32, g_KeyPairs[3].public_key, 32, NULL, 0);
+  grdw_register_address_assemble(
+      &body.register_address, g_KeyPairs[3].public_key, GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN, 1,
+      nameHash, g_KeyPairs[4].public_key
+  );
+
   body.transaction_type = GRDD_TRANSACTION_TYPE_REGISTER_ADDRESS;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
@@ -267,12 +273,13 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt1;
-  memcpy(body.creation.recipient.pubkey, g_KeyPairs[4].public_key, 32);
-  body.creation.recipient.amount = 10000000;
+
   grd_memory_block communityUuid = fromHex(communityUuidHex);
-  memcpy(body.creation.recipient.community_uuid, communityUuid.data, 16);
+  grdw_gradido_creation_assemble(
+      &body.creation, g_KeyPairs[4].public_key, 10000000, communityUuid.data, targetDate.seconds
+  );
   free(communityUuid.data);
-  body.creation.target_date = targetDate;
+
   body.transaction_type = GRDD_TRANSACTION_TYPE_CREATION;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
@@ -325,12 +332,12 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
-  memcpy(body.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32);
-  body.transfer.sender.amount = 100000;
+
   grd_memory_block communityUuid = fromHex(communityUuidHex);
-  memcpy(body.transfer.sender.community_uuid, communityUuid.data, 16);
+  grdw_gradido_transfer_assemble(
+      &body.transfer, g_KeyPairs[4].public_key, 100000, communityUuid.data, g_KeyPairs[5].public_key
+  );
   free(communityUuid.data);
-  memcpy(body.transfer.recipient, g_KeyPairs[5].public_key, 32);
 
   body.transaction_type = GRDD_TRANSACTION_TYPE_TRANSFER;
   uint8_t buffer[256]{};
@@ -384,13 +391,13 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
-  memcpy(body.deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32);
-  body.deferred_transfer.transfer.sender.amount = 100000;
+
   grd_memory_block communityUuid = fromHex(communityUuidHex);
-  memcpy(body.deferred_transfer.transfer.sender.community_uuid, communityUuid.data, 16);
+  grdw_gradido_deferred_transfer_assemble(
+      &body.deferred_transfer, g_KeyPairs[4].public_key, 100000, communityUuid.data,
+      g_KeyPairs[5].public_key, 17261
+  );
   free(communityUuid.data);
-  memcpy(body.deferred_transfer.transfer.recipient, g_KeyPairs[5].public_key, 32);
-  body.deferred_transfer.timeout_duration = 17261;
 
   body.transaction_type = GRDD_TRANSACTION_TYPE_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
@@ -449,13 +456,13 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
-  memcpy(body.redeem_deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32);
-  body.redeem_deferred_transfer.transfer.sender.amount = 100000;
+
   grd_memory_block communityUuid = fromHex(communityUuidHex);
-  memcpy(body.redeem_deferred_transfer.transfer.sender.community_uuid, communityUuid.data, 16);
+  grdw_gradido_redeem_deferred_transfer_assemble(
+      &body.redeem_deferred_transfer, 15, g_KeyPairs[4].public_key, 100000, communityUuid.data,
+      g_KeyPairs[5].public_key
+  );
   free(communityUuid.data);
-  memcpy(body.redeem_deferred_transfer.transfer.recipient, g_KeyPairs[5].public_key, 32);
-  body.redeem_deferred_transfer.deferred_transfer_transaction_nr = 15;
 
   body.transaction_type = GRDD_TRANSACTION_TYPE_REDEEM_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
@@ -513,7 +520,8 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt2;
-  body.timeout_deferred_transfer.deferred_transfer_transaction_nr = 16;
+
+  grdw_gradido_timeout_deferred_transfer_assemble(&body.timeout_deferred_transfer, 16);
 
   body.transaction_type = GRDD_TRANSACTION_TYPE_TIMEOUT_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
