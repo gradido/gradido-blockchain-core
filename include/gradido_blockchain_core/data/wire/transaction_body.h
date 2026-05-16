@@ -51,7 +51,7 @@ grd_result grdw_transaction_body_copy_memo(
     uint8_t index,
     grd_memory *allocator
 );
-
+//! need a area allocator
 grd_result grdw_transaction_body_decode(
     grdw_transaction_body *body, const grd_memory_block *binarySrc, grd_memory *allocator
 );

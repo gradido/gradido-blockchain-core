@@ -78,6 +78,7 @@ constexpr auto communityUuidHex = "019e2c31a30375c0941ef35c59e4f978";
 grdw_timestamp createdAt1 = {.seconds = 1609459200, .nanos = 0};
 grdw_timestamp createdAt2 = {.seconds = 1609459200, .nanos = 281271};
 grdw_timestamp_seconds targetDate = {.seconds = 1609449200};
+constexpr size_t BUFFER_SIZE = 512;
 
 static grd_memory_block fromBase64(
     const char *base64String, size_t size, int variant = sodium_base64_VARIANT_ORIGINAL
@@ -160,7 +161,7 @@ TEST(PBToolsTest, TransactionBody_Decode) {
   grd_memory mem;
   grdw_transaction_body body{};
   auto bin = fromBase64(emptyTransactionBodyBase64, strlen(emptyTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body_decode(&body, &bin, &mem);
   grd_memory_free(&mem);
 }
@@ -168,7 +169,7 @@ TEST(PBToolsTest, TransactionBody_Decode) {
 TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 128), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
@@ -195,7 +196,7 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Decode) {
   grdw_transaction_body body{};
   auto bin =
       fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
@@ -213,7 +214,7 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Decode) {
 TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
@@ -244,7 +245,7 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Decode) {
   auto bin = fromBase64(
       registerAddressTransactionBodyBase64, strlen(registerAddressTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
@@ -267,7 +268,7 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Decode) {
 TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
@@ -302,7 +303,7 @@ TEST(PBToolsTest, TransactionBody_Creation_Decode) {
   grd_memory mem;
   grdw_transaction_body body{};
   auto bin = fromBase64(creationTransactionBodyBase64, strlen(creationTransactionBodyBase64));
-  EXPECT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  EXPECT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
@@ -325,7 +326,7 @@ TEST(PBToolsTest, TransactionBody_Creation_Decode) {
 TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
@@ -361,7 +362,7 @@ TEST(PBToolsTest, TransactionBody_Transfer_Decode) {
   grd_memory mem;
   grdw_transaction_body body{};
   auto bin = fromBase64(transferTransactionBodyBase64, strlen(transferTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
@@ -384,7 +385,7 @@ TEST(PBToolsTest, TransactionBody_Transfer_Decode) {
 TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
@@ -423,7 +424,7 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Decode) {
   auto bin = fromBase64(
       deferredTransferTransactionBodyBase64, strlen(deferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
@@ -449,7 +450,7 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Decode) {
 TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
@@ -489,7 +490,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
       redeemDeferredTransferTransactionBodyBase64,
       strlen(redeemDeferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
@@ -519,7 +520,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
 TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
   init_key_pairs();
   grd_memory mem;
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt2;
@@ -547,7 +548,7 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Decode) {
       timeoutDeferredTransferTransactionBodyBase64,
       strlen(timeoutDeferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
@@ -566,7 +567,7 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Decode) {
 TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
   grd_memory mem;
   grdw_gradido_transaction tx{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   tx.body_bytes =
       fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
@@ -605,7 +606,8 @@ TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
 
   grdu_mono_timer_reset(&timeUsed);
   auto bin = fromBase64(communityRootTransactionBase64, strlen(communityRootTransactionBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  uint8_t staticBuffer[BUFFER_SIZE * 2];
+  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, BUFFER_SIZE * 2), GRD_SUCCESS);
   char buffer[256];
   grdu_mono_timer_reset(&timeUsed);
   int i = 0;
@@ -630,7 +632,8 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   grd_memory mem;
 
   grdw_gradido_transaction tx{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
+  uint8_t staticBuffer[BUFFER_SIZE];
+  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, BUFFER_SIZE), GRD_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   // tx.body_bytes = fromBase64(communityRootTransactionBodyBase64,
   // strlen(communityRootTransactionBodyBase64));
@@ -656,7 +659,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
   grd_memory mem2;
-  ASSERT_EQ(grd_memory_init_arena(&mem2, 1024), GRD_SUCCESS);
+  ASSERT_EQ(grd_memory_init_arena(&mem2, BUFFER_SIZE), GRD_SUCCESS);
   int i = 0;
   grdu_mono_timer_reset(&timeUsed);
   for (; i < 1000; ++i) {

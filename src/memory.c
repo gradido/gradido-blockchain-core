@@ -67,7 +67,7 @@ grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t 
   if (!size) { return GRD_ERROR_INVALID_PARAM; }
 
   if (GRD_MEMORY_ALLOC_TYPE_DEFAULT == memory->allocation_type) {
-    *buffer = malloc(size);
+    *buffer = (uint8_t *)malloc(size);
     if (!*buffer) { return GRD_ERROR_OUT_OF_MEMORY; }
     return GRD_SUCCESS;
   }
@@ -122,5 +122,21 @@ grd_result grd_memory_block_free(grd_memory_block *memory_block, grd_memory *mem
 
   memory_block->data = NULL;
   memory_block->size = 0;
+  return GRD_SUCCESS;
+}
+
+grd_result grd_memory_block_free_part(
+    grd_memory_block *memory_block, grd_memory *memory, size_t size_to_release
+) {
+  if (!memory_block || !memory) { return GRD_ERROR_NULL_POINTER; }
+  if (memory_block->size < size_to_release) { return GRD_ERROR_INVALID_PARAM; }
+  if (memory_block->size == size_to_release) { return grd_memory_block_free(memory_block, memory); }
+  if (GRD_MEMORY_ALLOC_TYPE_ARENA_EXTERNAL == memory->allocation_type ||
+      GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED == memory->allocation_type) {
+    if (memory->data + memory->last_index - memory_block->size == memory_block->data) {
+      memory->last_index -= size_to_release;
+      memory_block->size -= size_to_release;
+    }
+  }
   return GRD_SUCCESS;
 }

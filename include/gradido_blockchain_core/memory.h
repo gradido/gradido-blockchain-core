@@ -240,6 +240,15 @@ grd_result grd_memory_block_copy(
  */
 grd_result grd_memory_block_free(grd_memory_block *memory_block, grd_memory *memory);
 
+/*
+ * if memory_block was the last allocated block, we can release what we don't need at the end
+ * work only with area memory, will do nothing on other memory types
+ * will call grd_memory_block_free if size_to_release == memory_block->size
+ */
+grd_result grd_memory_block_free_part(
+    grd_memory_block *memory_block, grd_memory *memory, size_t size_to_release
+);
+
 /** @} */
 
 #ifdef __cplusplus

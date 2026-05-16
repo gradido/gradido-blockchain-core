@@ -23,24 +23,18 @@ typedef struct grdw_confirmed_transaction grdw_confirmed_transaction;
 typedef struct grdw_gradido_transaction grdw_gradido_transaction;
 typedef struct grdw_transaction_body grdw_transaction_body;
 
-typedef struct grd_memory grd_memory;
-
 grd_result grdm_transaction_body_from_wire(
     struct proto_gradido_transaction_body_t *pb_transaction_body,
-    const grdw_transaction_body *transaction_body,
-    grd_memory *allocator
+    const grdw_transaction_body *transaction_body
 );
 
 grd_result grdm_gradido_transaction_from_wire(
-    struct proto_gradido_gradido_transaction_t *pbtx,
-    const grdw_gradido_transaction *tx,
-    grd_memory *allocator
+    struct proto_gradido_gradido_transaction_t *pbtx, const grdw_gradido_transaction *tx
 );
 
 grd_result grdm_confirmed_transaction_from_wire(
     struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
-    const grdw_confirmed_transaction *confirmed_tx,
-    grd_memory *allocator
+    const grdw_confirmed_transaction *confirmed_tx
 );
 
 #ifdef __cplusplus
