@@ -173,6 +173,7 @@ static grd_result ledger_anchor_from_wire(
     pb_ledger_anchor->type =
         (enum proto_gradido_ledger_anchor_type_e)GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID;
   } else {
+    pb_ledger_anchor->anchor_id = proto_gradido_ledger_anchor_anchor_id_id_e;
     pb_ledger_anchor->type = (enum proto_gradido_ledger_anchor_type_e)ledger_anchor->type;
     pb_ledger_anchor->id = ledger_anchor->id;
   }

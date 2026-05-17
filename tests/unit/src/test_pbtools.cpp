@@ -51,7 +51,8 @@ constexpr auto communityRootTransactionBase64 =
     "QQsQgxucGfLP3RSn9srLQl0EHOJWZ5GZn3wcEzulHauS7qT32gG78hSLe/"
     "eNlPpB4rhedsKJEAoSdFpmCiCBZwMplGmI7fRR9MQkaR2Dz1qQQ5BCiC1btyJD71Ue9BIg1+OooJCqRIcyRvXGrPwX/"
     "3TuF09W570qVf+4EEH22x0aIK2HB0oqpLwC03l/u0PIsr5u3Wyx1jRKlA/FKLzh4TCyEgYIgMy5/wUYiIAM";
-constexpr auto timeoutDeferredTransferTransactionBase64 = "EhRqAggQEgoIgMy5/wUQt5URGIiADA==";
+constexpr auto timeoutDeferredTransferTransactionBase64 =
+    "EhRqAggQEgoIgMy5/wUQt5URGIiADBoEIBEIAw==";
 
 // Confirmed Gradido Transaction
 constexpr auto confirmedCommunityRootTransactionBase64 =
@@ -728,17 +729,20 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   grdw_gradido_transaction_free(&tx, &mem);
 }
 
-TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer)
-{
+TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
   grd_memory mem;
   grdw_gradido_transaction tx{};
   ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_gradido_transaction_init(&tx);
-  tx.body_bytes =
-    fromBase64(timeoutDeferredTransferTransactionBodyBase64, strlen(timeoutDeferredTransferTransactionBodyBase64));
-  
+  tx.body_bytes = fromBase64(
+      timeoutDeferredTransferTransactionBodyBase64,
+      strlen(timeoutDeferredTransferTransactionBodyBase64)
+  );
+  tx.pairing_ledger_anchor.id = 17;
+  tx.pairing_ledger_anchor.type = GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID;
+
   uint8_t buffer[256]{};
-  grd_memory_block bufferPtr = { .data = buffer, .size = 256 };
+  grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
   ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
@@ -752,19 +756,23 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer)
   grdw_gradido_transaction_free(&tx, &mem);
 }
 
-TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer)
-{
+TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
   grd_memory mem;
   grdw_gradido_transaction tx{};
   ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_gradido_transaction_init(&tx);
-  auto serializedTx = 
-    fromBase64(timeoutDeferredTransferTransactionBase64, strlen(timeoutDeferredTransferTransactionBase64));
+  auto serializedTx = fromBase64(
+      timeoutDeferredTransferTransactionBase64, strlen(timeoutDeferredTransferTransactionBase64)
+  );
   ASSERT_EQ(grdw_gradido_transaction_decode(&tx, &serializedTx, &mem), GRD_SUCCESS);
   free(serializedTx.data);
   EXPECT_FALSE(tx.sig_map_count);
   EXPECT_FALSE(tx.sig_map);
-  
+  EXPECT_EQ(tx.pairing_ledger_anchor.id, 17);
+  EXPECT_EQ(
+      tx.pairing_ledger_anchor.type, GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID
+  );
+
   grdw_gradido_transaction_free(&tx, &mem);
 }
 
