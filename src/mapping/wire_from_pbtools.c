@@ -398,7 +398,7 @@ grd_result grdm_gradido_transaction_from_pb(
 ) {
   if (!tx || !pbtx) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = GRD_ERROR_NOT_INITIALIZED;
-  if (pbtx->sig_map_p->sig_pair.length > 0) {
+  if (pbtx->sig_map_p && pbtx->sig_map_p->sig_pair.length > 0) {
     int sig_map_count = pbtx->sig_map_p->sig_pair.length;
     if (sig_map_count >= 255) { return GRD_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
 
