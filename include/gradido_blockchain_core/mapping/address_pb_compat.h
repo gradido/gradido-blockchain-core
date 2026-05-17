@@ -28,43 +28,44 @@ extern "C" {
 
 // NONE
 static_assert(
-    GRDD_ADDRESS_TYPE_NONE == proto_gradido_register_address_none_e,
+    (int)GRDD_ADDRESS_TYPE_NONE == (int)proto_gradido_register_address_none_e,
     "AddressType enum mismatch: NONE"
 );
 
 // COMMUNITY_HUMAN
 static_assert(
-    GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN == proto_gradido_register_address_community_human_e,
+    (int)GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN == (int)proto_gradido_register_address_community_human_e,
     "AddressType enum mismatch: COMMUNITY_HUMAN"
 );
 
 // COMMUNITY_GMW
 static_assert(
-    GRDD_ADDRESS_TYPE_COMMUNITY_GMW == proto_gradido_register_address_community_gmw_e,
+    (int)GRDD_ADDRESS_TYPE_COMMUNITY_GMW == (int)proto_gradido_register_address_community_gmw_e,
     "AddressType enum mismatch: COMMUNITY_GMW"
 );
 
 // COMMUNITY_AUF
 static_assert(
-    GRDD_ADDRESS_TYPE_COMMUNITY_AUF == proto_gradido_register_address_community_auf_e,
+    (int)GRDD_ADDRESS_TYPE_COMMUNITY_AUF == (int)proto_gradido_register_address_community_auf_e,
     "AddressType enum mismatch: COMMUNITY_AUF"
 );
 
 // COMMUNITY_PROJECT
 static_assert(
-    GRDD_ADDRESS_TYPE_COMMUNITY_PROJECT == proto_gradido_register_address_community_project_e,
+    (int)GRDD_ADDRESS_TYPE_COMMUNITY_PROJECT ==
+        (int)proto_gradido_register_address_community_project_e,
     "AddressType enum mismatch: COMMUNITY_PROJECT"
 );
 
 // SUBACCOUNT
 static_assert(
-    GRDD_ADDRESS_TYPE_SUBACCOUNT == proto_gradido_register_address_subaccount_e,
+    (int)GRDD_ADDRESS_TYPE_SUBACCOUNT == (int)proto_gradido_register_address_subaccount_e,
     "AddressType enum mismatch: SUBACCOUNT"
 );
 
 // CRYPTO_ACCOUNT
 static_assert(
-    GRDD_ADDRESS_TYPE_CRYPTO_ACCOUNT == proto_gradido_register_address_crypto_account_e,
+    (int)GRDD_ADDRESS_TYPE_CRYPTO_ACCOUNT == (int)proto_gradido_register_address_crypto_account_e,
     "AddressType enum mismatch: CRYPTO_ACCOUNT"
 );
 
