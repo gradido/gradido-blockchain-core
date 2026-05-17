@@ -20,6 +20,7 @@
 // Transaction Body
 // contain only createAt and version string
 constexpr auto emptyTransactionBodyBase64 = "CgASCAiAzLn/BRAAGgMzLjMgAA==";
+constexpr auto transactionBodyOtherCommunityBase64 = "EgYIgMy5/wUYiIAMKhABniwxowN1wJQe81xZ5Pl4";
 constexpr auto communityRootTransactionBodyBase64 =
     "WmYKIIFnAymUaYjt9FH0xCRpHYPPWpBDkEKILVu3IkPvVR70EiDX46igkKpEhzJG9cas/Bf/dO4XT1bnvSpV/"
     "7gQQfbbHRogrYcHSiqkvALTeX+7Q8iyvm7dbLHWNEqUD8UovOHhMLISBgiAzLn/BRiIgAw=";
@@ -152,6 +153,54 @@ TEST(PBToolsTest, TransactionBody_Decode) {
   auto bin = fromBase64(emptyTransactionBodyBase64, strlen(emptyTransactionBodyBase64));
   ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   grdw_transaction_body_decode(&body, &bin, &mem);
+  grd_memory_free(&mem);
+}
+
+TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
+  init_key_pairs();
+  grd_memory mem;
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  grdw_transaction_body body;
+  grdw_transaction_body_init(&body);
+  body.created_at = createdAt1;
+
+  grd_memory_block communityUuid = fromHex(communityUuidHex);
+  grd_memory_buffer_alloc(&body.other_community_uuid, &mem, 16);
+  memcpy(body.other_community_uuid, communityUuid.data, 16);
+  free(communityUuid.data);
+
+  body.transaction_type = GRDD_TRANSACTION_TYPE_NONE;
+  uint8_t buffer[256]{};
+  grd_memory_block bufferPtr = {.data = buffer, .size = 256};
+  size_t finalSize = 0;
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  bufferPtr.size = finalSize;
+  auto hex = toHex(&bufferPtr);
+  auto base64 = toBase64(&bufferPtr);
+  EXPECT_STREQ(base64.data(), transactionBodyOtherCommunityBase64);
+  // printf("other community:\n%s\n", base64.c_str());
+  // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
+
+  grd_memory_free(&mem);
+}
+
+TEST(PBtoolsTest, TransactionBody_Decode_OtherCommunity) {
+  grd_memory mem;
+  grdw_transaction_body body{};
+  auto bin =
+      fromBase64(transactionBodyOtherCommunityBase64, strlen(transactionBodyOtherCommunityBase64));
+  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  free(bin.data);
+  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_FALSE(body.memos);
+  EXPECT_FALSE(body.memos_count);
+  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_NONE);
+  grd_memory_block communityUuid = fromHex(communityUuidHex);
+  ASSERT_TRUE(body.other_community_uuid);
+  EXPECT_FALSE(memcmp(body.other_community_uuid, communityUuid.data, 16));
+  free(communityUuid.data);
+
   grd_memory_free(&mem);
 }
 

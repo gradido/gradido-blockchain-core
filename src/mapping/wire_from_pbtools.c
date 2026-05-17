@@ -329,6 +329,7 @@ grd_result grdm_transaction_body_from_pbtools(
     }
   }
   if (pb_transaction_body->other_community_uuid.size) {
+    grd_memory_buffer_alloc(&transaction_body->other_community_uuid, allocator, 16);
     result = community_uuid_from_pbtools(
         transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
     );

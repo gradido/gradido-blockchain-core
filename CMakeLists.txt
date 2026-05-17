@@ -42,6 +42,11 @@ include_directories(
 
 add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC} ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC})
 
+# enable debug symbols from parent project on visual studio on windows in debug build
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CONFIG:Debug>:/JMC>
+)
+
 if(ENABLE_BENCHMARKS)
     add_subdirectory(benchmarks)
 endif()
