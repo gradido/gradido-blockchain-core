@@ -28,18 +28,19 @@ extern "C" {
 
 // UNSPECIFIED
 static_assert(
-    GRDD_BALANCE_DERIVATION_UNSPECIFIED == proto_gradido_unspecified_e,
+    (int)GRDD_BALANCE_DERIVATION_UNSPECIFIED == (int)proto_gradido_unspecified_e,
     "BalanceDerivation enum mismatch: UNSPECIFIED"
 );
 
 // NODE
 static_assert(
-    GRDD_BALANCE_DERIVATION_NODE == proto_gradido_node_e, "BalanceDerivation enum mismatch: NODE"
+    (int)GRDD_BALANCE_DERIVATION_NODE == (int)proto_gradido_node_e,
+    "BalanceDerivation enum mismatch: NODE"
 );
 
 // EXTERN
 static_assert(
-    GRDD_BALANCE_DERIVATION_EXTERN == proto_gradido_extern_e,
+    (int)GRDD_BALANCE_DERIVATION_EXTERN == (int)proto_gradido_extern_e,
     "CrossGroupType enum mismatch: OUTBOUND"
 );
 

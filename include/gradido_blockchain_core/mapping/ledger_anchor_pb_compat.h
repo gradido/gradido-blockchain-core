@@ -28,56 +28,56 @@ extern "C" {
 
 /* UNSPECIFIED */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_UNSPECIFIED == proto_gradido_ledger_anchor_unspecified_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_UNSPECIFIED == (int)proto_gradido_ledger_anchor_unspecified_e,
     "LedgerAnchor enum mismatch: UNSPECIFIED"
 );
 
 /* HIERO_TRANSACTION_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID ==
-        proto_gradido_ledger_anchor_hiero_transaction_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID ==
+        (int)proto_gradido_ledger_anchor_hiero_transaction_id_e,
     "LedgerAnchor enum mismatch: HIERO_TRANSACTION_ID"
 );
 
 /* LEGACY_GRADIDO_DB_TRANSACTION_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID ==
-        proto_gradido_ledger_anchor_legacy_gradido_db_transaction_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID ==
+        (int)proto_gradido_ledger_anchor_legacy_gradido_db_transaction_id_e,
     "LedgerAnchor enum mismatch: LEGACY_TRANSACTION_ID"
 );
 
 /* NODE_TRIGGER_TRANSACTION_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_NODE_TRIGGER_TRANSACTION_ID ==
-        proto_gradido_ledger_anchor_node_trigger_transaction_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_NODE_TRIGGER_TRANSACTION_ID ==
+        (int)proto_gradido_ledger_anchor_node_trigger_transaction_id_e,
     "LedgerAnchor enum mismatch: NODE_TRIGGER_TRANSACTION_ID"
 );
 
 /* LEGACY_GRADIDO_DB_COMMUNITY_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_COMMUNITY_ID ==
-        proto_gradido_ledger_anchor_legacy_gradido_db_community_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_COMMUNITY_ID ==
+        (int)proto_gradido_ledger_anchor_legacy_gradido_db_community_id_e,
     "LedgerAnchor enum mismatch: LEGACY_COMMUNITY_ID"
 );
 
 /* LEGACY_GRADIDO_DB_USER_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_USER_ID ==
-        proto_gradido_ledger_anchor_legacy_gradido_db_user_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_USER_ID ==
+        (int)proto_gradido_ledger_anchor_legacy_gradido_db_user_id_e,
     "LedgerAnchor enum mismatch: LEGACY_USER_ID"
 );
 
 /* LEGACY_GRADIDO_DB_CONTRIBUTION_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_CONTRIBUTION_ID ==
-        proto_gradido_ledger_anchor_legacy_gradido_db_contribution_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_CONTRIBUTION_ID ==
+        (int)proto_gradido_ledger_anchor_legacy_gradido_db_contribution_id_e,
     "LedgerAnchor enum mismatch: LEGACY_CONTRIBUTION_ID"
 );
 
 /* LEGACY_GRADIDO_DB_TRANSACTION_LINK_ID */
 static_assert(
-    GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_LINK_ID ==
-        proto_gradido_ledger_anchor_legacy_gradido_db_transaction_link_id_e,
+    (int)GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_LINK_ID ==
+        (int)proto_gradido_ledger_anchor_legacy_gradido_db_transaction_link_id_e,
     "LedgerAnchor enum mismatch: LEGACY_TRANSACTION_LINK_ID"
 );
 

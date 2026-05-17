@@ -11,6 +11,7 @@ extern "C" {
 // forward declarations from pbtools
 struct proto_gradido_transaction_body_t;
 struct proto_gradido_gradido_transaction_t;
+struct proto_gradido_confirmed_transaction_t;
 
 // forward declarations from gradido data wire
 typedef struct grdw_confirmed_transaction grdw_confirmed_transaction;

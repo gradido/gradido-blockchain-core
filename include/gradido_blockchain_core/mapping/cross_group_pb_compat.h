@@ -28,25 +28,25 @@ extern "C" {
 
 // LOCAL
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_LOCAL == proto_gradido_transaction_body_local_e,
+    (int)GRDD_CROSS_GROUP_TYPE_LOCAL == (int)proto_gradido_transaction_body_local_e,
     "CrossGroupType enum mismatch: LOCAL"
 );
 
 // INBOUND
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_INBOUND == proto_gradido_transaction_body_inbound_e,
+    (int)GRDD_CROSS_GROUP_TYPE_INBOUND == (int)proto_gradido_transaction_body_inbound_e,
     "CrossGroupType enum mismatch: INBOUND"
 );
 
 // OUTBOUND
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_OUTBOUND == proto_gradido_transaction_body_outbound_e,
+    (int)GRDD_CROSS_GROUP_TYPE_OUTBOUND == (int)proto_gradido_transaction_body_outbound_e,
     "CrossGroupType enum mismatch: OUTBOUND"
 );
 
 // CROSS
 static_assert(
-    GRDD_CROSS_GROUP_TYPE_CROSS == proto_gradido_transaction_body_cross_e,
+    (int)GRDD_CROSS_GROUP_TYPE_CROSS == (int)proto_gradido_transaction_body_cross_e,
     "CrossGroupType enum mismatch: CROSS"
 );
 
