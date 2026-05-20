@@ -117,7 +117,7 @@ static void bench_step(void (*func_ptr)(int), int stepCount, const char* name)
   grdu_mono_timer timeUsed;
   grdu_mono_timer_reset(&timeUsed);
   func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, timeUsed);
   printf("%s: %s\n", name, buffer);
 }
 
@@ -129,7 +129,7 @@ int main(void)
 
   grdu_mono_timer_reset(&timeUsed);
   prepare_test_data();
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
   printf("time for prepare test data: %s\n", buffer);
 
   const int stepCount = TEST_VALUES_COUNT * 1000;
@@ -142,7 +142,7 @@ int main(void)
   bench_step(test_unit_round, stepCount, "unit round");
   bench_step(test_r128_round, stepCount, "r128 round");
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
   printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
 
   return 0;

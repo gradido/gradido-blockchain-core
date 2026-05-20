@@ -349,13 +349,13 @@ TEST(GradidoUnitTest, toString_Randomized)
   int countDiffBetweenDoubleInteger = 0;
   constexpr int bufferSize = 24;
   char buffer[bufferSize];
-  
-  for (int i = 0; i < 10'000; ++i) 
+
+  for (int i = 0; i < 10'000; ++i)
   {
     double value = dist(rng);
     grdd_unit v = grdd_unit_from_decimal(value);
-    
-    for (int precision = 0; precision <= 4; ++precision) 
+
+    for (int precision = 0; precision <= 4; ++precision)
     {
       EXPECT_GT(grdd_unit_to_string(buffer, bufferSize, v, precision), 0);
 
@@ -365,12 +365,12 @@ TEST(GradidoUnitTest, toString_Randomized)
 
       double rounded = grdd_unit_to_decimal(v);
 
-      if (precision < 4) 
+      if (precision < 4)
       {
         double factor = pow(10.0, precision);
         rounded = round(grdd_unit_to_decimal(v) * factor) / factor;
       }
-      
+
       ss << rounded;
       std::string refStr(ss.str());
 
@@ -420,7 +420,7 @@ TEST(GradidoUnitTest, toStringFast_RandomExact)
     // --- toString Tests ---
     for (int precision = 0; precision <= 4; ++precision) {
       grdd_unit_to_string(buffer, bufferSize, v, precision);
-      
+
       std::string ref = fullStr;
 
       if (precision == 0) {
@@ -543,7 +543,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
           std::lock_guard<std::mutex> lock(coutMutex);
           // Only output every 1000th example, otherwise it becomes too much
           static int sampleCounter = 0;
-          if (sampleCounter++ % 1000 == 0) 
+          if (sampleCounter++ % 1000 == 0)
           {
             constexpr int bufferSize = 32;
             char buffer[bufferSize];
@@ -659,7 +659,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   std::cout << "Testing " << amountSamples.size() << " amounts x " << durationSamples.size()
     << " durations = " << totalTests << " combinations." << std::endl;
 
-  grdu_mono_timer_string(buffer, bufferSize, &timeUsed);
+  grdu_mono_timer_string(buffer, bufferSize, timeUsed);
   std::cout << "Time for preparations: " << buffer << std::endl;
 
   std::vector<ThreadResult> threadResults(NUM_THREADS);
@@ -715,7 +715,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
           }
           else if (diff <= 100) {
             ++res.diffByHundred;
-          } 
+          }
           else {
             res.diffByOther++;
 
@@ -768,7 +768,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   std::cout << "Other differences: " << totalDiffOther << " ("
     << (100.0 * totalDiffOther / totalTests) << "%)" << std::endl;
   std::cout << "Smallest Error: " << smallestError << ", " << smallestErrorDuration << " seconds " << std::endl;
-  
+
   // Show the first 20 errors as examples
   std::cout << "\nExample errors (amount in Cent, duration in seconds, difference in Cent):" << std::endl;
   std::set<int64_t> postedGdd;
@@ -866,7 +866,7 @@ TEST(GradidoUnitTest, testOverflowProvocation)
 
   bool overflowDetected = false;
 
-  
+
   // Apply multiple times -> escalating growth
   for (int i = 0; i < 10; ++i) {
     value = grdd_unit_calculate_decay(value, hugeNegativeDuration);
@@ -887,4 +887,3 @@ TEST(TestUnit, decayAfterYear)
   grdd_unit_to_string(buffer, 30, result, 2);
   EXPECT_STREQ(buffer, "500.00");
 }
-
