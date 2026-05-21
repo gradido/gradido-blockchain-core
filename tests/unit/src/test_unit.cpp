@@ -39,10 +39,10 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
   for (int i = 1; i < 31556952 * 2; i += 32) {
     grdd_unit decayed = grdd_unit_calculate_decay(100000000, i);
     if (prevValue) {
-      ASSERT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
+      EXPECT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
       auto distance = prevValue - decayed;
       if (prevDistance) {
-        ASSERT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
+        EXPECT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
       }
       prevDistance = distance;
     }
@@ -56,7 +56,7 @@ TEST(GradidoUnitTest, TestReverseDecay)
   for (int i = 1; i < 31556952 * 2; i += 32) {
     auto valueWithDecay = grdd_unit_calculate_decay(startValue, -i);
     auto decay = grdd_unit_calculate_decay(valueWithDecay, i);
-    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1);
+    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1) << "diff is more than 1, i: " << i;
   }
 }
 
@@ -341,6 +341,229 @@ TEST(GradidoUnitTest, roundToPrecision_BoundarySweep)
   }
 }
 
+struct DecayTestVector {
+    const char* name;
+    grdd_unit amount;
+    grdd_duration_seconds duration;
+    grdd_unit expected;
+};
+
+static const DecayTestVector DECAY_TEST_VECTORS[] = {
+    {
+        "1_gdd_1_second",
+        10000,
+        1,
+        10000
+    },
+    {
+        "100_gdd_14_days",
+        1000000,
+        14 * 24 * 60 * 60,
+        973781
+    },
+    {
+        "100_gdd_1_year",
+        1000000,
+        31556952,
+        500000
+    },
+    {
+        "0_0001_gdd_1_second",
+        1,
+        1,
+        1
+    },
+    {
+        "1_gdd_1_hour",
+        10000,
+        3600,
+        9999
+    },
+    {
+        "1_gdd_1_day",
+        10000,
+        86400,
+        9981
+    },
+    {
+        "100_gdd_30_days",
+        1000000,
+        30 * 24 * 60 * 60,
+        944657
+    },
+    {
+        "100_gdd_half_year",
+        1000000,
+        15778476,
+        707107
+    },
+    {
+        "1000_gdd_1_year",
+        10000000,
+        31556952,
+        5000000
+    },
+    {
+        "1000_gdd_2_years",
+        10000000,
+        2 * 31556952,
+        2500000
+    },
+
+    // small values
+
+    {
+        "2_gdd_1_second",
+        20000,
+        1,
+        20000
+    },
+    {
+        "5_gdd_1_second",
+        50000,
+        1,
+        50000
+    },
+    {
+        "10_gdd_1_second",
+        100000,
+        1,
+        100000
+    },
+    {
+        "25_gdd_1_second",
+        250000,
+        1,
+        250000
+    },
+    {
+        "50_gdd_1_second",
+        500000,
+        1,
+        500000
+    },
+    {
+        "75_gdd_1_second",
+        750000,
+        1,
+        750000
+    },
+    {
+        "100_gdd_1_second",
+        1000000,
+        1,
+        1000000
+    },
+
+    // medium values
+
+    {
+        "250_gdd_1_second",
+        2500000,
+        1,
+        2500000
+    },
+    {
+        "500_gdd_1_second",
+        5000000,
+        1,
+        5000000
+    },
+    {
+        "750_gdd_1_second",
+        7500000,
+        1,
+        7500000
+    },
+    {
+        "1000_gdd_1_second",
+        10000000,
+        1,
+        10000000
+    },
+
+    // larger values
+
+    {
+        "2500_gdd_1_second",
+        25000000,
+        1,
+        24999999
+    },
+    {
+        "5000_gdd_1_second",
+        50000000,
+        1,
+        49999999
+    },
+    {
+        "10000_gdd_1_second",
+        100000000,
+        1,
+        99999998
+    },
+    {
+        "25000_gdd_1_second",
+        250000000,
+        1,
+        249999995
+    },
+    {
+        "50000_gdd_1_second",
+        500000000,
+        1,
+        499999989
+    },
+    {
+        "100000_gdd_1_second",
+        1000000000,
+        1,
+        999999978
+    },
+    {
+        "250000_gdd_1_second",
+        2500000000,
+        1,
+        2499999945
+    },
+    {
+        "500000_gdd_1_second",
+        5000000000,
+        1,
+        4999999890
+    },
+    {
+        "1000000_gdd_1_second",
+        10000000000LL,
+        1,
+        9999999780LL
+    },
+
+    // max-ish
+
+    {
+        "maxish_1_year",
+        INT64_MAX,
+        31556952,
+        4611686018427387903LL
+    },
+};
+
+TEST(GradidoUnitTest, DecayTestVectors)
+{
+    for (const auto& test : DECAY_TEST_VECTORS) {
+        auto result =
+            grdd_unit_calculate_decay(
+                test.amount,
+                test.duration
+            );
+
+        EXPECT_EQ(result, test.expected)
+            << "failed test vector: "
+            << test.name;
+    }
+}
+
 
 TEST(GradidoUnitTest, toString_Randomized)
 {
@@ -543,7 +766,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
           std::lock_guard<std::mutex> lock(coutMutex);
           // Only output every 1000th example, otherwise it becomes too much
           static int sampleCounter = 0;
-          if (sampleCounter++ % 1000 == 0)
+          /*if (sampleCounter++ % 1000 == 0)
           {
             constexpr int bufferSize = 32;
             char buffer[bufferSize];
@@ -555,7 +778,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
             std::cout << ", decayed: " << buffer;
             EXPECT_GT(grdd_unit_to_string(buffer, bufferSize, diff, 4), 0);
             std::cout << ", Diff: " << buffer << std::endl;
-          }
+            }*/
         }
       }
     }
