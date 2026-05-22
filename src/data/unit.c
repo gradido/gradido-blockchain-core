@@ -292,6 +292,84 @@ grdd_timestamp_seconds grdd_unit_decay_start_time()
 	return DECAY_START_TIME;
 }
 
+#if defined(__SIZEOF_INT128__)
+
+static inline void r128Mul_precise(R128* dst, const R128* a, const R128* b)
+{
+    //
+    // Handle sign separately
+    //
+    int sign = 0;
+
+    R128 ta = *a;
+    R128 tb = *b;
+
+    if (r128IsNeg(&ta)) {
+        r128__neg(&ta, &ta);
+        sign ^= 1;
+    }
+
+    if (r128IsNeg(&tb)) {
+        r128__neg(&tb, &tb);
+        sign ^= 1;
+    }
+
+    //
+    // Q64.64 multiplication:
+    //
+    // (ahi<<64 + alo) * (bhi<<64 + blo)
+    //
+    // Result after >>64:
+    //
+    //   (alo*blo)>>64
+    // + (ahi*blo)
+    // + (alo*bhi)
+    //
+    // High-high term contributes above Q64.64 range.
+    //
+
+    __uint128_t p0 =
+        (__uint128_t)ta.lo * tb.lo;
+
+    __uint128_t p1 =
+        (__uint128_t)ta.hi * tb.lo;
+
+    __uint128_t p2 =
+        (__uint128_t)ta.lo * tb.hi;
+
+    __uint128_t p3 =
+        (__uint128_t)ta.hi * tb.hi;
+
+    //
+    // Q64.64:
+    //
+    // result =
+    //      (p0 >> 64)
+    //    + p1
+    //    + p2
+    //    + (p3 << 64)
+    //
+
+    __uint128_t low =
+        (p0 >> 64)
+        + (uint64_t)p1
+        + (uint64_t)p2;
+
+    __uint128_t high =
+        (p1 >> 64)
+        + (p2 >> 64)
+        + p3
+        + (low >> 64);
+
+    R128 out = {
+        .lo = (uint64_t)low,
+        .hi = (uint64_t)high
+    };
+    *dst = out;
+}
+
+#else
+
 // use intern fp256 for better precision
 static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
 {
@@ -337,7 +415,7 @@ static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
       numeric value:
           (hi << 64) | lo
   */
-  
+
   fa.d[0] = ta.lo;
   fa.d[1] = ta.hi;
   fa.d[2] = 0;
@@ -411,6 +489,7 @@ static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
 
   *dst = result;
 }
+#endif
 
 grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
 {
@@ -495,7 +574,7 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	R128 gdd128;
 	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
-  r128Mul_precise(&gdd128, &gdd128, &factor);
+    r128Mul_precise(&gdd128, &gdd128, &factor);
 	r128Round(&gdd128, &gdd128); // round to nearest integer
 	grdd_unit decayed = r128ToInt(&gdd128);
 	if (negative && gdd > 0 && decayed < 0) {
