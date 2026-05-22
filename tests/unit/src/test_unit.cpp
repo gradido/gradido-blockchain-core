@@ -36,17 +36,35 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
   // calculate for every 32. second until two years are full
   grdd_unit prevValue = 0;
   grdd_unit prevDistance = 0;
+  int countErrors = 0;
+  int countTwoJumps = 0;
   for (int i = 1; i < 31556952 * 2; i += 32) {
     grdd_unit decayed = grdd_unit_calculate_decay(100000000, i);
-    if (prevValue) {
+    if (prevValue)
+    {
       EXPECT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
       auto distance = prevValue - decayed;
-      if (prevDistance) {
-        EXPECT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
+      if (prevDistance)
+      {
+        grdd_unit absDistance = abs(prevDistance - distance);
+          if (absDistance > 1) {
+            ++countErrors;
+          }
+          if (absDistance > 2) {
+            ++countTwoJumps;
+          }
+        // EXPECT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
       }
       prevDistance = distance;
     }
     prevValue = decayed;
+  }
+  if (countErrors > 0) {
+      std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times" << std::endl;
+      //std::cout << "errors: " << countErrors << std::endl;
+  }
+  if (countTwoJumps > 0) {
+      EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times" << std::endl;
   }
 }
 

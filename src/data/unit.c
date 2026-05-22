@@ -4,7 +4,6 @@
 #define R128_IMPLEMENTATION
 #define R128_STDC_ONLY
 #include "r128/r128.h"
-#include "c128/integer.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -23,79 +22,75 @@ static const uint64_t GROW_FACTOR_PER_SECOND =    405181995575ULL; // for low, a
 // precalculated powers of 10 for fast rounding
 static const uint64_t POW10[] = { 1, 10, 100, 1000, 10000 };
 // precalculated decay powers for consistent result across plattforms
-static const uint64_t DECAY_POWERS[] = {
-    0xffffffa1a945888cULL,
-    0xffffff43528b33ddULL,
-    0xfffffe86a516f2c9ULL,
-    0xfffffd0d4a3011d0ULL,
-    0xfffffa1a9468d493ULL,
-    0xfffff43528f46cf4ULL,
-    0xffffe86a5273e91dULL,
-    0xffffd0d4a7140eecULL,
-    0xffffa1a956d90fd6ULL,
-    0xffff4352d075e13cULL,
-    0xfffe86a62bfa9575ULL,
-    0xfffd0d4e842edce7ULL,
-    0xfffa1aa5b937b238ULL,
-    0xfff4356e3570cabbULL,
-    0xffe86b6773b36477ULL,
-    0xffd0d8faf110bbd1ULL,
-    0xffa1baa53bef7e25ULL,
-    0xff43980179510649ULL,
-    0xfe87baabdab6ab02ULL,
-    0xfd119e636f61552fULL,
-    0xfa2bd446f55a1169ULL,
-    0xf479a21b970ff04bULL,
-    0xe97816cf3cb21d4bULL,
-    0xd4ebd1daa0cd6680ULL,
-    0xb1176ccd0dbe2024ULL,
-    0x7a81669848170873ULL,
-    0x3a9f9731b34c4f4cULL,
-    0xd6cb3ffae46f7e3ULL,
-    0xb4387055fdce22ULL,
-    0x7edf6a6a43d4ULL,
-    0x3ee0afbbULL,
-    0x0ULL,
+static const uint64_t DECAY_POWERS_C[] = {
+    18446743668527564940ULL,
+    18446743263345587164ULL,
+    18446742452981658311ULL,
+    18446740832253907403ULL,
+    18446737590798832777ULL,
+    18446731107890392288ULL,
+    18446718142080346355ULL,
+    18446692210487594649ULL,
+    18446640347411451696ULL,
+    18446536621696606191ULL,
+    18446329172016665306ULL,
+    18445914279655692209ULL,
+    18445084522928646091ULL,
+    18443425121448277474ULL,
+    18440106766335425222ULL,
+    18433471847125248119ULL,
+    18420209169759917966ULL,
+    18393712435208894869ULL,
+    18340833254761042819ULL,
+    18235530516107111888ULL,
+    18026735334708994272ULL,
+    17616289656817321474ULL,
+    16823221487372342210ULL,
+    15342587292494071157ULL,
+    12760787697124685720ULL,
+    8827449548842949827ULL,
+    4224261215204113981ULL,
+    967345930695146144ULL,
+    50727550937626361ULL,
+    139498028153214ULL,
+    1054912443ULL,
+    0ULL,
 };
 
-static const uint64_t GROW_POWERS[] = {
-    0x5e56ba9a37ULL,
-    0xbcad755732ULL,
-    0x1795aeb3973ULL,
-    0x2f2b5d89f23ULL,
-    0x5e56bb9ef3aULL,
-    0xbcad796a244ULL,
-    0x1795afb853c8ULL,
-    0x2f2b619ce4aaULL,
-    0x5e56cbeabe87ULL,
-    0xbcadba99583cULL,
-    0x1795c00425070ULL,
-    0x2f2ba2cc4bab4ULL,
-    0x5e57d0a96ac84ULL,
-    0xbcb1cd9c8b4f1ULL,
-    0x1796c4c932e5c6ULL,
-    0x2f2fb6028d25bfULL,
-    0x5e681e92d391aaULL,
-    0xbcf30dc673d1a6ULL,
-    0x17a71916fe644e6ULL,
-    0x2f7129673acb53aULL,
-    0x5f6efec20d4d53fULL,
-    0xc117369759bd2f8ULL,
-    0x18b48ad55647cb85ULL,
-    0x33cb6f06340914f7ULL,
-    0x72118df224caaff6ULL,
-    0x16f6bf841b376922ULL,
-    0x5dea54cfc2b5dde1ULL,
-    0x11c6be9c3110071dULL,
-    0xa4bc4acb6e6d4c3cULL,
-    0x97fde73dc016aa34ULL,
-    0x24235c8330777bc4ULL,
-    0x3074f51547231e0fULL,
-    0x8adc99481307800ULL,
-    0x6a40000000000000ULL,
-    0x0ULL,
+static const uint64_t DECAY_POWERS_TS[] = {
+    18446743668527564940ULL,
+    18446743263345587165ULL,
+    18446742452981658313ULL,
+    18446740832253907408ULL,
+    18446737590798832787ULL,
+    18446731107890392308ULL,
+    18446718142080346397ULL,
+    18446692210487594732ULL,
+    18446640347411451862ULL,
+    18446536621696606524ULL,
+    18446329172016665973ULL,
+    18445914279655693543ULL,
+    18445084522928648760ULL,
+    18443425121448282811ULL,
+    18440106766335435895ULL,
+    18433471847125269457ULL,
+    18420209169759960613ULL,
+    18393712435208980041ULL,
+    18340833254761212674ULL,
+    18235530516107449647ULL,
+    18026735334709662057ULL,
+    17616289656818626635ULL,
+    16823221487374835019ULL,
+    15342587292498617984ULL,
+    12760787697132249124ULL,
+    8827449548853414003ULL,
+    4224261215214128972ULL,
+    967345930699732963ULL,
+    50727550938107426ULL,
+    139498028155860ULL,
+    1054912443ULL,
+    0ULL,
 };
-
 
 static double round_to_precision(double gdd, uint8_t precision)
 {
@@ -296,26 +291,6 @@ grdd_timestamp_seconds grdd_unit_decay_start_time()
 	return DECAY_START_TIME;
 }
 
-static inline uint64_t fixed_mul_u64(uint64_t x, uint64_t y)
-{
-    const u64 mask = 0xffffffffll;
-    u64 x0 =    x       & mask;
-    u64 x1 =    x >> 32 & mask;
-    u64 y0 =    y       & mask;
-    u64 y1 =    y >> 32 & mask;
-    u64 z0 =    x0 * y0;
-    u64 z1 =    x1 * y0;
-    u64 z2 =    x0 * y1;
-    u64 z3 =    x1 * y1;
-    u64 z4 =    z1 + (z0 >> 32);
-    u64 c1 =    z2 + (z4 & mask);
-    u64 hi =    z3 + (z4 >> 32) + (c1 >> 32);
-    // i128_t r;
-    // r.lo = x * y;
-    return hi + ((x * y) >= 0x8000000000000000ULL);
-    // return hi;
-}
-
 grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
 {
   if (duration == 0) {
@@ -369,80 +344,45 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	// from wolframalpha, based on the interest rate formula
 	//return (grdd_unit)((double)gradidoCent * pow(2.0, (double)-duration / (double)SECONDS_PER_YEAR));
 	//
-	// c128 Version
-	uint64_t exp;
-    uint64_t base;
-
-    if (duration > 0) {
-        exp = (uint64_t)duration;
-        base = DECAY_FACTOR_PER_SECOND;
-    } else {
-        exp = (uint64_t)(-duration);
-        base = GROW_FACTOR_PER_SECOND;
-    }
-
-    // factor = 1.0 in 64.64
-    uint64_t factor = (1ULL << 64);
-
-    while (exp > 0) {
-        if (exp & 1ULL) {
-            factor = fixed_mul_u64(factor, base);
-        }
-
-        base = fixed_mul_u64(base, base);
-
-        exp >>= 1;
-    }
-
-    // gdd * factor
-    i128_t result = i128_umul_i64_i64(
-        (uint64_t)gdd,
-        factor
-    );
-
-    // rounding
-    uint64_t rounded =
-        result.hi +
-        (result.lo >= 0x8000000000000000ULL);
-
-    return (grdd_unit)rounded;
-}
-/*
 	// r128 Version
 	R128 factor = { .lo = 0, .hi = 1 };
 	R128 base = { .lo = DECAY_FACTOR_PER_SECOND, .hi = 0 };
 	bool negative = false;
 	uint64_t exp = duration;
-	const uint64_t* table = DECAY_POWERS;
+	const uint64_t* table = DECAY_POWERS_C;
 
 	if (duration < 0) {
 		negative = true;
 		exp = -duration;
-		// table = GROW_POWERS;
-		// base.lo = GROW_FACTOR_PER_SECOND;
-		// base.hi = 1;
-
-		r128Div(&base, &R128_one, &base);
 	}
 
-	for (int i = 0; i < 32; i++) {
-        if (duration & (1ULL << i)) {
-            R128 static_factor = { .lo = table[i], .hi = 0 };// negative ? 1 : 0 };
-            if (negative) {
-                r128Div(&static_factor, &R128_one, &static_factor);
-            }
+	/*
+	while (exp > 0)
+	{
+        if ((exp & 1) == 1) {
+            r128Mul(&factor, &factor, &base); // factor *= base
+        }
+        r128Mul(&base, &base, &base); // base *= base
+        exp >>= 1;
+    }
+	// */
+
+	int i = 0;
+	while (exp > 0)
+    {
+        if ((exp & 1) == 1) {
+            R128 static_factor = { .lo = DECAY_POWERS_C[i], .hi = 0 };
             r128Mul(&factor, &factor, &static_factor);
         }
+        exp >>= 1;
+        ++i;
+    }
+    // */
+	if (negative) {
+	    r128Div(&factor, &R128_one, &factor);
 	}
-// */
-    /*while (exp > 0) {
-			if ((exp & 1) == 1) {
-					r128Mul(&factor, &factor, &base);  // factor *= base
-			}
-			r128Mul(&base, &base, &base);        // base *= base
-			exp >>= 1;
-			}*/
-	/*R128 gdd128;
+
+	R128 gdd128;
 	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
 	r128Mul(&gdd128, &gdd128, &factor);
@@ -452,8 +392,8 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 		// sign flip/overflow detected
 		decayed = INT64_MAX;
 	}
-	return decayed;*/
-// }
+	return decayed;
+}
 
 bool grdd_unit_calculate_duration_seconds(grdd_timestamp_seconds startTime, grdd_timestamp_seconds endTime, grdd_duration_seconds* outSeconds)
 {
