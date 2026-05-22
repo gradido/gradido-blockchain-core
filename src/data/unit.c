@@ -23,72 +23,37 @@ static const uint64_t GROW_FACTOR_PER_SECOND =    405181995575ULL; // for low, a
 // precalculated powers of 10 for fast rounding
 static const uint64_t POW10[] = { 1, 10, 100, 1000, 10000 };
 // precalculated decay powers for consistent result across plattforms
-static const uint64_t DECAY_POWERS_C[] = {
+static const uint64_t DECAY_POWERS[] = {
     18446743668527564940ULL,
-    18446743263345587164ULL,
-    18446742452981658311ULL,
-    18446740832253907403ULL,
-    18446737590798832777ULL,
-    18446731107890392288ULL,
-    18446718142080346355ULL,
-    18446692210487594649ULL,
-    18446640347411451696ULL,
-    18446536621696606191ULL,
-    18446329172016665306ULL,
-    18445914279655692209ULL,
-    18445084522928646091ULL,
-    18443425121448277474ULL,
-    18440106766335425222ULL,
-    18433471847125248119ULL,
-    18420209169759917966ULL,
-    18393712435208894869ULL,
-    18340833254761042819ULL,
-    18235530516107111888ULL,
-    18026735334708994272ULL,
-    17616289656817321474ULL,
-    16823221487372342210ULL,
-    15342587292494071157ULL,
-    12760787697124685720ULL,
-    8827449548842949827ULL,
-    4224261215204113981ULL,
-    967345930695146144ULL,
-    50727550937626361ULL,
-    139498028153214ULL,
-    1054912443ULL,
-    0ULL,
-};
-
-static const uint64_t DECAY_POWERS_TS[] = {
-    18446743668527564940ULL,
-    18446743263345587165ULL,
-    18446742452981658313ULL,
-    18446740832253907408ULL,
-    18446737590798832787ULL,
-    18446731107890392308ULL,
-    18446718142080346397ULL,
-    18446692210487594732ULL,
-    18446640347411451862ULL,
-    18446536621696606524ULL,
-    18446329172016665973ULL,
-    18445914279655693543ULL,
-    18445084522928648760ULL,
-    18443425121448282811ULL,
-    18440106766335435895ULL,
-    18433471847125269457ULL,
-    18420209169759960613ULL,
-    18393712435208980041ULL,
-    18340833254761212674ULL,
-    18235530516107449647ULL,
-    18026735334709662057ULL,
-    17616289656818626635ULL,
-    16823221487374835019ULL,
-    15342587292498617984ULL,
-    12760787697132249124ULL,
-    8827449548853414003ULL,
-    4224261215214128972ULL,
-    967345930699732963ULL,
-    50727550938107426ULL,
-    139498028155860ULL,
+    18446743263345587163ULL,
+    18446742452981658309ULL,
+    18446740832253907398ULL,
+    18446737590798832767ULL,
+    18446731107890392267ULL,
+    18446718142080346313ULL,
+    18446692210487594564ULL,
+    18446640347411451525ULL,
+    18446536621696605848ULL,
+    18446329172016664620ULL,
+    18445914279655690837ULL,
+    18445084522928643346ULL,
+    18443425121448271984ULL,
+    18440106766335414243ULL,
+    18433471847125226169ULL,
+    18420209169759874097ULL,
+    18393712435208807257ULL,
+    18340833254760868098ULL,
+    18235530516106764452ULL,
+    18026735334708307356ULL,
+    17616289656815978922ULL,
+    16823221487369777986ULL,
+    15342587292489394070ULL,
+    12760787697116905635ULL,
+    8827449548832185865ULL,
+    4224261215193812073ULL,
+    967345930690427918ULL,
+    50727550937131514ULL,
+    139498028150492ULL,
     1054912443ULL,
     0ULL,
 };
@@ -293,17 +258,175 @@ grdd_timestamp_seconds grdd_unit_decay_start_time()
 }
 
 #if defined(__SIZEOF_INT128__)
+// specialized version of r128Mul_precise, with the assumption that a and b always positive and b.hi is 0
+static inline void r128Mul_specialized_factor(R128* dst, const R128* a, const R128* b)
+{
+    R128_ASSERT(dst != NULL && a != NULL && b != NULL);
+    // Q64.64 multiplication:
+    // (ahi<<64 + alo) * (bhi<<64 + blo)
+    //
+    // Result after >>64:
+    //   (alo*blo)>>64
+    // + (ahi*blo)
+    //
+    // High-high term contributes above Q64.64 range.
+
+    __uint128_t p0 = (__uint128_t)a->lo * (__uint128_t)b->lo;
+    __uint128_t p1 = (__uint128_t)a->hi * (__uint128_t)b->lo;
+
+    __uint128_t low = (p0 >> 64) + (uint64_t)p1;
+    __uint128_t high = (p1 >> 64) + (low >> 64);
+
+    dst->lo = (uint64_t)low;
+    dst->hi = (uint64_t)high;
+}
 
 static inline void r128Mul_precise(R128* dst, const R128* a, const R128* b)
 {
+    R128_ASSERT(dst != NULL && a != NULL && b != NULL);
+    // Q64.64 multiplication:
+    // (ahi<<64 + alo) * (bhi<<64 + blo)
     //
-    // Handle sign separately
+    // Result after >>64:
+    //   (alo*blo)>>64
+    // + (ahi*blo)
+    // + (alo*bhi)
     //
+    // High-high term contributes above Q64.64 range.
+
+    __uint128_t p0 = (__uint128_t)a->lo * (__uint128_t)b->lo;
+    __uint128_t p1 = (__uint128_t)a->hi * (__uint128_t)b->lo;
+    __uint128_t p2 = (__uint128_t)a->lo * (__uint128_t)b->hi;
+    __uint128_t p3 = (__uint128_t)a->hi * (__uint128_t)b->hi;
+
+    __uint128_t low = (p0 >> 64) + (uint64_t)p1 + (uint64_t)p2;
+    dst->lo = (uint64_t)low;
+    dst->hi = (uint64_t)((p1 >> 64) + (p2 >> 64) + p3 + (low >> 64));
+}
+
+#else
+
+static void r128Mul_specialized_factor(R128* dst, const R128* a, const R128* b)
+{
+    R128_ASSERT(dst != NULL && a != NULL && b != NULL);
+    fp256 fa;
+    fp256 fb;
+    fp256 rhi;
+    fp256 rlo;
+
     int sign = 0;
 
-    R128 ta = *a;
-    R128 tb = *b;
+    R128 ta;
+    R128 tb;
 
+
+
+    ta = *a;
+    tb = *b;
+
+    //
+    // Convert R128 -> fp256
+    //
+    /*
+        Q64.64 layout:
+
+        hi = integer part
+        lo = fractional part
+
+        numeric value:
+            (hi << 64) | lo
+    */
+
+    fa.d[0] = ta.lo;
+    fa.d[1] = ta.hi;
+    fa.d[2] = 0;
+    fa.d[3] = 0;
+
+    fb.d[0] = tb.lo;
+    fb.d[1] = 0;
+    fb.d[2] = 0;
+    fb.d[3] = 0;
+
+    //
+    // Full 256-bit multiplication:
+    //
+    // product = fa * fb
+    //
+    // result is 512 bit:
+    //
+    //   rhi:rlo
+    //
+    fp256_mul(&rhi, &rlo, &fa, &fb);
+
+    //
+    // Q64.64 requires:
+    //
+    //   result = (a * b) >> 64
+    //
+    // We therefore extract bits [64..191]
+    //
+    // rlo layout after multiplication:
+    //
+    //   d[0] = bits   0..63
+    //   d[1] = bits  64..127
+    //   d[2] = bits 128..191
+    //   d[3] = bits 192..255
+    //
+    // Desired Q64.64 result:
+    //
+    //   lo = d[1]
+    //   hi = d[2]
+    //
+
+    R128 result = {
+        .lo = rlo.d[1],
+        .hi = rlo.d[2]
+    };
+
+    //
+    // Optional rounding:
+    //
+    // Round using highest discarded bit.
+    //
+    // discarded upper bit:
+    //
+    //   rlo.d[0] bit 63
+    //
+    if (rlo.d[0] & 0x8000000000000000ULL) {
+
+        result.lo++;
+
+        if (result.lo == 0) {
+        result.hi++;
+        }
+    }
+
+    *dst = result;
+}
+
+// use intern fp256 for better precision
+static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
+{
+    fp256 fa;
+    fp256 fb;
+    fp256 rhi;
+    fp256 rlo;
+
+    int sign = 0;
+
+    R128 ta;
+    R128 tb;
+
+    R128_ASSERT(dst != NULL);
+    R128_ASSERT(a != NULL);
+    R128_ASSERT(b != NULL);
+
+    ta = *a;
+    tb = *b;
+
+    //
+    // Handle sign manually using absolute values
+    //
     if (r128IsNeg(&ta)) {
         r128__neg(&ta, &ta);
         sign ^= 1;
@@ -315,179 +438,90 @@ static inline void r128Mul_precise(R128* dst, const R128* a, const R128* b)
     }
 
     //
-    // Q64.64 multiplication:
+    // Convert R128 -> fp256
     //
-    // (ahi<<64 + alo) * (bhi<<64 + blo)
-    //
-    // Result after >>64:
-    //
-    //   (alo*blo)>>64
-    // + (ahi*blo)
-    // + (alo*bhi)
-    //
-    // High-high term contributes above Q64.64 range.
-    //
+    /*
+        Q64.64 layout:
 
-    __uint128_t p0 =
-        (__uint128_t)ta.lo * tb.lo;
+        hi = integer part
+        lo = fractional part
 
-    __uint128_t p1 =
-        (__uint128_t)ta.hi * tb.lo;
+        numeric value:
+            (hi << 64) | lo
+    */
 
-    __uint128_t p2 =
-        (__uint128_t)ta.lo * tb.hi;
+    fa.d[0] = ta.lo;
+    fa.d[1] = ta.hi;
+    fa.d[2] = 0;
+    fa.d[3] = 0;
 
-    __uint128_t p3 =
-        (__uint128_t)ta.hi * tb.hi;
+    fb.d[0] = tb.lo;
+    fb.d[1] = tb.hi;
+    fb.d[2] = 0;
+    fb.d[3] = 0;
 
     //
-    // Q64.64:
+    // Full 256-bit multiplication:
     //
-    // result =
-    //      (p0 >> 64)
-    //    + p1
-    //    + p2
-    //    + (p3 << 64)
+    // product = fa * fb
+    //
+    // result is 512 bit:
+    //
+    //   rhi:rlo
+    //
+    fp256_mul(&rhi, &rlo, &fa, &fb);
+
+    //
+    // Q64.64 requires:
+    //
+    //   result = (a * b) >> 64
+    //
+    // We therefore extract bits [64..191]
+    //
+    // rlo layout after multiplication:
+    //
+    //   d[0] = bits   0..63
+    //   d[1] = bits  64..127
+    //   d[2] = bits 128..191
+    //   d[3] = bits 192..255
+    //
+    // Desired Q64.64 result:
+    //
+    //   lo = d[1]
+    //   hi = d[2]
     //
 
-    __uint128_t low =
-        (p0 >> 64)
-        + (uint64_t)p1
-        + (uint64_t)p2;
-
-    __uint128_t high =
-        (p1 >> 64)
-        + (p2 >> 64)
-        + p3
-        + (low >> 64);
-
-    R128 out = {
-        .lo = (uint64_t)low,
-        .hi = (uint64_t)high
+    R128 result = {
+        .lo = rlo.d[1],
+        .hi = rlo.d[2]
     };
-    *dst = out;
-}
 
-#else
+    //
+    // Optional rounding:
+    //
+    // Round using highest discarded bit.
+    //
+    // discarded upper bit:
+    //
+    //   rlo.d[0] bit 63
+    //
+    if (rlo.d[0] & 0x8000000000000000ULL) {
 
-// use intern fp256 for better precision
-static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
-{
-  fp256 fa;
-  fp256 fb;
-  fp256 rhi;
-  fp256 rlo;
+        result.lo++;
 
-  int sign = 0;
-
-  R128 ta;
-  R128 tb;
-
-  R128_ASSERT(dst != NULL);
-  R128_ASSERT(a != NULL);
-  R128_ASSERT(b != NULL);
-
-  ta = *a;
-  tb = *b;
-
-  //
-  // Handle sign manually using absolute values
-  //
-  if (r128IsNeg(&ta)) {
-    r128__neg(&ta, &ta);
-    sign ^= 1;
-  }
-
-  if (r128IsNeg(&tb)) {
-    r128__neg(&tb, &tb);
-    sign ^= 1;
-  }
-
-  //
-  // Convert R128 -> fp256
-  //
-  /*
-      Q64.64 layout:
-
-      hi = integer part
-      lo = fractional part
-
-      numeric value:
-          (hi << 64) | lo
-  */
-
-  fa.d[0] = ta.lo;
-  fa.d[1] = ta.hi;
-  fa.d[2] = 0;
-  fa.d[3] = 0;
-
-  fb.d[0] = tb.lo;
-  fb.d[1] = tb.hi;
-  fb.d[2] = 0;
-  fb.d[3] = 0;
-
-  //
-  // Full 256-bit multiplication:
-  //
-  // product = fa * fb
-  //
-  // result is 512 bit:
-  //
-  //   rhi:rlo
-  //
-  fp256_mul(&rhi, &rlo, &fa, &fb);
-
-  //
-  // Q64.64 requires:
-  //
-  //   result = (a * b) >> 64
-  //
-  // We therefore extract bits [64..191]
-  //
-  // rlo layout after multiplication:
-  //
-  //   d[0] = bits   0..63
-  //   d[1] = bits  64..127
-  //   d[2] = bits 128..191
-  //   d[3] = bits 192..255
-  //
-  // Desired Q64.64 result:
-  //
-  //   lo = d[1]
-  //   hi = d[2]
-  //
-
-  R128 result = {
-    .lo = rlo.d[1],
-    .hi = rlo.d[2]
-  };
-
-  //
-  // Optional rounding:
-  //
-  // Round using highest discarded bit.
-  //
-  // discarded upper bit:
-  //
-  //   rlo.d[0] bit 63
-  //
-  if (rlo.d[0] & 0x8000000000000000ULL) {
-
-    result.lo++;
-
-    if (result.lo == 0) {
-      result.hi++;
+        if (result.lo == 0) {
+        result.hi++;
+        }
     }
-  }
 
-  //
-  // Restore sign
-  //
-  if (sign) {
-    r128__neg(&result, &result);
-  }
+    //
+    // Restore sign
+    //
+    if (sign) {
+        r128__neg(&result, &result);
+    }
 
-  *dst = result;
+    *dst = result;
 }
 #endif
 
@@ -546,10 +580,8 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	//
 	// r128 Version
 	R128 factor = { .lo = 0, .hi = 1 };
-	R128 base = { .lo = DECAY_FACTOR_PER_SECOND, .hi = 0 };
 	bool negative = false;
 	uint64_t exp = duration;
-	const uint64_t* table = DECAY_POWERS_C;
 
 	if (duration < 0) {
 		negative = true;
@@ -560,13 +592,13 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	while (exp > 0)
     {
         if ((exp & 1) == 1) {
-            R128 static_factor = { .lo = DECAY_POWERS_C[i], .hi = 0 };
-            r128Mul_precise(&factor, &factor, &static_factor);
+            R128 static_factor =  { .lo = DECAY_POWERS[i], .hi = 0 };
+            r128Mul_specialized_factor(&factor, &factor, &static_factor);
         }
         exp >>= 1;
         ++i;
     }
-    // */
+
 	if (negative) {
 	    r128Div(&factor, &R128_one, &factor);
 	}
