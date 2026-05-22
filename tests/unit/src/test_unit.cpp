@@ -743,7 +743,8 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   auto worker = [&](int threadId) {
     // Each thread gets its own random generator
     std::random_device rd;
-    std::mt19937_64 gen(MASTER_SEED ^ threadId);
+    std::seed_seq seq { MASTER_SEED, static_cast<uint64_t>(threadId) };
+    std::mt19937_64 gen(seq);
     std::uniform_int_distribution<int64_t> amountDist(1, MAX_AMOUNT_CENT);
     std::uniform_int_distribution<int64_t> durationDist(1, MAX_DURATION_SECONDS);
 
