@@ -4,6 +4,7 @@
 #define R128_IMPLEMENTATION
 #define R128_STDC_ONLY
 #include "r128/r128.h"
+#include "fp256/fp256.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -291,6 +292,126 @@ grdd_timestamp_seconds grdd_unit_decay_start_time()
 	return DECAY_START_TIME;
 }
 
+// use intern fp256 for better precision
+static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
+{
+  fp256 fa;
+  fp256 fb;
+  fp256 rhi;
+  fp256 rlo;
+
+  int sign = 0;
+
+  R128 ta;
+  R128 tb;
+
+  R128_ASSERT(dst != NULL);
+  R128_ASSERT(a != NULL);
+  R128_ASSERT(b != NULL);
+
+  ta = *a;
+  tb = *b;
+
+  //
+  // Handle sign manually using absolute values
+  //
+  if (r128IsNeg(&ta)) {
+    r128__neg(&ta, &ta);
+    sign ^= 1;
+  }
+
+  if (r128IsNeg(&tb)) {
+    r128__neg(&tb, &tb);
+    sign ^= 1;
+  }
+
+  //
+  // Convert R128 -> fp256
+  //
+  /*
+      Q64.64 layout:
+
+      hi = integer part
+      lo = fractional part
+
+      numeric value:
+          (hi << 64) | lo
+  */
+  
+  fa.d[0] = ta.lo;
+  fa.d[1] = ta.hi;
+  fa.d[2] = 0;
+  fa.d[3] = 0;
+
+  fb.d[0] = tb.lo;
+  fb.d[1] = tb.hi;
+  fb.d[2] = 0;
+  fb.d[3] = 0;
+
+  //
+  // Full 256-bit multiplication:
+  //
+  // product = fa * fb
+  //
+  // result is 512 bit:
+  //
+  //   rhi:rlo
+  //
+  fp256_mul(&rhi, &rlo, &fa, &fb);
+
+  //
+  // Q64.64 requires:
+  //
+  //   result = (a * b) >> 64
+  //
+  // We therefore extract bits [64..191]
+  //
+  // rlo layout after multiplication:
+  //
+  //   d[0] = bits   0..63
+  //   d[1] = bits  64..127
+  //   d[2] = bits 128..191
+  //   d[3] = bits 192..255
+  //
+  // Desired Q64.64 result:
+  //
+  //   lo = d[1]
+  //   hi = d[2]
+  //
+
+  R128 result = {
+    .lo = rlo.d[1],
+    .hi = rlo.d[2]
+  };
+
+  //
+  // Optional rounding:
+  //
+  // Round using highest discarded bit.
+  //
+  // discarded upper bit:
+  //
+  //   rlo.d[0] bit 63
+  //
+  if (rlo.d[0] & 0x8000000000000000ULL) {
+
+    result.lo++;
+
+    if (result.lo == 0) {
+      result.hi++;
+    }
+  }
+
+  //
+  // Restore sign
+  //
+  if (sign) {
+    r128__neg(&result, &result);
+  }
+
+  *dst = result;
+}
+
 grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
 {
   if (duration == 0) {
@@ -356,23 +477,12 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 		exp = -duration;
 	}
 
-	/*
-	while (exp > 0)
-	{
-        if ((exp & 1) == 1) {
-            r128Mul(&factor, &factor, &base); // factor *= base
-        }
-        r128Mul(&base, &base, &base); // base *= base
-        exp >>= 1;
-    }
-	// */
-
 	int i = 0;
 	while (exp > 0)
     {
         if ((exp & 1) == 1) {
             R128 static_factor = { .lo = DECAY_POWERS_C[i], .hi = 0 };
-            r128Mul(&factor, &factor, &static_factor);
+            r128Mul_precise(&factor, &factor, &static_factor);
         }
         exp >>= 1;
         ++i;
@@ -385,7 +495,7 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	R128 gdd128;
 	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
-	r128Mul(&gdd128, &gdd128, &factor);
+  r128Mul_precise(&gdd128, &gdd128, &factor);
 	r128Round(&gdd128, &gdd128); // round to nearest integer
 	grdd_unit decayed = r128ToInt(&gdd128);
 	if (negative && gdd > 0 && decayed < 0) {

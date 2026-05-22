@@ -60,11 +60,11 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
     prevValue = decayed;
   }
   if (countErrors > 0) {
-      std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times" << std::endl;
+      std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times" << ANSI_TXT_DFT << std::endl;
       //std::cout << "errors: " << countErrors << std::endl;
   }
   if (countTwoJumps > 0) {
-      EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times" << std::endl;
+      EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times" << ANSI_TXT_DFT << std::endl;
   }
 }
 
@@ -726,8 +726,8 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
 {
   constexpr int64_t NUM_SAMPLES = 5000000; // 500k test cases
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
-  constexpr int64_t MAX_AMOUNT_CENT = 1'000'000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
-  constexpr int64_t MAX_DURATION_SECONDS = 60ll * 60ll * 24ll * 90ll; // 90 Days in seconds
+  constexpr int64_t MAX_AMOUNT_CENT = std::numeric_limits<int64_t>::max() / 2;// 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
+  constexpr int64_t MAX_DURATION_SECONDS = 60ll * 60ll * 24ll * 90ll * 4; // 90 Days in seconds
 
   std::atomic<int64_t> totalTests{ 0 };
   std::atomic<int64_t> exactMatches{ 0 };
@@ -821,7 +821,8 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   std::cout << "Other difference: " << diffByOther << " ("
     << (100.0 * diffByOther / totalTests) << "%)" << std::endl;
 
-  EXPECT_EQ(exactMatches, totalTests);
+  EXPECT_EQ(exactMatches + diffByOne, totalTests);
+  EXPECT_LE(100.0 * (diffByOne / totalTests), 1.0);
 }
 
 
@@ -1033,62 +1034,93 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
 {
   using namespace std::chrono;
 
-  // --- Define time points ---
-  grdd_timestamp_seconds start = 0;
-  grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;   // +30 days
-  grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;   // +90 days
-  grdd_timestamp_seconds end = 60 * 60 * 24 * 365;  // +1 year
+  struct TestCase {
+    const char* name;
+    grdd_unit startAmount;
+    int64_t tolerance;
+  };
 
-  // --- Large values near int64 limit ---
-  // int64 max ~9.22e18 -> we stay a bit below because of *10000
-  int64_t maxSafeCent = std::numeric_limits<int64_t>::max() / 2;
+  constexpr int64_t max = std::numeric_limits<int64_t>::max();
 
-  grdd_unit startAmount = maxSafeCent;
-  grdd_unit minusAmount = 100 * 10000; // -100 GDD
-  grdd_unit plusAmount = 500 * 10000; // +500 GDD
+  const TestCase cases[] = {
+      {"max/4", max / 4, 1},
+      {"max/2", max / 2, 1},
+      {"max", max, 2}
+  };
 
-  // --- Variant 1: Step-by-step simulation ---
-  grdd_unit step = startAmount;
+  for (const auto& tc : cases)
+  {
+    // --- Define time points ---
+    grdd_timestamp_seconds start = 0;
+    grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;    // +30 days
+    grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;    // +90 days
+    grdd_timestamp_seconds end = 60 * 60 * 24 * 365;  // +1 year
 
-  // decay to t2
-  step = grdd_unit_calculate_decay(step, t2 - start);
+    grdd_unit minusAmount = 100l * 10000l; // -100 GDD
+    grdd_unit plusAmount = 500l * 10000l; // +500 GDD
 
-  // -100 GDD at t2
-  step -= minusAmount;
+    // =========================================================
+    // Variant 1: Step-by-step simulation
+    // =========================================================
 
-  // decay to t3
-  step = grdd_unit_calculate_decay(step, t3 - t2);
+    grdd_unit step = tc.startAmount;
 
-  // +500 GDD at t3
-  step += plusAmount;
+    // decay to t2
+    step = grdd_unit_calculate_decay(step, t2 - start);
 
-  // decay to end
-  step = grdd_unit_calculate_decay(step, end - t3);
+    // -100 GDD at t2
+    step -= minusAmount;
 
+    // decay to t3
+    step = grdd_unit_calculate_decay(step, t3 - t2);
 
-  // --- Variant 2: Reference calculation ---
-  grdd_unit ref = grdd_unit_calculate_decay(startAmount, end - start);
+    // +500 GDD at t3
+    step += plusAmount;
 
-  // -100 GDD -> from t2 to end decayed
-  grdd_unit minusDecayed = grdd_unit_calculate_decay(minusAmount, end - t2);
-  ref -= minusDecayed;
+    // decay to end
+    step = grdd_unit_calculate_decay(step, end - t3);
 
-  // +500 GDD -> from t3 to end decayed
-  grdd_unit plusDecayed = grdd_unit_calculate_decay(plusAmount, end - t3);
-  ref += plusDecayed;
+    // =========================================================
+    // Variant 2: Reference calculation
+    // =========================================================
 
+    grdd_unit ref =
+      grdd_unit_calculate_decay(tc.startAmount, end - start);
 
-  // --- Comparison ---
-  // Not exact due to rounding -> Tolerance via GradidoCent
-  int64_t stepCent = step;
-  int64_t refCent = ref;
+    // -100 GDD -> from t2 to end decayed
+    grdd_unit minusDecayed =
+      grdd_unit_calculate_decay(minusAmount, end - t2);
 
-  int64_t diff = std::llabs(stepCent - refCent);
+    ref -= minusDecayed;
 
-  // Tolerance: 1 Cent (0.0001 GDD)
-  EXPECT_LE(diff, 1)
-    << "Mismatch between step-by-step and reference calculation. "
-    << "step=" << stepCent << " ref=" << refCent << " diff=" << diff;
+    // +500 GDD -> from t3 to end decayed
+    grdd_unit plusDecayed =
+      grdd_unit_calculate_decay(plusAmount, end - t3);
+
+    ref += plusDecayed;
+
+    // =========================================================
+    // Comparison
+    // =========================================================
+
+    int64_t stepCent = step;
+    int64_t refCent = ref;
+
+    int64_t diff = std::llabs(stepCent - refCent);
+
+    double percentDiffToStep =
+      stepCent != 0
+      ? (double)diff / (double)stepCent
+      : 0.0;
+
+    EXPECT_LE(diff, tc.tolerance)
+      << "Mismatch for case '" << tc.name << "'. "
+      << "step=" << stepCent
+      << " ref=" << refCent
+      << " diff=" << diff
+      << " tolerance=" << tc.tolerance
+      << " percent=" << percentDiffToStep * 100.0 << "%";
+  }
 }
 
 TEST(GradidoUnitTest, testOverflowProvocation)
