@@ -724,6 +724,7 @@ struct ThreadResult {
 
 TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
 {
+  constexpr uint64_t MASTER_SEED = 0xC0FFEE1234567890ULL;
   constexpr int64_t NUM_SAMPLES = 5000000; // 500k test cases
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
   constexpr int64_t MAX_AMOUNT_CENT = std::numeric_limits<int64_t>::max() / 2;// 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
@@ -742,7 +743,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   auto worker = [&](int threadId) {
     // Each thread gets its own random generator
     std::random_device rd;
-    std::mt19937_64 gen(rd() + threadId);
+    std::mt19937_64 gen(MASTER_SEED ^ threadId);
     std::uniform_int_distribution<int64_t> amountDist(1, MAX_AMOUNT_CENT);
     std::uniform_int_distribution<int64_t> durationDist(1, MAX_DURATION_SECONDS);
 
