@@ -349,16 +349,7 @@ static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
     dst->lo = rlo.d[1];
     dst->hi = rlo.d[2];
 
-    // Optional rounding:
-    // Round using highest discarded bit.
-    // discarded upper bit:  rlo.d[0] bit 63
-    if (rlo.d[0] & 0x8000000000000000ULL) {
-        dst->lo++;
-
-        if (dst->lo == 0) {
-            dst->hi++;
-        }
-    }
+		return;
 }
 
 // use intern fp256 for better precision
@@ -449,7 +440,7 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	R128 gdd128;
 	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
-    r128Mul_precise(&gdd128, &gdd128, &factor);
+  r128Mul_precise(&gdd128, &gdd128, &factor);
 	r128Round(&gdd128, &gdd128); // round to nearest integer
 	grdd_unit decayed = r128ToInt(&gdd128);
 	if (negative && gdd > 0 && decayed < 0) {
