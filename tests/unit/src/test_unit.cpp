@@ -36,19 +36,13 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration) {
   int countTwoJumps = 0;
   for (int i = 1; i < 31556952 * 2; i += 32) {
     grdd_unit decayed = grdd_unit_calculate_decay(100000000, i);
-    if (prevValue)
-    {
+    if (prevValue) {
       EXPECT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
       auto distance = prevValue - decayed;
-      if (prevDistance)
-      {
+      if (prevDistance) {
         grdd_unit absDistance = abs(prevDistance - distance);
-          if (absDistance > 1) {
-            ++countErrors;
-          }
-          if (absDistance > 2) {
-            ++countTwoJumps;
-          }
+        if (absDistance > 1) { ++countErrors; }
+        if (absDistance > 2) { ++countTwoJumps; }
         // EXPECT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
       }
       prevDistance = distance;
@@ -56,11 +50,13 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration) {
     prevValue = decayed;
   }
   if (countErrors > 0) {
-      std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times" << ANSI_TXT_DFT << std::endl;
-      //std::cout << "errors: " << countErrors << std::endl;
+    std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times"
+              << ANSI_TXT_DFT << std::endl;
+    // std::cout << "errors: " << countErrors << std::endl;
   }
   if (countTwoJumps > 0) {
-      EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times" << ANSI_TXT_DFT << std::endl;
+    EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times"
+                              << ANSI_TXT_DFT << std::endl;
   }
 }
 
@@ -69,7 +65,8 @@ TEST(GradidoUnitTest, TestReverseDecay) {
   for (int i = 1; i < 31556952 * 2; i += 32) {
     auto valueWithDecay = grdd_unit_calculate_decay(startValue, -i);
     auto decay = grdd_unit_calculate_decay(valueWithDecay, i);
-    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1) << "diff is more than 1, i: " << i;
+    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1)
+        << "diff is more than 1, i: " << i;
   }
 }
 
@@ -342,232 +339,68 @@ TEST(GradidoUnitTest, roundToPrecision_BoundarySweep) {
 }
 
 struct DecayTestVector {
-    const char* name;
-    grdd_unit amount;
-    grdd_duration_seconds duration;
-    grdd_unit expected;
+  const char *name;
+  grdd_unit amount;
+  grdd_duration_seconds duration;
+  grdd_unit expected;
 };
 
 static const DecayTestVector DECAY_TEST_VECTORS[] = {
-    {
-        "1_gdd_1_second",
-        10000,
-        1,
-        10000
-    },
-    {
-        "100_gdd_14_days",
-        1000000,
-        14 * 24 * 60 * 60,
-        973781
-    },
-    {
-        "100_gdd_1_year",
-        1000000,
-        31556952,
-        500000
-    },
-    {
-        "0_0001_gdd_1_second",
-        1,
-        1,
-        1
-    },
-    {
-        "1_gdd_1_hour",
-        10000,
-        3600,
-        9999
-    },
-    {
-        "1_gdd_1_day",
-        10000,
-        86400,
-        9981
-    },
-    {
-        "100_gdd_30_days",
-        1000000,
-        30 * 24 * 60 * 60,
-        944657
-    },
-    {
-        "100_gdd_half_year",
-        1000000,
-        15778476,
-        707107
-    },
-    {
-        "1000_gdd_1_year",
-        10000000,
-        31556952,
-        5000000
-    },
-    {
-        "1000_gdd_2_years",
-        10000000,
-        2 * 31556952,
-        2500000
-    },
+    {"1_gdd_1_second", 10000, 1, 10000},
+    {"100_gdd_14_days", 1000000, 14 * 24 * 60 * 60, 973781},
+    {"100_gdd_1_year", 1000000, 31556952, 500000},
+    {"0_0001_gdd_1_second", 1, 1, 1},
+    {"1_gdd_1_hour", 10000, 3600, 9999},
+    {"1_gdd_1_day", 10000, 86400, 9981},
+    {"100_gdd_30_days", 1000000, 30 * 24 * 60 * 60, 944657},
+    {"100_gdd_half_year", 1000000, 15778476, 707107},
+    {"1000_gdd_1_year", 10000000, 31556952, 5000000},
+    {"1000_gdd_2_years", 10000000, 2 * 31556952, 2500000},
 
     // small values
 
-    {
-        "2_gdd_1_second",
-        20000,
-        1,
-        20000
-    },
-    {
-        "5_gdd_1_second",
-        50000,
-        1,
-        50000
-    },
-    {
-        "10_gdd_1_second",
-        100000,
-        1,
-        100000
-    },
-    {
-        "25_gdd_1_second",
-        250000,
-        1,
-        250000
-    },
-    {
-        "50_gdd_1_second",
-        500000,
-        1,
-        500000
-    },
-    {
-        "75_gdd_1_second",
-        750000,
-        1,
-        750000
-    },
-    {
-        "100_gdd_1_second",
-        1000000,
-        1,
-        1000000
-    },
+    {"2_gdd_1_second", 20000, 1, 20000},
+    {"5_gdd_1_second", 50000, 1, 50000},
+    {"10_gdd_1_second", 100000, 1, 100000},
+    {"25_gdd_1_second", 250000, 1, 250000},
+    {"50_gdd_1_second", 500000, 1, 500000},
+    {"75_gdd_1_second", 750000, 1, 750000},
+    {"100_gdd_1_second", 1000000, 1, 1000000},
 
     // medium values
 
-    {
-        "250_gdd_1_second",
-        2500000,
-        1,
-        2500000
-    },
-    {
-        "500_gdd_1_second",
-        5000000,
-        1,
-        5000000
-    },
-    {
-        "750_gdd_1_second",
-        7500000,
-        1,
-        7500000
-    },
-    {
-        "1000_gdd_1_second",
-        10000000,
-        1,
-        10000000
-    },
+    {"250_gdd_1_second", 2500000, 1, 2500000},
+    {"500_gdd_1_second", 5000000, 1, 5000000},
+    {"750_gdd_1_second", 7500000, 1, 7500000},
+    {"1000_gdd_1_second", 10000000, 1, 10000000},
 
     // larger values
 
-    {
-        "2500_gdd_1_second",
-        25000000,
-        1,
-        24999999
-    },
-    {
-        "5000_gdd_1_second",
-        50000000,
-        1,
-        49999999
-    },
-    {
-        "10000_gdd_1_second",
-        100000000,
-        1,
-        99999998
-    },
-    {
-        "25000_gdd_1_second",
-        250000000,
-        1,
-        249999995
-    },
-    {
-        "50000_gdd_1_second",
-        500000000,
-        1,
-        499999989
-    },
-    {
-        "100000_gdd_1_second",
-        1000000000,
-        1,
-        999999978
-    },
-    {
-        "250000_gdd_1_second",
-        2500000000,
-        1,
-        2499999945
-    },
-    {
-        "500000_gdd_1_second",
-        5000000000,
-        1,
-        4999999890
-    },
-    {
-        "1000000_gdd_1_second",
-        10000000000LL,
-        1,
-        9999999780LL
-    },
+    {"2500_gdd_1_second", 25000000, 1, 24999999},
+    {"5000_gdd_1_second", 50000000, 1, 49999999},
+    {"10000_gdd_1_second", 100000000, 1, 99999998},
+    {"25000_gdd_1_second", 250000000, 1, 249999995},
+    {"50000_gdd_1_second", 500000000, 1, 499999989},
+    {"100000_gdd_1_second", 1000000000, 1, 999999978},
+    {"250000_gdd_1_second", 2500000000, 1, 2499999945},
+    {"500000_gdd_1_second", 5000000000, 1, 4999999890},
+    {"1000000_gdd_1_second", 10000000000LL, 1, 9999999780LL},
 
     // max-ish
 
-    {
-        "maxish_1_year",
-        INT64_MAX,
-        31556952,
-        4611686018427387903LL
-    },
+    {"maxish_1_year", INT64_MAX, 31556952, 4611686018427387903LL},
 };
 
-TEST(GradidoUnitTest, DecayTestVectors)
-{
-    for (const auto& test : DECAY_TEST_VECTORS) {
-        auto result =
-            grdd_unit_calculate_decay(
-                test.amount,
-                test.duration
-            );
+TEST(GradidoUnitTest, DecayTestVectors) {
+  for (const auto &test : DECAY_TEST_VECTORS) {
+    auto result = grdd_unit_calculate_decay(test.amount, test.duration);
 
-        EXPECT_EQ(result, test.expected)
-            << "failed test vector: "
-            << test.name;
-    }
+    EXPECT_EQ(result, test.expected) << "failed test vector: " << test.name;
+  }
 }
 
-
-TEST(GradidoUnitTest, toString_Randomized)
-{
-  std::mt19937_64 rng(42); // deterministisch
+TEST(GradidoUnitTest, toString_Randomized) {
+  std::mt19937_64 rng(42);                                // deterministisch
   std::uniform_real_distribution<double> dist(-1e9, 1e9); // innerhalb double-Bereich
   int countDiffBetweenDoubleInteger = 0;
   constexpr int bufferSize = 24;
@@ -686,12 +519,13 @@ struct ThreadResult {
   std::deque<std::tuple<int64_t, int64_t, int64_t>> errors; // amount, duration, diff
 };
 
-TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
-{
+TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom) {
   constexpr uint64_t MASTER_SEED = 0xC0FFEE1234567890ULL;
   constexpr int64_t NUM_SAMPLES = 5000000; // 500k test cases
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
-  constexpr int64_t MAX_AMOUNT_CENT = std::numeric_limits<int64_t>::max() / 2;// 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
+  constexpr int64_t MAX_AMOUNT_CENT =
+      std::numeric_limits<int64_t>::max() /
+      2; // 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
   constexpr int64_t MAX_DURATION_SECONDS = 60ll * 60ll * 24ll * 90ll * 4; // 90 Days in seconds
 
   std::atomic<int64_t> totalTests{0};
@@ -709,7 +543,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   auto worker = [&](int threadId) {
     // Each thread gets its own random generator
     std::random_device rd;
-    std::seed_seq seq { MASTER_SEED, static_cast<uint64_t>(threadId) };
+    std::seed_seq seq{MASTER_SEED, static_cast<uint64_t>(threadId)};
     std::mt19937_64 gen(seq);
     std::uniform_int_distribution<int64_t> amountDist(1, MAX_AMOUNT_CENT);
     std::uniform_int_distribution<int64_t> durationDist(1, MAX_DURATION_SECONDS);
@@ -953,8 +787,9 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay) {
   std::cout << "Difference [-100;100] Cent (0.01 GDD): " << totalDiffHoundred << " ("
             << (100.0 * totalDiffHoundred / totalTests) << "%)" << std::endl;
   std::cout << "Other differences: " << totalDiffOther << " ("
-    << (100.0 * totalDiffOther / totalTests) << "%)" << std::endl;
-  std::cout << "Smallest Error: " << smallestError << ", " << smallestErrorDuration << " seconds " << std::endl;
+            << (100.0 * totalDiffOther / totalTests) << "%)" << std::endl;
+  std::cout << "Smallest Error: " << smallestError << ", " << smallestErrorDuration << " seconds "
+            << std::endl;
 
   // Show the first 20 errors as examples
   std::cout << "\nExample errors (amount in Cent, duration in seconds, difference in Cent):"
@@ -975,29 +810,24 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions) {
   using namespace std::chrono;
 
   struct TestCase {
-    const char* name;
+    const char *name;
     grdd_unit startAmount;
     int64_t tolerance;
   };
 
   constexpr int64_t max = std::numeric_limits<int64_t>::max();
 
-  const TestCase cases[] = {
-      {"max/4", max / 4, 1},
-      {"max/2", max / 2, 1},
-      {"max", max, 2}
-  };
+  const TestCase cases[] = {{"max/4", max / 4, 1}, {"max/2", max / 2, 1}, {"max", max, 2}};
 
-  for (const auto& tc : cases)
-  {
+  for (const auto &tc : cases) {
     // --- Define time points ---
     grdd_timestamp_seconds start = 0;
-    grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;    // +30 days
-    grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;    // +90 days
-    grdd_timestamp_seconds end = 60 * 60 * 24 * 365;  // +1 year
+    grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;   // +30 days
+    grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;   // +90 days
+    grdd_timestamp_seconds end = 60 * 60 * 24 * 365; // +1 year
 
     grdd_unit minusAmount = 100l * 10000l; // -100 GDD
-    grdd_unit plusAmount = 500l * 10000l; // +500 GDD
+    grdd_unit plusAmount = 500l * 10000l;  // +500 GDD
 
     // =========================================================
     // Variant 1: Step-by-step simulation
@@ -1024,18 +854,15 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions) {
     // Variant 2: Reference calculation
     // =========================================================
 
-    grdd_unit ref =
-      grdd_unit_calculate_decay(tc.startAmount, end - start);
+    grdd_unit ref = grdd_unit_calculate_decay(tc.startAmount, end - start);
 
     // -100 GDD -> from t2 to end decayed
-    grdd_unit minusDecayed =
-      grdd_unit_calculate_decay(minusAmount, end - t2);
+    grdd_unit minusDecayed = grdd_unit_calculate_decay(minusAmount, end - t2);
 
     ref -= minusDecayed;
 
     // +500 GDD -> from t3 to end decayed
-    grdd_unit plusDecayed =
-      grdd_unit_calculate_decay(plusAmount, end - t3);
+    grdd_unit plusDecayed = grdd_unit_calculate_decay(plusAmount, end - t3);
 
     ref += plusDecayed;
 
@@ -1048,18 +875,12 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions) {
 
     int64_t diff = std::llabs(stepCent - refCent);
 
-    double percentDiffToStep =
-      stepCent != 0
-      ? (double)diff / (double)stepCent
-      : 0.0;
+    double percentDiffToStep = stepCent != 0 ? (double)diff / (double)stepCent : 0.0;
 
-    EXPECT_LE(diff, tc.tolerance)
-      << "Mismatch for case '" << tc.name << "'. "
-      << "step=" << stepCent
-      << " ref=" << refCent
-      << " diff=" << diff
-      << " tolerance=" << tc.tolerance
-      << " percent=" << percentDiffToStep * 100.0 << "%";
+    EXPECT_LE(diff, tc.tolerance) << "Mismatch for case '" << tc.name << "'. "
+                                  << "step=" << stepCent << " ref=" << refCent << " diff=" << diff
+                                  << " tolerance=" << tc.tolerance
+                                  << " percent=" << percentDiffToStep * 100.0 << "%";
   }
 }
 
@@ -1077,7 +898,6 @@ TEST(GradidoUnitTest, testOverflowProvocation) {
   grdd_unit value = nearMax;
 
   bool overflowDetected = false;
-
 
   // Apply multiple times -> escalating growth
   for (int i = 0; i < 10; ++i) {
