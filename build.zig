@@ -56,13 +56,10 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib);
 
     if (enable_benchmarks) {
-        const bench = b.addExecutable(.{
-            .name = "bench_numberToString",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            })
-        });
+        const bench = b.addExecutable(.{ .name = "bench_numberToString", .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }) });
 
         bench.linkLibrary(lib);
         bench.addIncludePath(b.path("include"));
@@ -83,12 +80,12 @@ pub fn build(b: *std.Build) void {
 
         const test_targets = [_]struct {
             name: []const u8,
-            src:  []const u8,
+            src: []const u8,
         }{
             .{ .name = "test_converter", .src = "tests/unit/src/test_converter.cpp" },
-            .{ .name = "test_duration",  .src = "tests/unit/src/test_duration.cpp"  },
-            .{ .name = "test_memory",    .src = "tests/unit/src/test_memory.cpp"    },
-            .{ .name = "test_unit",      .src = "tests/unit/src/test_unit.cpp"      },
+            .{ .name = "test_duration", .src = "tests/unit/src/test_duration.cpp" },
+            .{ .name = "test_memory", .src = "tests/unit/src/test_memory.cpp" },
+            .{ .name = "test_unit", .src = "tests/unit/src/test_unit.cpp" },
         };
         for (test_targets) |tt| {
             const exe = b.addExecutable(.{
@@ -128,8 +125,10 @@ pub fn build(b: *std.Build) void {
         if (b.lazyDependency("libsodium", .{
             .target = target,
             .optimize = optimize,
-        })) | dep | {
-          test_pbtools.linkLibrary(dep.artifact("libsodium-static"));
+            .static = true,
+            .shared = false,
+        })) |dep| {
+            test_pbtools.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
         }
         if (googletest_dep) |dep| {
             test_pbtools.linkLibrary(dep.artifact("gtest"));
