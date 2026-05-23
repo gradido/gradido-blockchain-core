@@ -82,6 +82,13 @@ static void test_unit_round(int stepCount)
   }
 }
 
+static void test_calculate_decay(int stepCount)
+{
+    for (int i = 0; i < stepCount; ++i) {
+        grdd_unit_calculate_decay(getNextTestValue(), getNextTestValue() % 31556952 * 10);
+    }
+}
+
 static void test_r128_round(int stepCount)
 {
   R128 v = {
@@ -117,7 +124,7 @@ static void bench_step(void (*func_ptr)(int), int stepCount, const char* name)
   grdu_mono_timer timeUsed;
   grdu_mono_timer_reset(&timeUsed);
   func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, timeUsed);
   printf("%s: %s\n", name, buffer);
 }
 
@@ -129,20 +136,21 @@ int main(void)
 
   grdu_mono_timer_reset(&timeUsed);
   prepare_test_data();
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
   printf("time for prepare test data: %s\n", buffer);
 
   const int stepCount = TEST_VALUES_COUNT * 1000;
 
   bench_step(test_snprintf_integer, stepCount, "snprintf integer");
   bench_step(test_lr_algo_integer, stepCount, "lr algo integer");
-  bench_step(test_r128_integer, stepCount, "r128 integer");
-  bench_step(test_unit_fixed, stepCount, "grdd unit fixed point integer");
+  bench_step(test_r128_integer, stepCount, "r128 integer to string");
+  bench_step(test_unit_fixed, stepCount, "grdd unit to string");
   bench_step(test_duration_to_string, stepCount, "duration to string r128");
   bench_step(test_unit_round, stepCount, "unit round");
   bench_step(test_r128_round, stepCount, "r128 round");
+  bench_step(test_calculate_decay, stepCount, "calculate decay");
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, &timeUsed);
+  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
   printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
 
   return 0;

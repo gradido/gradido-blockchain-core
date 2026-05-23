@@ -1,0 +1,13 @@
+.{
+    .name = .blockchain_core,
+    .version = "0.15.2",
+    .dependencies = .{
+        .googletest = .{
+            .url = "git+https://github.com/allyourcodebase/googletest#e2affdd13730f800aa63772039f2adfa971461b6",
+            .hash = "googletest-1.15.2-vLU55gAVAAC86GD--lNpG3oVHLsJhdB0lFCOCsBEbiAE",
+            .lazy = true,
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0x838910c1a62edeaf,
+}

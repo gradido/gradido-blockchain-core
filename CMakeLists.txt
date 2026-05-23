@@ -24,6 +24,11 @@ FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
 FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
 set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${PBTOOLS} ${R128})
 
+# Third Party
+FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
+FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${R128})
+
 if(MSVC)
     source_group("data/proto/gradido" FILES ${DATA_PROTO_GRADIDO} )
     source_group("data/wire" FILES ${DATA_WIRE} )
