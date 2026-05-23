@@ -15,9 +15,15 @@ FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 
 set(GRADIDO_BLOCKCHAIN_CORE_SRC ${DATA} ${UTILS})
 
+# Third Party
+FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
+FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${R128})
+
 if(MSVC)
   source_group("data" FILES ${DATA} )
   source_group("utils" FILES ${UTILS} )
+  source_group("third_party" FILES ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC} )
 endif()
 
 include_directories(
@@ -25,7 +31,7 @@ include_directories(
     third_party
 )
 
-add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC})
+add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC}  ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC})
 
 
 if(ENABLE_BENCHMARKS)
@@ -35,4 +41,3 @@ endif()
 if(ENABLE_TESTS)
     add_subdirectory(tests)
 endif()
-
