@@ -111,10 +111,10 @@ static void prepare_test_data()
   srand(12812);
   for (int i = 0; i < TEST_VALUES_COUNT; ++i) {
     testValues[i] =
-      (((uint64_t)rand() << 48) ^
+      ((uint64_t)rand() << 48) ^
       ((uint64_t)rand() << 32) ^
       ((uint64_t)rand() << 16) ^
-      (uint64_t)rand());
+      (uint64_t)rand();
   }
 }
 
