@@ -6,6 +6,9 @@
 #include <time.h>
 
 #ifdef _WIN32
+#if !defined(__SIZEOF_INT128__)
+#include "r128/r128.h"
+#endif
 #include <windows.h>
 
 // counts per second
@@ -24,8 +27,25 @@ static int64_t get_time_ns()
         fprintf(stderr, "Error: QueryPerformanceCounter failed\n");
         exit(1);
     }
-
-    return ((int64_t)counter.QuadPart * 1000000000LL) / (int64_t)freq.QuadPart;
+    // if compiled with zig, than we have __int128 and QueryPerformanceCounter
+#if defined(__SIZEOF_INT128__)
+    __int128 tmp = (__int128)counter.QuadPart * 1000000000LL;
+    return (int64_t)(tmp / (int64_t)freq.QuadPart);
+#else
+    // if compiled with msvc
+    R128 rCounter;
+    r128FromInt(&rCounter, counter.QuadPart);
+    R128 rFrequency;
+    r128FromInt(&rFrequency, freq.QuadPart);
+    R128 rSeconds;
+    r128Div(&rSeconds, &rCounter, &rFrequency);
+    R128 rNanos;
+    R128 rFactor;
+    r128FromInt(&rFactor, 1000000000LL);
+    r128Mul(&rNanos, &rSeconds, &rFactor);
+    return r128ToInt(&rNanos);
+    //return ((int64_t)counter.QuadPart * 1000000000LL) / (int64_t)freq.QuadPart;
+#endif
 }
 
 #else
