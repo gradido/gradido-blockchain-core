@@ -4,24 +4,25 @@ const std = @import("std");
 fn addDirSources(
     lib: *std.Build.Step.Compile,
     b: *std.Build,
-    dirs: []const []const u8,
+    dir_path: []const u8,
 ) void {
-    for (dirs) |dir| {
-        var it = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch continue;
-        defer it.close();
+    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch |err| {
+        std.debug.panic("Failed to open directory '{s}': {s}", .{ dir_path, @errorName(err) });
+    };
+    defer dir.close();
 
-        var walker = it.walk(b.allocator) catch continue;
-        defer walker.deinit();
+    var walker = dir.walk(b.allocator) catch |err| {
+        std.debug.panic("Failed to walk directory '{s}': {s}", .{ dir_path, @errorName(err) });
+    };
+    defer walker.deinit();
 
-        while (walker.next() catch null) |entry| {
-            if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
-                const full_path = b.fmt("{s}/{s}", .{ dir, entry.path });
-
-                lib.addCSourceFiles(.{
-                    .files = &[_][]const u8{full_path},
-                    .flags = &.{},
-                });
-            }
+    while (walker.next() catch null) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
+            const full_path = b.fmt("{s}/{s}", .{ dir_path, entry.path });
+            lib.addCSourceFiles(.{
+                .files = &[_][]const u8{full_path},
+                .flags = &.{},
+            });
         }
     }
 }
@@ -45,24 +46,12 @@ pub fn build(b: *std.Build) void {
     lib.linkLibC();
 
     lib.addIncludePath(b.path("include"));
+    lib.addIncludePath(b.path("include/gradido_blockchain_core/data/proto/gradido"));
     lib.addIncludePath(b.path("third_party"));
+    lib.addIncludePath(b.path("third_party/pbtools"));
 
-    const data_sources = [_][]const u8{
-           "src/data",
-       };
-
-       const utils_sources = [_][]const u8{
-           "src/utils",
-       };
-
-       const third_party_sources = [_][]const u8{
-           "third_party/fp256/src",
-           "third_party/r128",
-       };
-
-    addDirSources(lib, b, &data_sources);
-    addDirSources(lib, b, &utils_sources);
-    addDirSources(lib, b, &third_party_sources);
+    addDirSources(lib, b, "src");
+    addDirSources(lib, b, "third_party");
 
     b.installArtifact(lib);
 
@@ -98,6 +87,7 @@ pub fn build(b: *std.Build) void {
         }{
             .{ .name = "test_converter", .src = "tests/unit/src/test_converter.cpp" },
             .{ .name = "test_duration",  .src = "tests/unit/src/test_duration.cpp"  },
+            .{ .name = "test_memory",    .src = "tests/unit/src/test_memory.cpp"    },
             .{ .name = "test_unit",      .src = "tests/unit/src/test_unit.cpp"      },
         };
         for (test_targets) |tt| {
@@ -125,5 +115,37 @@ pub fn build(b: *std.Build) void {
 
             b.installArtifact(exe);
         }
+        // test_pbtools
+        const test_pbtools = b.addExecutable(.{
+            .name = "test_pbtools",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        test_pbtools.linkLibrary(lib);
+        if (b.lazyDependency("libsodium", .{
+            .target = target,
+            .optimize = optimize,
+        })) | dep | {
+          test_pbtools.linkLibrary(dep.artifact("libsodium-static"));
+        }
+        if (googletest_dep) |dep| {
+            test_pbtools.linkLibrary(dep.artifact("gtest"));
+            test_pbtools.linkLibrary(dep.artifact("gtest_main"));
+        }
+
+        test_pbtools.addIncludePath(b.path("include"));
+        test_pbtools.addIncludePath(b.path("third_party"));
+
+        test_pbtools.addCSourceFiles(.{
+            .files = &.{
+                "tests/unit/src/test_pbtools.cpp",
+                "tests/unit/src/key_pairs.cpp",
+            },
+        });
+
+        b.installArtifact(test_pbtools);
     }
 }

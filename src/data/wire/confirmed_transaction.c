@@ -46,7 +46,7 @@ grd_result grdw_confirmed_transaction_decode(
   grd_memory_block pbBuffer;
   // take whole static area from allocator for pbtools
   grd_result result =
-      grd_memory_block_alloc(&pbBuffer, allocator, allocator->capacity - allocator->last_index);
+      grd_memory_block_alloc(&pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index));
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;
@@ -79,7 +79,7 @@ grd_result grdw_confirmed_transaction_encode(
   grd_memory_block pbBuffer;
   // take whole static area from allocator for pbtools
   grd_result result =
-      grd_memory_block_alloc(&pbBuffer, allocator, allocator->capacity - allocator->last_index);
+      grd_memory_block_alloc(&pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index));
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;

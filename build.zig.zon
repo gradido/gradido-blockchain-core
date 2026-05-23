@@ -7,6 +7,11 @@
             .hash = "googletest-1.15.2-vLU55gAVAAC86GD--lNpG3oVHLsJhdB0lFCOCsBEbiAE",
             .lazy = true,
         },
+        .libsodium = .{
+            .url = "git+https://github.com/jedisct1/libsodium#77e1ce5d6dee871c49ef211222ba18ef0c486bda",
+            .hash = "N-V-__8AAGV3jgBL34nv4uUihxaCgroWLfj966-SVjBHn9RE",
+            .lazy = true,
+        }
     },
     .paths = .{""},
     .fingerprint = 0x838910c1a62edeaf,

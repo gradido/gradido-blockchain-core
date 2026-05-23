@@ -62,6 +62,7 @@ size_t grd_memory_overflow_total(const grd_memory *memory) {
   if (!memory) { return 0; }
   return memory->out_of_memory_capacity;
 }
+
 grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t size) {
   if (!buffer || !memory) { return GRD_ERROR_NULL_POINTER; }
   if (!size) { return GRD_ERROR_INVALID_PARAM; }
@@ -72,10 +73,18 @@ grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t 
     return GRD_SUCCESS;
   }
   if (!memory->data) { return GRD_ERROR_NOT_INITIALIZED; }
-  if (memory->last_index + size > memory->capacity) {
+  // align with 8 Bytes
+  uintptr_t current_addr = (uintptr_t)(memory->data + memory->last_index);
+  uintptr_t aligned_addr = ALIGN8(current_addr);
+  size_t alignment_padding = (size_t)(aligned_addr - current_addr);
+
+  if (memory->last_index + alignment_padding + size > memory->capacity) {
     memory->out_of_memory_capacity += size;
     return GRD_ERROR_OUT_OF_MEMORY;
   }
+  // set last_index to next aligned place
+  memory->last_index += alignment_padding;
+
   *buffer = memory->data + memory->last_index;
   memory->last_index += size;
   return GRD_SUCCESS;
