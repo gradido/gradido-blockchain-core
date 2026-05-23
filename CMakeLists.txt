@@ -20,14 +20,10 @@ FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 set(GRADIDO_BLOCKCHAIN_CORE_SRC ${SRC} ${DATA} ${DATA_PROTO_GRADIDO} ${DATA_WIRE} ${MAPPING} ${UTILS})
 
 # Third Party
+FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
 FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
 FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
-set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${PBTOOLS} ${R128})
-
-# Third Party
-FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
-FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
-set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${R128})
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128})
 
 if(MSVC)
     source_group("data/proto/gradido" FILES ${DATA_PROTO_GRADIDO} )
@@ -35,7 +31,9 @@ if(MSVC)
     source_group("data" FILES ${DATA} )
     source_group("mapping" FILES ${MAPPING} )
     source_group("utils" FILES ${UTILS} )
-    source_group("third_party" FILES ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC} )
+    source_group("third_party/fp256" FILES ${FP256})
+    source_group("third_party/pbtools" FILES ${PBTOOLS})
+    source_group("third_party/r128" FILES ${R128})
 endif()
 
 include_directories(

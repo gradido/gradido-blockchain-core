@@ -14,8 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "r128/r128.h"
-
 // seconds in a year in gregorian calender
 static const grdd_duration_seconds SECONDS_PER_YEAR = 31556952;
 static const grdd_timestamp_seconds DECAY_START_TIME = 1620927991;
