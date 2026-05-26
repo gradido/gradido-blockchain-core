@@ -1,5 +1,6 @@
 #include "gradido_blockchain_core/data/wire/specific_transactions.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/types/address.h"
 
 #include <string.h>
 
@@ -99,7 +100,7 @@ void grdw_gradido_timeout_deferred_transfer_assemble(
 void grdw_register_address_assemble(
     grdw_register_address *register_address,
     const uint8_t user_pubkey[32],
-    const grdd_address_type address_type,
+    const grdt_address address_type,
     const uint32_t derivation_index,
     const uint8_t name_hash[32],
     const uint8_t account_pubkey[32]

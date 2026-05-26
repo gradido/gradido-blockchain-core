@@ -2,9 +2,9 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_CONFIRMED_TRANSACTION_H
 
 #include "basic_types.h"
-#include "gradido_blockchain_core/data/balance_derivation_type.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_transaction.h"
 #include "ledger_anchor.h"
 
@@ -20,7 +20,7 @@ typedef struct grdw_confirmed_transaction {
   grdw_ledger_anchor ledger_anchor;
   grdw_account_balance *account_balances;
   uint8_t account_balances_count;
-  grdd_balance_derivation_type balance_derivation;
+  grdt_balance_derivation balance_derivation;
 } grdw_confirmed_transaction;
 
 void grdw_confirmed_transaction_init(grdw_confirmed_transaction *tx);

@@ -30,6 +30,9 @@
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/types/address.h"
+#include "gradido_blockchain_core/types/balance_derivation.h"
+#include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/utils/version.h"
 
 static grd_result community_uuid_from_pbtools(
@@ -77,7 +80,7 @@ static grd_result encrypted_memo_from_pbtools(
     grd_memory *allocator
 ) {
   if (!encrypted_memo || !pb_encrypted_memo || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  encrypted_memo->type = (grdw_memo_key_type)pb_encrypted_memo->type;
+  encrypted_memo->type = (grdt_memo_key)pb_encrypted_memo->type;
   if (pb_encrypted_memo->memo.size > 0) {
     return memory_block_from_pbtools(&encrypted_memo->memo, &pb_encrypted_memo->memo, allocator);
   } else {
@@ -178,9 +181,9 @@ static grd_result ledger_anchor_from_pbtools(
         &ledger_anchor->hiero_transaction_id, pb_ledger_anchor->hiero_transaction_id_p
     );
     if (GRD_SUCCESS != result) { return result; }
-    ledger_anchor->type = GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID;
+    ledger_anchor->type = GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID;
   } else {
-    ledger_anchor->type = (grdw_ledger_anchor_type)pb_ledger_anchor->type;
+    ledger_anchor->type = (grdt_ledger_anchor)pb_ledger_anchor->type;
     ledger_anchor->id = pb_ledger_anchor->id;
   }
   return GRD_SUCCESS;
@@ -292,7 +295,7 @@ static grd_result register_address_from_pbtools(
     return GRD_ERROR_INVALID_PARAM;
   }
   memcpy(register_address->user_pubkey, pb_register_address->user_pubkey.buf_p, 32);
-  register_address->address_type = (grdd_address_type)pb_register_address->address_type;
+  register_address->address_type = (grdt_address)pb_register_address->address_type;
   register_address->derivation_index = pb_register_address->derivation_index;
   memcpy(register_address->name_hash, pb_register_address->name_hash.buf_p, 32);
   memcpy(register_address->account_pubkey, pb_register_address->account_pubkey.buf_p, 32);
@@ -339,49 +342,49 @@ grd_result grdm_transaction_body_from_pbtools(
   result = timestamp_from_pbtools(&transaction_body->created_at, pb_transaction_body->created_at_p);
   if (GRD_SUCCESS != result) { return result; }
 
-  transaction_body->type = (grdd_cross_group_type)pb_transaction_body->type;
+  transaction_body->type = (grdt_cross_group)pb_transaction_body->type;
 
   switch (pb_transaction_body->data) {
   case proto_gradido_transaction_body_data_none_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_NONE;
+    transaction_body->transaction_type = GRDT_TRANSACTION_NONE;
     return GRD_SUCCESS;
   case proto_gradido_transaction_body_data_transfer_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_TRANSFER;
+    transaction_body->transaction_type = GRDT_TRANSACTION_TRANSFER;
     return gradido_transfer_from_pbtools(
         &transaction_body->transfer, pb_transaction_body->transfer_p
     );
   case proto_gradido_transaction_body_data_creation_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_CREATION;
+    transaction_body->transaction_type = GRDT_TRANSACTION_CREATION;
     return gradido_creation_from_pbtools(
         &transaction_body->creation, pb_transaction_body->creation_p
     );
   case proto_gradido_transaction_body_data_community_friends_update_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_FRIENDS_UPDATE;
+    transaction_body->transaction_type = GRDT_TRANSACTION_COMMUNITY_FRIENDS_UPDATE;
     return community_friends_update_from_pbtools(
         &transaction_body->community_friends_update, pb_transaction_body->community_friends_update_p
     );
   case proto_gradido_transaction_body_data_register_address_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_REGISTER_ADDRESS;
+    transaction_body->transaction_type = GRDT_TRANSACTION_REGISTER_ADDRESS;
     return register_address_from_pbtools(
         &transaction_body->register_address, pb_transaction_body->register_address_p
     );
   case proto_gradido_transaction_body_data_deferred_transfer_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_DEFERRED_TRANSFER;
+    transaction_body->transaction_type = GRDT_TRANSACTION_DEFERRED_TRANSFER;
     return gradido_deferred_transfer_from_pbtools(
         &transaction_body->deferred_transfer, pb_transaction_body->deferred_transfer_p
     );
   case proto_gradido_transaction_body_data_community_root_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT;
+    transaction_body->transaction_type = GRDT_TRANSACTION_COMMUNITY_ROOT;
     return community_root_from_pbtools(
         &transaction_body->community_root, pb_transaction_body->community_root_p
     );
   case proto_gradido_transaction_body_data_redeem_deferred_transfer_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_REDEEM_DEFERRED_TRANSFER;
+    transaction_body->transaction_type = GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER;
     return gradido_redeem_deferred_transfer_from_pbtools(
         &transaction_body->redeem_deferred_transfer, pb_transaction_body->redeem_deferred_transfer_p
     );
   case proto_gradido_transaction_body_data_timeout_deferred_transfer_e:
-    transaction_body->transaction_type = GRDD_TRANSACTION_TYPE_TIMEOUT_DEFERRED_TRANSFER;
+    transaction_body->transaction_type = GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER;
     return gradido_timeout_deferred_transfer_from_pbtools(
         &transaction_body->timeout_deferred_transfer,
         pb_transaction_body->timeout_deferred_transfer_p
@@ -470,7 +473,6 @@ grd_result grdm_confirmed_transaction_from_pb(
     }
   }
 
-  confirmed_tx->balance_derivation =
-      (grdd_balance_derivation_type)pb_confirmed_tx->balance_derivation;
+  confirmed_tx->balance_derivation = (grdt_balance_derivation)pb_confirmed_tx->balance_derivation;
   return GRD_SUCCESS;
 }

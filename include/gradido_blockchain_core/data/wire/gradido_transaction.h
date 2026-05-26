@@ -10,8 +10,6 @@
 extern "C" {
 #endif
 
-typedef struct proto_gradido_gradido_transaction_t proto_gradido_gradido_transaction;
-
 typedef struct grdw_gradido_transaction {
   grdw_signature_pair *sig_map;
   grd_memory_block body_bytes;

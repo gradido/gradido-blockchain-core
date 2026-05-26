@@ -171,7 +171,7 @@ TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
   memcpy(body.other_community_uuid, communityUuid.data, 16);
   free(communityUuid.data);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_NONE;
+  body.transaction_type = GRDT_TRANSACTION_NONE;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -194,10 +194,10 @@ TEST(PBtoolsTest, TransactionBody_Decode_OtherCommunity) {
   ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
   ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
   free(bin.data);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_FALSE(body.memos);
   EXPECT_FALSE(body.memos_count);
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_NONE);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_NONE);
   grd_memory_block communityUuid = fromHex(communityUuidHex);
   ASSERT_TRUE(body.other_community_uuid);
   EXPECT_FALSE(memcmp(body.other_community_uuid, communityUuid.data, 16));
@@ -219,7 +219,7 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
       g_KeyPairs[2].public_key
   );
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT;
+  body.transaction_type = GRDT_TRANSACTION_COMMUNITY_ROOT;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -244,10 +244,10 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_FALSE(body.memos);
   EXPECT_FALSE(body.memos_count);
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_COMMUNITY_ROOT);
   EXPECT_FALSE(memcmp(body.community_root.pubkey, g_KeyPairs[0].public_key, 32));
   EXPECT_FALSE(memcmp(body.community_root.gmw_pubkey, g_KeyPairs[1].public_key, 32));
   EXPECT_FALSE(memcmp(body.community_root.auf_pubkey, g_KeyPairs[2].public_key, 32));
@@ -265,11 +265,11 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   uint8_t nameHash[32];
   crypto_generichash(nameHash, 32, g_KeyPairs[3].public_key, 32, NULL, 0);
   grdw_register_address_assemble(
-      &body.register_address, g_KeyPairs[3].public_key, GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN, 1,
-      nameHash, g_KeyPairs[4].public_key
+      &body.register_address, g_KeyPairs[3].public_key, GRDT_ADDRESS_COMMUNITY_HUMAN, 1, nameHash,
+      g_KeyPairs[4].public_key
   );
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_REGISTER_ADDRESS;
+  body.transaction_type = GRDT_TRANSACTION_REGISTER_ADDRESS;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -296,13 +296,13 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_FALSE(body.memos);
   EXPECT_FALSE(body.memos_count);
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_REGISTER_ADDRESS);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_REGISTER_ADDRESS);
   EXPECT_FALSE(memcmp(body.register_address.user_pubkey, g_KeyPairs[3].public_key, 32));
   EXPECT_FALSE(memcmp(body.register_address.account_pubkey, g_KeyPairs[4].public_key, 32));
-  EXPECT_EQ(body.register_address.address_type, GRDD_ADDRESS_TYPE_COMMUNITY_HUMAN);
+  EXPECT_EQ(body.register_address.address_type, GRDT_ADDRESS_COMMUNITY_HUMAN);
   EXPECT_EQ(body.register_address.derivation_index, 1);
   EXPECT_EQ(crypto_generichash_BYTES, 32);
   uint8_t nameHash[crypto_generichash_BYTES];
@@ -318,7 +318,7 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
-  grdw_encrypted_memo memo = {.type = GRDW_MEMO_KEY_TYPE_PLAIN};
+  grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
   grd_memory_block_alloc(&memo.memo, &mem, 13);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
@@ -331,7 +331,7 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   );
   free(communityUuid.data);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_CREATION;
+  body.transaction_type = GRDT_TRANSACTION_CREATION;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -355,12 +355,12 @@ TEST(PBToolsTest, TransactionBody_Creation_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_TRUE(body.memos);
   EXPECT_EQ(body.memos_count, 1);
-  EXPECT_EQ(body.memos[0].type, GRDW_MEMO_KEY_TYPE_PLAIN);
+  EXPECT_EQ(body.memos[0].type, GRDT_MEMO_KEY_PLAIN);
   EXPECT_STREQ((const char *)body.memos[0].memo.data, "Hello World2");
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_CREATION);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_CREATION);
   EXPECT_FALSE(memcmp(body.creation.recipient.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.creation.recipient.amount, 10000000);
   grd_memory_block communityUuid = fromHex(communityUuidHex);
@@ -377,7 +377,7 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
-  grdw_encrypted_memo memo = {.type = GRDW_MEMO_KEY_TYPE_PLAIN};
+  grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
   grd_memory_block_alloc(&memo.memo, &mem, 13);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
@@ -390,7 +390,7 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   );
   free(communityUuid.data);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_TRANSFER;
+  body.transaction_type = GRDT_TRANSACTION_TRANSFER;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -414,12 +414,12 @@ TEST(PBToolsTest, TransactionBody_Transfer_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_TRUE(body.memos);
   EXPECT_EQ(body.memos_count, 1);
-  EXPECT_EQ(body.memos[0].type, GRDW_MEMO_KEY_TYPE_PLAIN);
+  EXPECT_EQ(body.memos[0].type, GRDT_MEMO_KEY_PLAIN);
   EXPECT_STREQ((const char *)body.memos[0].memo.data, "Hello World2");
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_TRANSFER);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_TRANSFER);
   EXPECT_FALSE(memcmp(body.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.transfer.sender.amount, 100000);
   grd_memory_block communityUuid = fromHex(communityUuidHex);
@@ -436,7 +436,7 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
-  grdw_encrypted_memo memo = {.type = GRDW_MEMO_KEY_TYPE_PLAIN};
+  grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
   grd_memory_block_alloc(&memo.memo, &mem, 13);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
@@ -450,7 +450,7 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   );
   free(communityUuid.data);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_DEFERRED_TRANSFER;
+  body.transaction_type = GRDT_TRANSACTION_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -476,12 +476,12 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_TRUE(body.memos);
   EXPECT_EQ(body.memos_count, 1);
-  EXPECT_EQ(body.memos[0].type, GRDW_MEMO_KEY_TYPE_PLAIN);
+  EXPECT_EQ(body.memos[0].type, GRDT_MEMO_KEY_PLAIN);
   EXPECT_STREQ((const char *)body.memos[0].memo.data, "Hello World2");
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_DEFERRED_TRANSFER);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_DEFERRED_TRANSFER);
   EXPECT_FALSE(memcmp(body.deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.deferred_transfer.transfer.sender.amount, 100000);
   grd_memory_block communityUuid = fromHex(communityUuidHex);
@@ -501,7 +501,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
-  grdw_encrypted_memo memo = {.type = GRDW_MEMO_KEY_TYPE_PLAIN};
+  grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
   grd_memory_block_alloc(&memo.memo, &mem, 13);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
@@ -515,7 +515,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   );
   free(communityUuid.data);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_REDEEM_DEFERRED_TRANSFER;
+  body.transaction_type = GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -542,12 +542,12 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_TRUE(body.memos);
   EXPECT_EQ(body.memos_count, 1);
-  EXPECT_EQ(body.memos[0].type, GRDW_MEMO_KEY_TYPE_PLAIN);
+  EXPECT_EQ(body.memos[0].type, GRDT_MEMO_KEY_PLAIN);
   EXPECT_STREQ((const char *)body.memos[0].memo.data, "Hello World2");
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_REDEEM_DEFERRED_TRANSFER);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER);
   EXPECT_FALSE(
       memcmp(body.redeem_deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32)
   );
@@ -574,7 +574,7 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
 
   grdw_gradido_timeout_deferred_transfer_assemble(&body.timeout_deferred_transfer, 16);
 
-  body.transaction_type = GRDD_TRANSACTION_TYPE_TIMEOUT_DEFERRED_TRANSFER;
+  body.transaction_type = GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
   size_t finalSize = 0;
@@ -601,11 +601,11 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Decode) {
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
-  EXPECT_EQ(body.type, GRDD_CROSS_GROUP_TYPE_LOCAL);
+  EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_FALSE(body.memos);
   EXPECT_FALSE(body.memos_count);
 
-  EXPECT_EQ(body.transaction_type, GRDD_TRANSACTION_TYPE_TIMEOUT_DEFERRED_TRANSFER);
+  EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER);
   EXPECT_EQ(body.timeout_deferred_transfer.deferred_transfer_transaction_nr, 16);
   grd_memory_free(&mem);
 }
@@ -703,7 +703,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   memcpy(body.community_root.pubkey, g_KeyPairs[0].public_key, 32);
   memcpy(body.community_root.gmw_pubkey, g_KeyPairs[1].public_key, 32);
   memcpy(body.community_root.auf_pubkey, g_KeyPairs[2].public_key, 32);
-  body.transaction_type = GRDD_TRANSACTION_TYPE_COMMUNITY_ROOT;
+  body.transaction_type = GRDT_TRANSACTION_COMMUNITY_ROOT;
 
   uint8_t staticBuffer2[300]{};
   uint8_t buffer[256]{};
@@ -739,7 +739,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
       strlen(timeoutDeferredTransferTransactionBodyBase64)
   );
   tx.pairing_ledger_anchor.id = 17;
-  tx.pairing_ledger_anchor.type = GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID;
+  tx.pairing_ledger_anchor.type = GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID;
 
   uint8_t buffer[256]{};
   grd_memory_block bufferPtr = {.data = buffer, .size = 256};
@@ -769,9 +769,7 @@ TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
   EXPECT_FALSE(tx.sig_map_count);
   EXPECT_FALSE(tx.sig_map);
   EXPECT_EQ(tx.pairing_ledger_anchor.id, 17);
-  EXPECT_EQ(
-      tx.pairing_ledger_anchor.type, GRDW_LEDGER_ANCHOR_TYPE_LEGACY_GRADIDO_DB_TRANSACTION_ID
-  );
+  EXPECT_EQ(tx.pairing_ledger_anchor.type, GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID);
 
   grdw_gradido_transaction_free(&tx, &mem);
 }
@@ -815,7 +813,7 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   memcpy(accountBalance.community_uuid, communityUuid.data, 16);
   free(communityUuid.data);
   ASSERT_EQ(grdw_confirmed_transaction_copy_account_balance(&tx, &accountBalance, 0), GRD_SUCCESS);
-  tx.balance_derivation = GRDD_BALANCE_DERIVATION_EXTERN;
+  tx.balance_derivation = GRDT_BALANCE_DERIVATION_EXTERN;
 
   ASSERT_EQ(grdw_confirmed_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
@@ -846,11 +844,11 @@ TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
   EXPECT_EQ(tx.confirmed_at.nanos, confirmedAt.nanos);
   EXPECT_EQ(tx.account_balances_count, 1);
   EXPECT_EQ(tx.account_balances[0].balance, 10000);
-  EXPECT_EQ(tx.ledger_anchor.type, GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID);
+  EXPECT_EQ(tx.ledger_anchor.type, GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID);
   EXPECT_EQ(
       tx.ledger_anchor.hiero_transaction_id.transactionValidStart.seconds, createdAt2.seconds
   );
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.transactionValidStart.nanos, createdAt2.nanos);
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.accountID.accountNum, 121);
-  EXPECT_EQ(tx.balance_derivation, GRDD_BALANCE_DERIVATION_EXTERN);
+  EXPECT_EQ(tx.balance_derivation, GRDT_BALANCE_DERIVATION_EXTERN);
 }

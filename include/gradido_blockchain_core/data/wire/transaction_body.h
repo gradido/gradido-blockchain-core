@@ -2,10 +2,11 @@
 #define GRADIDO_BLOCKCHAIN_C_DATA_WIRE_TRANSACTION_BODY_H
 
 #include "basic_types.h"
-#include "gradido_blockchain_core/data/cross_group_type.h"
-#include "gradido_blockchain_core/data/transaction_type.h"
+
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/types/cross_group.h"
+#include "gradido_blockchain_core/types/transaction.h"
 #include "specific_transactions.h"
 
 #ifdef __cplusplus
@@ -26,8 +27,8 @@ typedef struct grdw_transaction_body {
     grdw_gradido_redeem_deferred_transfer redeem_deferred_transfer;
     grdw_gradido_timeout_deferred_transfer timeout_deferred_transfer;
   };
-  grdd_transaction_type transaction_type;
-  grdd_cross_group_type type;
+  grdt_transaction transaction_type;
+  grdt_cross_group type;
   uint8_t memos_count;
 } grdw_transaction_body;
 

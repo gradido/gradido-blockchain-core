@@ -28,19 +28,19 @@ extern "C" {
 
 // UNSPECIFIED
 static_assert(
-    (int)GRDD_BALANCE_DERIVATION_UNSPECIFIED == (int)proto_gradido_unspecified_e,
+    (int)GRDT_BALANCE_DERIVATION_UNSPECIFIED == (int)proto_gradido_unspecified_e,
     "BalanceDerivation enum mismatch: UNSPECIFIED"
 );
 
 // NODE
 static_assert(
-    (int)GRDD_BALANCE_DERIVATION_NODE == (int)proto_gradido_node_e,
+    (int)GRDT_BALANCE_DERIVATION_NODE == (int)proto_gradido_node_e,
     "BalanceDerivation enum mismatch: NODE"
 );
 
 // EXTERN
 static_assert(
-    (int)GRDD_BALANCE_DERIVATION_EXTERN == (int)proto_gradido_extern_e,
+    (int)GRDT_BALANCE_DERIVATION_EXTERN == (int)proto_gradido_extern_e,
     "BalanceDerivation enum mismatch: EXTERN"
 );
 

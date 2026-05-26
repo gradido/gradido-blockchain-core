@@ -4,9 +4,9 @@
 #include <stdbool.h>
 
 #include "basic_types.h"
-#include "gradido_blockchain_core/data/address_type.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/types/address.h"
 #include "hiero.h"
 #include "ledger_anchor.h"
 
@@ -50,7 +50,7 @@ typedef struct grdw_gradido_timeout_deferred_transfer {
 
 typedef struct grdw_register_address {
   uint8_t user_pubkey[32];
-  grdd_address_type address_type;
+  grdt_address address_type;
   uint32_t derivation_index;
   uint8_t name_hash[32];
   uint8_t account_pubkey[32];
@@ -111,7 +111,7 @@ void grdw_gradido_timeout_deferred_transfer_assemble(
 void grdw_register_address_assemble(
     grdw_register_address *register_address,
     const uint8_t user_pubkey[32],
-    const grdd_address_type address_type,
+    const grdt_address address_type,
     const uint32_t derivation_index,
     const uint8_t name_hash[32],
     const uint8_t account_pubkey[32]
