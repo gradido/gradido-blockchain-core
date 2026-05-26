@@ -622,7 +622,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
   grdw_gradido_transaction_reserve_sig_map(&tx, 1, &mem);
   grdw_signature_pair signature{};
   memcpy(signature.public_key, g_KeyPairs[0].public_key, 32);
-  size_t sig_len = 64;
+  unsigned long long sig_len = 64;
   crypto_sign_detached(
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
@@ -690,7 +690,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   grdw_gradido_transaction_reserve_sig_map(&tx, 1, &mem);
   grdw_signature_pair signature{};
   memcpy(signature.public_key, g_KeyPairs[0].public_key, 32);
-  size_t sig_len = 64;
+  unsigned long long sig_len = 64;
   crypto_sign_detached(
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
@@ -789,7 +789,7 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   ASSERT_EQ(grdw_gradido_transaction_reserve_sig_map(&tx.transaction, 1, &mem), GRD_SUCCESS);
   grdw_signature_pair signature{};
   memcpy(signature.public_key, g_KeyPairs[0].public_key, 32);
-  size_t sig_len = 64;
+  unsigned long long sig_len = 64;
   crypto_sign_detached(
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key

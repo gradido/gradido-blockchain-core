@@ -30,6 +30,13 @@ extern "C" {
  *  @{
  */
 
+/* Alignment: Most CPUs access memory more efficiently if data starts at
+ * addresses that are multiples of 4 or 8. We'll align to 8 bytes.
+ * This macro takes a size 'x' and rounds it UP to the nearest multiple of 8.
+ * Example: ALIGN8(3) -> 8, ALIGN8(8) -> 8, ALIGN8(10) -> 16
+ */
+#define ALIGN8(x) (((x) + 7) & (~7))
+
 /** @brief Operational mode for memory allocator.
  *
  *  Determines allocation strategy and ownership semantics.
