@@ -5,8 +5,7 @@
 extern "C" {
 #endif
 
-typedef enum grdd_cross_group_type
-{
+typedef enum grdd_cross_group_type {
   GRDD_CROSS_GROUP_TYPE_LOCAL = 0,
   GRDD_CROSS_GROUP_TYPE_INBOUND = 1,
   GRDD_CROSS_GROUP_TYPE_OUTBOUND = 2,

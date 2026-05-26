@@ -12,11 +12,11 @@ extern "C" {
  * or trusts external data.
  */
 typedef enum grdd_balance_derivation_type {
-    GRDD_BALANCE_DERIVATION_UNSPECIFIED = 0,
-    /* Balances & decay can be recalculated deterministically */
-    GRDD_BALANCE_DERIVATION_NODE        = 1,
-    /* Balances are accepted as-is from external / legacy system */
-    GRDD_BALANCE_DERIVATION_EXTERN      = 2
+  GRDD_BALANCE_DERIVATION_UNSPECIFIED = 0,
+  /* Balances & decay can be recalculated deterministically */
+  GRDD_BALANCE_DERIVATION_NODE = 1,
+  /* Balances are accepted as-is from external / legacy system */
+  GRDD_BALANCE_DERIVATION_EXTERN = 2
 } grdd_balance_derivation_type;
 
 #ifdef __cplusplus

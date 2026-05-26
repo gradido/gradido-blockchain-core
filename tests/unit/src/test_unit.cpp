@@ -1,22 +1,20 @@
 #include <gtest/gtest.h>
 
+#include "../terminal_colors.h"
 #include "gradido_blockchain_core/data/unit.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
-#include "../terminal_colors.h"
 
 #include <iomanip>
 #include <math.h>
 #include <random>
 
-TEST(TestUnit, fromDouble)
-{
+TEST(TestUnit, fromDouble) {
   double gddD = 0.0;
   EXPECT_EQ(grdd_unit_from_decimal(gddD), 0);
 }
 
-TEST(TestUnit, fromToString)
-{
-  const char* testString = "1029.1021";
+TEST(TestUnit, fromToString) {
+  const char *testString = "1029.1021";
   grdd_unit value;
   grdd_unit_from_string(&value, testString);
   EXPECT_EQ(value, 10291021);
@@ -29,9 +27,7 @@ TEST(TestUnit, fromToString)
   EXPECT_STREQ("1029.10", buffer);
 }
 
-
-TEST(GradidoUnitTest, TestWithManyDifferentDuration)
-{
+TEST(GradidoUnitTest, TestWithManyDifferentDuration) {
   // 2^(x/31556952)
   // calculate for every 32. second until two years are full
   grdd_unit prevValue = 0;
@@ -40,19 +36,13 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
   int countTwoJumps = 0;
   for (int i = 1; i < 31556952 * 2; i += 32) {
     grdd_unit decayed = grdd_unit_calculate_decay(100000000, i);
-    if (prevValue)
-    {
+    if (prevValue) {
       EXPECT_GE(prevValue, decayed) << "previous value wasn't greater on i: " << i;
       auto distance = prevValue - decayed;
-      if (prevDistance)
-      {
+      if (prevDistance) {
         grdd_unit absDistance = abs(prevDistance - distance);
-          if (absDistance > 1) {
-            ++countErrors;
-          }
-          if (absDistance > 2) {
-            ++countTwoJumps;
-          }
+        if (absDistance > 1) { ++countErrors; }
+        if (absDistance > 2) { ++countTwoJumps; }
         // EXPECT_LE(abs(prevDistance - distance), 1) << "distance increased unexpectedly i: " << i;
       }
       prevDistance = distance;
@@ -60,26 +50,27 @@ TEST(GradidoUnitTest, TestWithManyDifferentDuration)
     prevValue = decayed;
   }
   if (countErrors > 0) {
-      std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times" << ANSI_TXT_DFT << std::endl;
-      //std::cout << "errors: " << countErrors << std::endl;
+    std::cout << COUT_GTEST_BLU << "distance increased more than 1, " << countErrors << " times"
+              << ANSI_TXT_DFT << std::endl;
+    // std::cout << "errors: " << countErrors << std::endl;
   }
   if (countTwoJumps > 0) {
-      EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times" << ANSI_TXT_DFT << std::endl;
+    EXPECT_FALSE(countErrors) << "distance increased more than 2 " << countTwoJumps << " times"
+                              << ANSI_TXT_DFT << std::endl;
   }
 }
 
-TEST(GradidoUnitTest, TestReverseDecay)
-{
+TEST(GradidoUnitTest, TestReverseDecay) {
   const grdd_unit startValue = 1000000;
   for (int i = 1; i < 31556952 * 2; i += 32) {
     auto valueWithDecay = grdd_unit_calculate_decay(startValue, -i);
     auto decay = grdd_unit_calculate_decay(valueWithDecay, i);
-    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1) << "diff is more than 1, i: " << i;
+    ASSERT_LE(abs(startValue - grdd_unit_calculate_decay(valueWithDecay, i)), 1)
+        << "diff is more than 1, i: " << i;
   }
 }
 
-TEST(GradidoUnitTest, toString_AllCases)
-{
+TEST(GradidoUnitTest, toString_AllCases) {
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
   // positive values
@@ -265,8 +256,7 @@ TEST(GradidoUnitTest, toString_AllCases)
   // number outside of double range
 }
 
-TEST(GradidoUnitTest, roundToPrecision_EdgeCases)
-{
+TEST(GradidoUnitTest, roundToPrecision_EdgeCases) {
   struct TestCase {
     int64_t raw; // GradidoCent (4 decimal places)
     int precision;
@@ -275,329 +265,152 @@ TEST(GradidoUnitTest, roundToPrecision_EdgeCases)
 
   std::vector<TestCase> cases = {
 
-    // --- simple cases ---
-    {1234500, 2, 1234500},   // 123.4500 -> 123.45
-    {1234567, 2, 1234600},   // 123.4567 -> 123.46
-    {1234549, 2, 1234500},   // 123.4549 -> 123.45
+      // --- simple cases ---
+      {1234500, 2, 1234500}, // 123.4500 -> 123.45
+      {1234567, 2, 1234600}, // 123.4567 -> 123.46
+      {1234549, 2, 1234500}, // 123.4549 -> 123.45
 
-    // --- critical .5 boundary ---
-    {1000500, 1, 1001000},   // 100.0500 -> 100.050 -> round up
-    {1000499, 1, 1000000},   // 100.0499 -> down
+      // --- critical .5 boundary ---
+      {1000500, 1, 1001000}, // 100.0500 -> 100.050 -> round up
+      {1000499, 1, 1000000}, // 100.0499 -> down
 
-    // --- precision 0 ---
-    {1234999, 0, 1230000},   // 123.4999 -> 123
-    {1235000, 0, 1240000},   // 123.5000 -> 124
+      // --- precision 0 ---
+      {1234999, 0, 1230000}, // 123.4999 -> 123
+      {1235000, 0, 1240000}, // 123.5000 -> 124
 
-    // --- carry in integer ---
-    {9999500, 0, 10000000},  // 999.9500 -> 1000
-    {19999500, 1, 20000000}, // 1999.9500 -> 2000.0
+      // --- carry in integer ---
+      {9999500, 0, 10000000},  // 999.9500 -> 1000
+      {19999500, 1, 20000000}, // 1999.9500 -> 2000.0
 
-    // --- negative values ---
-    {-1234500, 2, -1234500}, // -123.4500 -> -123.45
-    {-1234567, 2, -1234600}, // -123.4567 -> -123.46
-    {-1234549, 2, -1234500}, // -123.4549 -> -123.45
+      // --- negative values ---
+      {-1234500, 2, -1234500}, // -123.4500 -> -123.45
+      {-1234567, 2, -1234600}, // -123.4567 -> -123.46
+      {-1234549, 2, -1234500}, // -123.4549 -> -123.45
 
-    // --- critical negative .5 ---
-    {-1235000, 0, -1240000}, // -123.5000 -> -124 (!! important !!)
-    {-1234999, 0, -1230000}, // -123.4999 -> -123
+      // --- critical negative .5 ---
+      {-1235000, 0, -1240000}, // -123.5000 -> -124 (!! important !!)
+      {-1234999, 0, -1230000}, // -123.4999 -> -123
 
-    // --- small values ---
-    {5, 4, 5},               // 0.0005 -> remains
-    {5, 3, 10},               // 0.0005 -> 0.001
-    {4, 3, 0},               // 0.0004 -> 0.000
+      // --- small values ---
+      {5, 4, 5},  // 0.0005 -> remains
+      {5, 3, 10}, // 0.0005 -> 0.001
+      {4, 3, 0},  // 0.0004 -> 0.000
 
-    // --- null ---
-    {0, 0, 0},
-    {0, 4, 0},
+      // --- null ---
+      {0, 0, 0},
+      {0, 4, 0},
 
-    // --- extreme values ---
-    {INT64_MAX / 10, 4, INT64_MAX / 10}, // only stability
-    {INT64_MIN / 10, 4, INT64_MIN / 10}
+      // --- extreme values ---
+      {INT64_MAX / 10, 4, INT64_MAX / 10}, // only stability
+      {INT64_MIN / 10, 4, INT64_MIN / 10}
   };
 
-  for (const auto& t : cases) {
+  for (const auto &t : cases) {
     auto v = t.raw;
     grdd_unit rounded;
     EXPECT_TRUE(grdd_unit_round_to_precision(&rounded, v, t.precision));
 
-    EXPECT_EQ(rounded, t.expected)
-      << "raw=" << t.raw
-      << " precision=" << t.precision;
+    EXPECT_EQ(rounded, t.expected) << "raw=" << t.raw << " precision=" << t.precision;
   }
 }
 
-
-TEST(GradidoUnitTest, roundToPrecision_BoundarySweep)
-{
-  for (int precision = 0; precision <= 4; ++precision)
-  {
+TEST(GradidoUnitTest, roundToPrecision_BoundarySweep) {
+  for (int precision = 0; precision <= 4; ++precision) {
     int64_t factor = pow(10.0, 4 - precision);
 
-    for (int64_t base = -10; base <= 10; ++base)
-    {
+    for (int64_t base = -10; base <= 10; ++base) {
       int64_t center = base * factor;
 
       // test around the 5. border
-      for (int offset = -10; offset <= 10; ++offset)
-      {
+      for (int offset = -10; offset <= 10; ++offset) {
         int64_t raw = center + offset;
 
         auto v = raw;
         grdd_unit r;
         EXPECT_TRUE(grdd_unit_round_to_precision(&r, v, precision));
 
-        int64_t expected =
-          (raw >= 0)
-          ? (raw + factor / 2) / factor * factor
-          : (raw - factor / 2) / factor * factor;
+        int64_t expected = (raw >= 0) ? (raw + factor / 2) / factor * factor
+                                      : (raw - factor / 2) / factor * factor;
 
-        ASSERT_EQ(r, expected)
-          << "raw=" << raw
-          << " precision=" << precision;
+        ASSERT_EQ(r, expected) << "raw=" << raw << " precision=" << precision;
       }
     }
   }
 }
 
 struct DecayTestVector {
-    const char* name;
-    grdd_unit amount;
-    grdd_duration_seconds duration;
-    grdd_unit expected;
+  const char *name;
+  grdd_unit amount;
+  grdd_duration_seconds duration;
+  grdd_unit expected;
 };
 
 static const DecayTestVector DECAY_TEST_VECTORS[] = {
-    {
-        "1_gdd_1_second",
-        10000,
-        1,
-        10000
-    },
-    {
-        "100_gdd_14_days",
-        1000000,
-        14 * 24 * 60 * 60,
-        973781
-    },
-    {
-        "100_gdd_1_year",
-        1000000,
-        31556952,
-        500000
-    },
-    {
-        "0_0001_gdd_1_second",
-        1,
-        1,
-        1
-    },
-    {
-        "1_gdd_1_hour",
-        10000,
-        3600,
-        9999
-    },
-    {
-        "1_gdd_1_day",
-        10000,
-        86400,
-        9981
-    },
-    {
-        "100_gdd_30_days",
-        1000000,
-        30 * 24 * 60 * 60,
-        944657
-    },
-    {
-        "100_gdd_half_year",
-        1000000,
-        15778476,
-        707107
-    },
-    {
-        "1000_gdd_1_year",
-        10000000,
-        31556952,
-        5000000
-    },
-    {
-        "1000_gdd_2_years",
-        10000000,
-        2 * 31556952,
-        2500000
-    },
+    {"1_gdd_1_second", 10000, 1, 10000},
+    {"100_gdd_14_days", 1000000, 14 * 24 * 60 * 60, 973781},
+    {"100_gdd_1_year", 1000000, 31556952, 500000},
+    {"0_0001_gdd_1_second", 1, 1, 1},
+    {"1_gdd_1_hour", 10000, 3600, 9999},
+    {"1_gdd_1_day", 10000, 86400, 9981},
+    {"100_gdd_30_days", 1000000, 30 * 24 * 60 * 60, 944657},
+    {"100_gdd_half_year", 1000000, 15778476, 707107},
+    {"1000_gdd_1_year", 10000000, 31556952, 5000000},
+    {"1000_gdd_2_years", 10000000, 2 * 31556952, 2500000},
 
     // small values
 
-    {
-        "2_gdd_1_second",
-        20000,
-        1,
-        20000
-    },
-    {
-        "5_gdd_1_second",
-        50000,
-        1,
-        50000
-    },
-    {
-        "10_gdd_1_second",
-        100000,
-        1,
-        100000
-    },
-    {
-        "25_gdd_1_second",
-        250000,
-        1,
-        250000
-    },
-    {
-        "50_gdd_1_second",
-        500000,
-        1,
-        500000
-    },
-    {
-        "75_gdd_1_second",
-        750000,
-        1,
-        750000
-    },
-    {
-        "100_gdd_1_second",
-        1000000,
-        1,
-        1000000
-    },
+    {"2_gdd_1_second", 20000, 1, 20000},
+    {"5_gdd_1_second", 50000, 1, 50000},
+    {"10_gdd_1_second", 100000, 1, 100000},
+    {"25_gdd_1_second", 250000, 1, 250000},
+    {"50_gdd_1_second", 500000, 1, 500000},
+    {"75_gdd_1_second", 750000, 1, 750000},
+    {"100_gdd_1_second", 1000000, 1, 1000000},
 
     // medium values
 
-    {
-        "250_gdd_1_second",
-        2500000,
-        1,
-        2500000
-    },
-    {
-        "500_gdd_1_second",
-        5000000,
-        1,
-        5000000
-    },
-    {
-        "750_gdd_1_second",
-        7500000,
-        1,
-        7500000
-    },
-    {
-        "1000_gdd_1_second",
-        10000000,
-        1,
-        10000000
-    },
+    {"250_gdd_1_second", 2500000, 1, 2500000},
+    {"500_gdd_1_second", 5000000, 1, 5000000},
+    {"750_gdd_1_second", 7500000, 1, 7500000},
+    {"1000_gdd_1_second", 10000000, 1, 10000000},
 
     // larger values
 
-    {
-        "2500_gdd_1_second",
-        25000000,
-        1,
-        24999999
-    },
-    {
-        "5000_gdd_1_second",
-        50000000,
-        1,
-        49999999
-    },
-    {
-        "10000_gdd_1_second",
-        100000000,
-        1,
-        99999998
-    },
-    {
-        "25000_gdd_1_second",
-        250000000,
-        1,
-        249999995
-    },
-    {
-        "50000_gdd_1_second",
-        500000000,
-        1,
-        499999989
-    },
-    {
-        "100000_gdd_1_second",
-        1000000000,
-        1,
-        999999978
-    },
-    {
-        "250000_gdd_1_second",
-        2500000000,
-        1,
-        2499999945
-    },
-    {
-        "500000_gdd_1_second",
-        5000000000,
-        1,
-        4999999890
-    },
-    {
-        "1000000_gdd_1_second",
-        10000000000LL,
-        1,
-        9999999780LL
-    },
+    {"2500_gdd_1_second", 25000000, 1, 24999999},
+    {"5000_gdd_1_second", 50000000, 1, 49999999},
+    {"10000_gdd_1_second", 100000000, 1, 99999998},
+    {"25000_gdd_1_second", 250000000, 1, 249999995},
+    {"50000_gdd_1_second", 500000000, 1, 499999989},
+    {"100000_gdd_1_second", 1000000000, 1, 999999978},
+    {"250000_gdd_1_second", 2500000000, 1, 2499999945},
+    {"500000_gdd_1_second", 5000000000, 1, 4999999890},
+    {"1000000_gdd_1_second", 10000000000LL, 1, 9999999780LL},
 
     // max-ish
 
-    {
-        "maxish_1_year",
-        INT64_MAX,
-        31556952,
-        4611686018427387903LL
-    },
+    {"maxish_1_year", INT64_MAX, 31556952, 4611686018427387903LL},
 };
 
-TEST(GradidoUnitTest, DecayTestVectors)
-{
-    for (const auto& test : DECAY_TEST_VECTORS) {
-        auto result =
-            grdd_unit_calculate_decay(
-                test.amount,
-                test.duration
-            );
+TEST(GradidoUnitTest, DecayTestVectors) {
+  for (const auto &test : DECAY_TEST_VECTORS) {
+    auto result = grdd_unit_calculate_decay(test.amount, test.duration);
 
-        EXPECT_EQ(result, test.expected)
-            << "failed test vector: "
-            << test.name;
-    }
+    EXPECT_EQ(result, test.expected) << "failed test vector: " << test.name;
+  }
 }
 
-
-TEST(GradidoUnitTest, toString_Randomized)
-{
-  std::mt19937_64 rng(42); // deterministisch
+TEST(GradidoUnitTest, toString_Randomized) {
+  std::mt19937_64 rng(42);                                // deterministisch
   std::uniform_real_distribution<double> dist(-1e9, 1e9); // innerhalb double-Bereich
   int countDiffBetweenDoubleInteger = 0;
   constexpr int bufferSize = 24;
   char buffer[bufferSize];
 
-  for (int i = 0; i < 10'000; ++i)
-  {
+  for (int i = 0; i < 10'000; ++i) {
     double value = dist(rng);
     grdd_unit v = grdd_unit_from_decimal(value);
 
-    for (int precision = 0; precision <= 4; ++precision)
-    {
+    for (int precision = 0; precision <= 4; ++precision) {
       EXPECT_GT(grdd_unit_to_string(buffer, bufferSize, v, precision), 0);
 
       ASSERT_FALSE(precision < 0 || precision > 4) << "expect precision in the range [0;4]";
@@ -606,8 +419,7 @@ TEST(GradidoUnitTest, toString_Randomized)
 
       double rounded = grdd_unit_to_decimal(v);
 
-      if (precision < 4)
-      {
+      if (precision < 4) {
         double factor = pow(10.0, precision);
         rounded = round(grdd_unit_to_decimal(v) * factor) / factor;
       }
@@ -615,19 +427,18 @@ TEST(GradidoUnitTest, toString_Randomized)
       ss << rounded;
       std::string refStr(ss.str());
 
-      if (refStr.compare(buffer) != 0) {
-        ++countDiffBetweenDoubleInteger;
-      }
-      //EXPECT_EQ(fastStr, refStr) << "value=" << value << " precision=" << precision << " i=" << i;
-      // ASSERT_STREQ(buffer, rBuffer) << "value=" << value << " precision=" << precision << " i=" << i;
+      if (refStr.compare(buffer) != 0) { ++countDiffBetweenDoubleInteger; }
+      // EXPECT_EQ(fastStr, refStr) << "value=" << value << " precision=" << precision << " i=" <<
+      // i;
+      //  ASSERT_STREQ(buffer, rBuffer) << "value=" << value << " precision=" << precision << " i="
+      //  << i;
     }
   }
-  std::cout << COUT_GTEST_BLU << "double rounding diffs: " << countDiffBetweenDoubleInteger << ANSI_TXT_DFT << std::endl;
+  std::cout << COUT_GTEST_BLU << "double rounding diffs: " << countDiffBetweenDoubleInteger
+            << ANSI_TXT_DFT << std::endl;
 }
 
-
-TEST(GradidoUnitTest, toStringFast_RandomExact)
-{
+TEST(GradidoUnitTest, toStringFast_RandomExact) {
   std::mt19937_64 rng(42);
 
   std::uniform_int_distribution<int64_t> intDist(-1'000'000'000, 1'000'000'000);
@@ -635,8 +446,7 @@ TEST(GradidoUnitTest, toStringFast_RandomExact)
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
 
-  for (int i = 0; i < 10'000; ++i)
-  {
+  for (int i = 0; i < 10'000; ++i) {
     int64_t integerPart = intDist(rng);
     int fractionalPart = fracDist(rng);
 
@@ -653,8 +463,7 @@ TEST(GradidoUnitTest, toStringFast_RandomExact)
     // Build exact string
     std::stringstream ss;
     if (negative) ss << "-";
-    ss << absInteger << "."
-      << std::setw(4) << std::setfill('0') << fractionalPart;
+    ss << absInteger << "." << std::setw(4) << std::setfill('0') << fractionalPart;
 
     std::string fullStr = ss.str();
 
@@ -666,16 +475,12 @@ TEST(GradidoUnitTest, toStringFast_RandomExact)
 
       if (precision == 0) {
         int64_t roundedAbsInteger = absInteger;
-        if (fractionalPart >= 5000) {
-          ++roundedAbsInteger;
-        }
+        if (fractionalPart >= 5000) { ++roundedAbsInteger; }
         ref = (negative ? "-" : "") + std::to_string(roundedAbsInteger);
-      }
-      else {
+      } else {
         int64_t factor = pow(10.0, 4 - precision);
-        int64_t rounded = (raw >= 0)
-          ? (raw + factor / 2) / factor * factor
-          : (raw - factor / 2) / factor * factor;
+        int64_t rounded = (raw >= 0) ? (raw + factor / 2) / factor * factor
+                                     : (raw - factor / 2) / factor * factor;
 
         int64_t integerPart = rounded / 10000;
         int64_t fractional = std::llabs(rounded % 10000);
@@ -684,34 +489,26 @@ TEST(GradidoUnitTest, toStringFast_RandomExact)
         ss2 << integerPart;
 
         if (precision > 0) {
-          ss2 << '.'
-            << std::setw(precision)
-            << std::setfill('0')
-            << (fractional / factor);
+          ss2 << '.' << std::setw(precision) << std::setfill('0') << (fractional / factor);
         }
         ref = ss2.str();
       }
 
       ASSERT_STREQ(buffer, ref.c_str())
-        << "raw=" << raw
-        << " precision=" << precision
-        << " full=" << fullStr
-        << " i=" << i;
+          << "raw=" << raw << " precision=" << precision << " full=" << fullStr << " i=" << i;
     }
 
     // --- fromString Roundtrip ---
     grdd_unit parsed;
     EXPECT_TRUE(grdd_unit_from_string(&parsed, fullStr.c_str()));
 
-    ASSERT_EQ(parsed, raw)
-      << "Parsing failed for " << fullStr;
+    ASSERT_EQ(parsed, raw) << "Parsing failed for " << fullStr;
   }
 }
 
-
 #include <atomic>
-#include <thread>
 #include <deque>
+#include <thread>
 
 struct ThreadResult {
   int64_t exactMatches = 0;
@@ -722,19 +519,22 @@ struct ThreadResult {
   std::deque<std::tuple<int64_t, int64_t, int64_t>> errors; // amount, duration, diff
 };
 
-TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
-{
+TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom) {
   constexpr uint64_t MASTER_SEED = 0xC0FFEE1234567890ULL;
   constexpr int64_t NUM_SAMPLES = 5000000; // 500k test cases
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
-  constexpr int64_t MAX_AMOUNT_CENT = std::numeric_limits<int64_t>::max() / 2;// 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
+  constexpr int64_t MAX_AMOUNT_CENT =
+      std::numeric_limits<int64_t>::max() /
+      2; // 1'000'000ll * 10000ll * 1000ll * 1000ll; // 1M Gradido * 10000 Cent = 1e13 Cent
   constexpr int64_t MAX_DURATION_SECONDS = 60ll * 60ll * 24ll * 90ll * 4; // 90 Days in seconds
 
-  std::atomic<int64_t> totalTests{ 0 };
-  std::atomic<int64_t> exactMatches{ 0 };
-  std::atomic<int64_t> diffByOne{ 0 };
-  std::atomic<int64_t> diffByOther{ 0 };
-  std::atomic<int64_t> diffByExactTenThousandth{ 0 }; // 0.0001 corresponds to 1 Cent difference in the Cent range
+  std::atomic<int64_t> totalTests{0};
+  std::atomic<int64_t> exactMatches{0};
+  std::atomic<int64_t> diffByOne{0};
+  std::atomic<int64_t> diffByOther{0};
+  std::atomic<int64_t> diffByExactTenThousandth{
+      0
+  }; // 0.0001 corresponds to 1 Cent difference in the Cent range
 
   // Mutex only for outputting error examples, not for counting
   std::mutex coutMutex;
@@ -743,7 +543,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
   auto worker = [&](int threadId) {
     // Each thread gets its own random generator
     std::random_device rd;
-    std::seed_seq seq { MASTER_SEED, static_cast<uint64_t>(threadId) };
+    std::seed_seq seq{MASTER_SEED, static_cast<uint64_t>(threadId)};
     std::mt19937_64 gen(seq);
     std::uniform_int_distribution<int64_t> amountDist(1, MAX_AMOUNT_CENT);
     std::uniform_int_distribution<int64_t> durationDist(1, MAX_DURATION_SECONDS);
@@ -763,19 +563,16 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
 
       if (original == decayed) {
         exactMatches++;
-      }
-      else {
+      } else {
         grdd_unit diff;
         if (original > decayed) {
           diff = original - decayed;
-        }
-        else {
+        } else {
           diff = decayed - original;
         }
         if (diff == 1) {
           diffByOne++;
-        }
-        else {
+        } else {
           diffByOther++;
         }
 
@@ -802,34 +599,28 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom)
         }
       }
     }
-    };
+  };
 
   // Start threads
-  for (unsigned int t = 0; t < NUM_THREADS; ++t) {
-    threads.emplace_back(worker, t);
-  }
+  for (unsigned int t = 0; t < NUM_THREADS; ++t) { threads.emplace_back(worker, t); }
 
   // Wait for all threads
-  for (auto& th : threads) {
-    th.join();
-  }
+  for (auto &th : threads) { th.join(); }
 
   // Output results
   std::cout << "\n=== Sample Results (" << totalTests << " Tests) ===" << std::endl;
-  std::cout << "Exact match: " << exactMatches << " ("
-    << (100.0 * exactMatches / totalTests) << "%)" << std::endl;
+  std::cout << "Exact match: " << exactMatches << " (" << (100.0 * exactMatches / totalTests)
+            << "%)" << std::endl;
   std::cout << "Difference by +-1 Cent (0.0001 GDD): " << diffByOne << " ("
-    << (100.0 * diffByOne / totalTests) << "%)" << std::endl;
-  std::cout << "Other difference: " << diffByOther << " ("
-    << (100.0 * diffByOther / totalTests) << "%)" << std::endl;
+            << (100.0 * diffByOne / totalTests) << "%)" << std::endl;
+  std::cout << "Other difference: " << diffByOther << " (" << (100.0 * diffByOther / totalTests)
+            << "%)" << std::endl;
 
   EXPECT_EQ(exactMatches + diffByOne, totalTests);
   EXPECT_LE(100.0 * (diffByOne / totalTests), 1.0);
 }
 
-
-TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
-{
+TEST(GradidoUnitTest, testManyCasesDecayRevertDecay) {
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
   grdu_mono_timer timeUsed;
@@ -844,9 +635,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   // 1. Amounts: From 1 Cent to 10 billion Gradido, logarithmically distributed
   for (int64_t exp = 0; exp <= 14; ++exp) { // 10^0 = 1 Cent to 10^14 Cent = 10^10 GDD
     int64_t base = static_cast<int64_t>(std::pow(10.0, exp));
-    for (int64_t mul = 1; mul <= 9; ++mul) {
-      amountSamples.push_back(mul * base);
-    }
+    for (int64_t mul = 1; mul <= 9; ++mul) { amountSamples.push_back(mul * base); }
   }
   // Also some odd values, near overflows
   amountSamples.push_back(std::numeric_limits<int64_t>::max() / 10000); // Maximum GDD value in Cent
@@ -864,44 +653,42 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   amountSamples.push_back(std::numeric_limits<int64_t>::max() / 9900);
   amountSamples.push_back(70000000000001);
   amountSamples.push_back(69999999999999);
-  for (int64_t i = 69000000000000; i < 69000000800001; i++) {
-    amountSamples.push_back(i);
-  }
+  for (int64_t i = 69000000000000; i < 69000000800001; i++) { amountSamples.push_back(i); }
   amountSamples.push_back(69000000000000);
   amountSamples.push_back(12345678901234LL); // Just because it's pretty
-
-
 
   constexpr int64_t SECONDS_PER_YEAR = 31556952; // 365.2425 days
 
   for (int64_t exp = 0; exp <= 6; ++exp) { // 10^0 = 1s to 10^6 seconds ~ 115 days
     int64_t base = static_cast<int64_t>(std::pow(10.0, exp));
-    for (int64_t mul = 1; mul <= 9; ++mul) {
-      durationSamples.push_back(mul * base);
-    }
+    for (int64_t mul = 1; mul <= 9; ++mul) { durationSamples.push_back(mul * base); }
   }
   // Some typical durations
-  durationSamples.push_back(60);                      // 1 minute
-  durationSamples.push_back(3600);                    // 1 hour
-  durationSamples.push_back(86400);                   // 1 day
-  durationSamples.push_back(86400ll * 30ll);              // ~1 month
-  durationSamples.push_back(86400ll * 60ll);              // ~2 months
-  durationSamples.push_back(86400ll * 90ll);              // ~3 months
+  durationSamples.push_back(60);             // 1 minute
+  durationSamples.push_back(3600);           // 1 hour
+  durationSamples.push_back(86400);          // 1 day
+  durationSamples.push_back(86400ll * 30ll); // ~1 month
+  durationSamples.push_back(86400ll * 60ll); // ~2 months
+  durationSamples.push_back(86400ll * 90ll); // ~3 months
 
-  durationSamples.push_back(86400 * 14);                   // 1 day
+  durationSamples.push_back(86400 * 14); // 1 day
 
   // Remove duplicates and sort for a good feeling
   std::sort(amountSamples.begin(), amountSamples.end());
   amountSamples.erase(std::unique(amountSamples.begin(), amountSamples.end()), amountSamples.end());
   std::sort(durationSamples.begin(), durationSamples.end());
-  durationSamples.erase(std::unique(durationSamples.begin(), durationSamples.end()), durationSamples.end());
+  durationSamples.erase(
+      std::unique(durationSamples.begin(), durationSamples.end()), durationSamples.end()
+  );
 
   // Remove 0 from durations (makes no sense)
-  durationSamples.erase(std::remove(durationSamples.begin(), durationSamples.end(), 0), durationSamples.end());
+  durationSamples.erase(
+      std::remove(durationSamples.begin(), durationSamples.end(), 0), durationSamples.end()
+  );
 
   size_t totalTests = amountSamples.size() * durationSamples.size();
   std::cout << "Testing " << amountSamples.size() << " amounts x " << durationSamples.size()
-    << " durations = " << totalTests << " combinations." << std::endl;
+            << " durations = " << totalTests << " combinations." << std::endl;
 
   grdu_mono_timer_string(buffer, bufferSize, timeUsed);
   std::cout << "Time for preparations: " << buffer << std::endl;
@@ -915,151 +702,132 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay)
   std::atomic<int64_t> smallestErrorDuration;
 
   // 9223372036854775807
-       // 7'000'000'000,0000
+  // 7'000'000'000,0000
 
-  for (unsigned int t = 0; t < NUM_THREADS; ++t)
-  {
-    threads.emplace_back([&, t]()
-      {
-        size_t startIdx = t * chunkSize;
-        size_t endIdx = std::min(startIdx + chunkSize, totalTests);
+  for (unsigned int t = 0; t < NUM_THREADS; ++t) {
+    threads.emplace_back([&, t]() {
+      size_t startIdx = t * chunkSize;
+      size_t endIdx = std::min(startIdx + chunkSize, totalTests);
 
-        auto& res = threadResults[t];
+      auto &res = threadResults[t];
 
-        for (size_t idx = startIdx; idx < endIdx; ++idx) {
-          // Calculate 2D index from flat index
-          size_t amountIdx = idx / durationSamples.size();
-          size_t durationIdx = idx % durationSamples.size();
+      for (size_t idx = startIdx; idx < endIdx; ++idx) {
+        // Calculate 2D index from flat index
+        size_t amountIdx = idx / durationSamples.size();
+        size_t durationIdx = idx % durationSamples.size();
 
-          // Skip if index is out of bounds (should not happen)
-          if (amountIdx >= amountSamples.size()) continue;
+        // Skip if index is out of bounds (should not happen)
+        if (amountIdx >= amountSamples.size()) continue;
 
-          int64_t amountCent = amountSamples[amountIdx];
-          int64_t duration = durationSamples[durationIdx];
+        int64_t amountCent = amountSamples[amountIdx];
+        int64_t duration = durationSamples[durationIdx];
 
-          grdd_unit original = amountCent;
-          grdd_unit buffed = grdd_unit_calculate_decay(original, -duration);
-          grdd_unit decayed = grdd_unit_calculate_decay(buffed, duration);
+        grdd_unit original = amountCent;
+        grdd_unit buffed = grdd_unit_calculate_decay(original, -duration);
+        grdd_unit decayed = grdd_unit_calculate_decay(buffed, duration);
 
-          int64_t diff;
-          if (original > decayed) {
-            diff = original - decayed;
+        int64_t diff;
+        if (original > decayed) {
+          diff = original - decayed;
+        } else {
+          diff = decayed - original;
+        }
+        if (diff == 0) {
+          ++res.exactMatches;
+        } else if (diff == 1) {
+          ++res.diffByOne;
+        } else if (diff <= 10) {
+          ++res.diffByTen;
+        } else if (diff <= 100) {
+          ++res.diffByHundred;
+        } else {
+          res.diffByOther++;
+
+          if (amountCent < smallestError) {
+            smallestError = amountCent;
+            smallestErrorDuration = duration;
           }
-          else {
-            diff = decayed - original;
-          }
-          if (diff == 0) {
-            ++res.exactMatches;
-          }
-          else if (diff == 1) {
-            ++res.diffByOne;
-          }
-          else if (diff <= 10) {
-            ++res.diffByTen;
-          }
-          else if (diff <= 100) {
-            ++res.diffByHundred;
-          }
-          else {
-            res.diffByOther++;
 
-            if (amountCent < smallestError) {
-              smallestError = amountCent;
-              smallestErrorDuration = duration;
-            }
-
-            // Store each error for later analysis (or limit the number)
-            if (res.errors.size() < 1000) { // Do not store too many
-              res.errors.emplace_back(amountCent, duration, diff);
-            }
+          // Store each error for later analysis (or limit the number)
+          if (res.errors.size() < 1000) { // Do not store too many
+            res.errors.emplace_back(amountCent, duration, diff);
           }
         }
       }
-    );
+    });
   }
 
-  for (auto& th : threads) {
-    th.join();
-  }
+  for (auto &th : threads) { th.join(); }
 
   // Aggregate results
-  int64_t totalExact = 0, totalDiffOne = 0, totalDiffTen = 0, totalDiffHoundred = 0, totalDiffOther = 0;
+  int64_t totalExact = 0, totalDiffOne = 0, totalDiffTen = 0, totalDiffHoundred = 0,
+          totalDiffOther = 0;
   std::vector<std::tuple<int64_t, int64_t, int64_t>> allErrors;
 
-  for (const auto& res : threadResults) {
+  for (const auto &res : threadResults) {
     totalExact += res.exactMatches;
     totalDiffOne += res.diffByOne;
     totalDiffTen += res.diffByTen;
     totalDiffHoundred += res.diffByHundred;
     totalDiffOther += res.diffByOther;
-    for (const auto& err : res.errors) {
-      if (allErrors.size() < 1000) {
-        allErrors.push_back(err);
-      }
+    for (const auto &err : res.errors) {
+      if (allErrors.size() < 1000) { allErrors.push_back(err); }
     }
   }
 
   // Output
-  std::cout << "\n=== Results of uniform grid tests (" << totalTests << " combinations) ===" << std::endl;
-  std::cout << "Exact matches: " << totalExact << " ("
-    << (100.0 * totalExact / totalTests) << "%)" << std::endl;
+  std::cout << "\n=== Results of uniform grid tests (" << totalTests
+            << " combinations) ===" << std::endl;
+  std::cout << "Exact matches: " << totalExact << " (" << (100.0 * totalExact / totalTests) << "%)"
+            << std::endl;
   std::cout << "Difference +-1 Cent (0.0001 GDD): " << totalDiffOne << " ("
-    << (100.0 * totalDiffOne / totalTests) << "%)" << std::endl;
+            << (100.0 * totalDiffOne / totalTests) << "%)" << std::endl;
   std::cout << "Difference [-10;10] Cent (0.001 GDD): " << totalDiffTen << " ("
-    << (100.0 * totalDiffTen / totalTests) << "%)" << std::endl;
+            << (100.0 * totalDiffTen / totalTests) << "%)" << std::endl;
   std::cout << "Difference [-100;100] Cent (0.01 GDD): " << totalDiffHoundred << " ("
-    << (100.0 * totalDiffHoundred / totalTests) << "%)" << std::endl;
+            << (100.0 * totalDiffHoundred / totalTests) << "%)" << std::endl;
   std::cout << "Other differences: " << totalDiffOther << " ("
-    << (100.0 * totalDiffOther / totalTests) << "%)" << std::endl;
-  std::cout << "Smallest Error: " << smallestError << ", " << smallestErrorDuration << " seconds " << std::endl;
+            << (100.0 * totalDiffOther / totalTests) << "%)" << std::endl;
+  std::cout << "Smallest Error: " << smallestError << ", " << smallestErrorDuration << " seconds "
+            << std::endl;
 
   // Show the first 20 errors as examples
-  std::cout << "\nExample errors (amount in Cent, duration in seconds, difference in Cent):" << std::endl;
+  std::cout << "\nExample errors (amount in Cent, duration in seconds, difference in Cent):"
+            << std::endl;
   std::set<int64_t> postedGdd;
   for (size_t i = 0; i < allErrors.size(); ++i) {
-    const auto& [amt, dur, diff] = allErrors[i];
-    if (!postedGdd.insert(amt).second) {
-      continue;
-    }
-    std::cout << "  " << amt << " Cent (" << (amt / 10000.0) << " GDD) | "
-      << dur << "s | Diff: " << diff << " Cent = " << (diff / 10000.0) << " GDD" << std::endl;
-    if (postedGdd.size() > 20) {
-      break;
-    }
+    const auto &[amt, dur, diff] = allErrors[i];
+    if (!postedGdd.insert(amt).second) { continue; }
+    std::cout << "  " << amt << " Cent (" << (amt / 10000.0) << " GDD) | " << dur
+              << "s | Diff: " << diff << " Cent = " << (diff / 10000.0) << " GDD" << std::endl;
+    if (postedGdd.size() > 20) { break; }
   }
 
   EXPECT_LE((100.0 * totalDiffOther / totalTests), 0.01);
 }
 
-
-TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
-{
+TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions) {
   using namespace std::chrono;
 
   struct TestCase {
-    const char* name;
+    const char *name;
     grdd_unit startAmount;
     int64_t tolerance;
   };
 
   constexpr int64_t max = std::numeric_limits<int64_t>::max();
 
-  const TestCase cases[] = {
-      {"max/4", max / 4, 1},
-      {"max/2", max / 2, 1},
-      {"max", max, 2}
-  };
+  const TestCase cases[] = {{"max/4", max / 4, 1}, {"max/2", max / 2, 1}, {"max", max, 2}};
 
-  for (const auto& tc : cases)
-  {
+  for (const auto &tc : cases) {
     // --- Define time points ---
     grdd_timestamp_seconds start = 0;
-    grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;    // +30 days
-    grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;    // +90 days
-    grdd_timestamp_seconds end = 60 * 60 * 24 * 365;  // +1 year
+    grdd_timestamp_seconds t2 = 60 * 60 * 24 * 30;   // +30 days
+    grdd_timestamp_seconds t3 = 60 * 60 * 24 * 90;   // +90 days
+    grdd_timestamp_seconds end = 60 * 60 * 24 * 365; // +1 year
 
     grdd_unit minusAmount = 100l * 10000l; // -100 GDD
-    grdd_unit plusAmount = 500l * 10000l; // +500 GDD
+    grdd_unit plusAmount = 500l * 10000l;  // +500 GDD
 
     // =========================================================
     // Variant 1: Step-by-step simulation
@@ -1086,18 +854,15 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
     // Variant 2: Reference calculation
     // =========================================================
 
-    grdd_unit ref =
-      grdd_unit_calculate_decay(tc.startAmount, end - start);
+    grdd_unit ref = grdd_unit_calculate_decay(tc.startAmount, end - start);
 
     // -100 GDD -> from t2 to end decayed
-    grdd_unit minusDecayed =
-      grdd_unit_calculate_decay(minusAmount, end - t2);
+    grdd_unit minusDecayed = grdd_unit_calculate_decay(minusAmount, end - t2);
 
     ref -= minusDecayed;
 
     // +500 GDD -> from t3 to end decayed
-    grdd_unit plusDecayed =
-      grdd_unit_calculate_decay(plusAmount, end - t3);
+    grdd_unit plusDecayed = grdd_unit_calculate_decay(plusAmount, end - t3);
 
     ref += plusDecayed;
 
@@ -1110,23 +875,16 @@ TEST(GradidoUnitTest, testPrecisionDifferentTimeTransactions)
 
     int64_t diff = std::llabs(stepCent - refCent);
 
-    double percentDiffToStep =
-      stepCent != 0
-      ? (double)diff / (double)stepCent
-      : 0.0;
+    double percentDiffToStep = stepCent != 0 ? (double)diff / (double)stepCent : 0.0;
 
-    EXPECT_LE(diff, tc.tolerance)
-      << "Mismatch for case '" << tc.name << "'. "
-      << "step=" << stepCent
-      << " ref=" << refCent
-      << " diff=" << diff
-      << " tolerance=" << tc.tolerance
-      << " percent=" << percentDiffToStep * 100.0 << "%";
+    EXPECT_LE(diff, tc.tolerance) << "Mismatch for case '" << tc.name << "'. "
+                                  << "step=" << stepCent << " ref=" << refCent << " diff=" << diff
+                                  << " tolerance=" << tc.tolerance
+                                  << " percent=" << percentDiffToStep * 100.0 << "%";
   }
 }
 
-TEST(GradidoUnitTest, testOverflowProvocation)
-{
+TEST(GradidoUnitTest, testOverflowProvocation) {
   using namespace std::chrono;
 
   // --- Time ---
@@ -1141,7 +899,6 @@ TEST(GradidoUnitTest, testOverflowProvocation)
 
   bool overflowDetected = false;
 
-
   // Apply multiple times -> escalating growth
   for (int i = 0; i < 10; ++i) {
     value = grdd_unit_calculate_decay(value, hugeNegativeDuration);
@@ -1151,8 +908,7 @@ TEST(GradidoUnitTest, testOverflowProvocation)
 }
 
 const uint64_t secondsPerYear = 31556952;
-TEST(TestUnit, decayAfterYear)
-{
+TEST(TestUnit, decayAfterYear) {
   grdd_unit gdd;
   grdd_unit_from_string(&gdd, "1000");
   grdd_unit result = grdd_unit_calculate_decay(gdd, secondsPerYear);

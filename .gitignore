@@ -57,6 +57,7 @@ dkms.conf
 build
 doc
 
+.vscode/
 # zig
 .zig-cache
 zig-out

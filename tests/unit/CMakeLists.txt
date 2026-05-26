@@ -11,6 +11,20 @@ FetchContent_Declare(
   URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
 )
 
+set(SODIUM_DISABLE_TESTS ON)
+if(USE_INSTALLED_SODIUM)
+	find_package(Sodium REQUIRED)
+	message(STATUS "Using installed Sodium library")
+else()
+	message(STATUS "Fetch Sodium library from GitHub")
+	# Update the commit to point to whatever libsodium-cmake-commit you want to target.
+	FetchContent_Declare(Sodium
+			GIT_REPOSITORY https://github.com/robinlinden/libsodium-cmake.git
+			GIT_TAG e5b985ad0dd235d8c4307ea3a385b45e76c74c6a # HEAD, last updated at 2025-04-13
+	)
+	FetchContent_MakeAvailable(Sodium)
+endif()
+
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
@@ -25,6 +39,12 @@ target_link_libraries(test_duration gradido_blockchain_core GTest::gtest_main)
 add_executable(test_converter src/test_converter.cpp)
 target_link_libraries(test_converter gradido_blockchain_core GTest::gtest_main)
 
+add_executable(test_memory src/test_memory.cpp)
+target_link_libraries(test_memory gradido_blockchain_core GTest::gtest_main)
+
+add_executable(test_pbtools src/test_pbtools.cpp src/key_pairs.cpp src/key_pairs.h terminal_colors.h)
+target_link_libraries(test_pbtools gradido_blockchain_core GTest::gtest_main sodium)
+
 enable_testing()
 
 include(GoogleTest)
@@ -33,4 +53,6 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   add_test(NAME test_unit COMMAND test_unit)
   add_test(NAME test_duration COMMAND test_duration)
   add_test(NAME test_converter COMMAND test_converter)
+  add_test(NAME test_memory COMMAND test_memory)
+  add_test(NAME test_pbtools COMMAND test_pbtools)
 endif()
