@@ -6,4 +6,8 @@ project(${PROJECT_NAME} C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(precalculate_decay_table precalculate_decay_table.c)
+include_directories(
+  ../third_party
+)
+
+add_executable(precalculate_decay_table precalculate_decay_table.c ../third_party/fp256/src/fp256_mul.c ../third_party/fp256/src/fp256_utils.c)
