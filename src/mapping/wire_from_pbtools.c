@@ -32,7 +32,6 @@
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
-#include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/utils/version.h"
 
 static grd_result community_uuid_from_pbtools(
@@ -80,7 +79,7 @@ static grd_result encrypted_memo_from_pbtools(
     grd_memory *allocator
 ) {
   if (!encrypted_memo || !pb_encrypted_memo || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  encrypted_memo->type = (grdt_memo_key)pb_encrypted_memo->type;
+  encrypted_memo->type = (grdw_memo_key_type)pb_encrypted_memo->type;
   if (pb_encrypted_memo->memo.size > 0) {
     return memory_block_from_pbtools(&encrypted_memo->memo, &pb_encrypted_memo->memo, allocator);
   } else {
@@ -181,9 +180,9 @@ static grd_result ledger_anchor_from_pbtools(
         &ledger_anchor->hiero_transaction_id, pb_ledger_anchor->hiero_transaction_id_p
     );
     if (GRD_SUCCESS != result) { return result; }
-    ledger_anchor->type = GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID;
+    ledger_anchor->type = GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID;
   } else {
-    ledger_anchor->type = (grdt_ledger_anchor)pb_ledger_anchor->type;
+    ledger_anchor->type = (grdw_ledger_anchor_type)pb_ledger_anchor->type;
     ledger_anchor->id = pb_ledger_anchor->id;
   }
   return GRD_SUCCESS;
