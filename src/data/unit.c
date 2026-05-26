@@ -289,11 +289,8 @@ static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
     //
     // High-high term contributes above Q64.64 range.
 
-//    __uint128_t p0 = (__uint128_t)a->lo * (__uint128_t)b->lo;
     __uint128_t p1 = (__uint128_t)a->hi * (__uint128_t)b->lo;
     __uint128_t p2 = (__uint128_t)a->lo * (__uint128_t)b->hi;
-    // __uint128_t p3 = (__uint128_t)a->hi * (__uint128_t)b->hi;
-
     __uint128_t low = ((((__uint128_t)a->lo * (__uint128_t)b->lo)) >> 64) + (uint64_t)p1 + (uint64_t)p2;
     dst->lo = (uint64_t)low;
     dst->hi = (uint64_t)((p1 >> 64) + (p2 >> 64) + (__uint128_t)a->hi * (__uint128_t)b->hi + (low >> 64));
@@ -348,8 +345,6 @@ static void r128Mul_precise(R128* dst, const R128* a, const R128* b)
 
     dst->lo = rlo.d[1];
     dst->hi = rlo.d[2];
-
-		return;
 }
 
 // use intern fp256 for better precision
@@ -361,10 +356,10 @@ inline void r128Mul_specialized_factor(R128* dst, const R128* a, const R128* b)
 
 grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration)
 {
-  if (duration == 0) {
+    if (duration == 0) {
 		return gdd;
 	}
-
+    assert(gdd >= 0);
 	// decay for one year is 50%
 	/*
 	* while (seconds >= SECONDS_PER_YEAR) {
@@ -440,7 +435,7 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
 	R128 gdd128;
 	r128FromInt(&gdd128, gdd_temp);
 	// Final: balance * factor
-  r128Mul_precise(&gdd128, &gdd128, &factor);
+	r128Mul_precise(&gdd128, &gdd128, &factor);
 	r128Round(&gdd128, &gdd128); // round to nearest integer
 	grdd_unit decayed = r128ToInt(&gdd128);
 	if (negative && gdd > 0 && decayed < 0) {
@@ -455,17 +450,17 @@ bool grdd_unit_calculate_duration_seconds(grdd_timestamp_seconds startTime, grdd
 	if (!outSeconds) {
 		return false;
 	}
-  if(startTime > endTime) {
+    if(startTime > endTime) {
 		return false;
 	}
 	grdd_timestamp_seconds start = startTime >  DECAY_START_TIME ? startTime : DECAY_START_TIME;
 	grdd_timestamp_seconds end = endTime > DECAY_START_TIME ? endTime : DECAY_START_TIME;
-  if (outSeconds) {
-    if (start == end) {
-      *outSeconds = 0;
-    } else {
-      *outSeconds = end - start;
+    if (outSeconds) {
+        if (start == end) {
+            *outSeconds = 0;
+        } else {
+            *outSeconds = end - start;
+        }
     }
-  }
 	return true;
 }
