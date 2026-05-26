@@ -2,7 +2,7 @@
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_MEMO_KEY_PB_COMPAT_H
 
 #include "gradido_blockchain_core/data/proto/gradido/basic_types.h"
-#include "gradido_blockchain_core/data/wire/basic_types.h"
+#include "gradido_blockchain_core/types/memo_key.h"
 #include <assert.h>
 
 #ifdef __cplusplus
@@ -28,20 +28,20 @@ extern "C" {
 
 // SHARED SECRET
 static_assert(
-    (int)GRDW_MEMO_KEY_TYPE_SHARED_SECRET == (int)proto_gradido_encrypted_memo_shared_secret_e,
-    "grdw_memo_key_type enum mismatch: SHARED SECRET"
+    (int)GRDT_MEMO_KEY_SHARED_SECRET == (int)proto_gradido_encrypted_memo_shared_secret_e,
+    "MemoKeyType enum mismatch: SHARED SECRET"
 );
 
 // COMMUNITY SECRET
 static_assert(
-    (int)GRDW_MEMO_KEY_TYPE_COMMUNITY_SECRET == (int)proto_gradido_encrypted_memo_community_secret_e,
-    "grdw_memo_key_type enum mismatch: COMMUNITY SECRET"
+    (int)GRDT_MEMO_KEY_COMMUNITY_SECRET == (int)proto_gradido_encrypted_memo_community_secret_e,
+    "MemoKeyType enum mismatch: COMMUNITY SECRET"
 );
 
 // PLAIN
 static_assert(
-    (int)GRDW_MEMO_KEY_TYPE_PLAIN == (int)proto_gradido_encrypted_memo_plain_e,
-    "grdw_memo_key_type enum mismatch: PLAIN"
+    (int)GRDT_MEMO_KEY_PLAIN == (int)proto_gradido_encrypted_memo_plain_e,
+    "MemoKeyType enum mismatch: PLAIN"
 );
 
 #pragma warning(pop)

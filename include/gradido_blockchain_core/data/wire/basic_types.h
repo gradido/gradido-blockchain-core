@@ -2,6 +2,7 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 
 #include "gradido_blockchain_core/memory.h"
+#include "gradido_blockchain_core/types/memo_key.h"
 
 #include <stdint.h>
 
@@ -16,14 +17,8 @@ typedef struct grdw_account_balance {
   uint8_t community_uuid[16];
 } grdw_account_balance;
 
-typedef enum {
-  GRDW_MEMO_KEY_TYPE_SHARED_SECRET = 0,
-  GRDW_MEMO_KEY_TYPE_COMMUNITY_SECRET = 1,
-  GRDW_MEMO_KEY_TYPE_PLAIN = 2,
-} grdw_memo_key_type;
-
 typedef struct grdw_encrypted_memo {
-  grdw_memo_key_type type;
+  grdt_memo_key type;
   grd_memory_block memo;
 } grdw_encrypted_memo;
 

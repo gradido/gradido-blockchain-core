@@ -30,6 +30,7 @@
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
+#include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/utils/version.h"
 
 /*
@@ -164,7 +165,7 @@ static grd_result ledger_anchor_from_wire(
 ) {
   if (!ledger_anchor || !pb_ledger_anchor) { return GRD_ERROR_NULL_POINTER; }
 
-  if (GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID == ledger_anchor->type) {
+  if (GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID == ledger_anchor->type) {
     if (proto_gradido_ledger_anchor_hiero_transaction_id_alloc(pb_ledger_anchor)) {
       return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
     }
@@ -173,7 +174,7 @@ static grd_result ledger_anchor_from_wire(
         pb_ledger_anchor->hiero_transaction_id_p, &ledger_anchor->hiero_transaction_id
     );
     pb_ledger_anchor->type =
-        (enum proto_gradido_ledger_anchor_type_e)GRDW_LEDGER_ANCHOR_TYPE_HIERO_TRANSACTION_ID;
+        (enum proto_gradido_ledger_anchor_type_e)GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID;
   } else {
     pb_ledger_anchor->anchor_id = proto_gradido_ledger_anchor_anchor_id_id_e;
     pb_ledger_anchor->type = (enum proto_gradido_ledger_anchor_type_e)ledger_anchor->type;
@@ -444,7 +445,7 @@ grd_result grdm_gradido_transaction_from_wire(
     }
   }
 
-  if (tx->pairing_ledger_anchor.type != GRDW_LEDGER_ANCHOR_TYPE_UNSPECIFIED) {
+  if (tx->pairing_ledger_anchor.type != GRDT_LEDGER_ANCHOR_UNSPECIFIED) {
     if (proto_gradido_gradido_transaction_pairing_ledger_anchor_alloc(pbtx)) {
       return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
     }

@@ -66,7 +66,7 @@ struct proto_gradido_duration_seconds_t {
 };
 
 /**
- * Enum proto.gradido.EncryptedMemo.grdw_memo_key_type.
+ * Enum proto.gradido.EncryptedMemo.MemoKeyType.
  */
 enum proto_gradido_encrypted_memo_memo_key_type_e {
     proto_gradido_encrypted_memo_shared_secret_e = 0,
