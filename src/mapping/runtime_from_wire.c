@@ -136,8 +136,8 @@ grd_result grdm_complete_transaction_from_wire(
   // arrays
   if (confirmed_tx->account_balances_count) {
     result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->account_balances, (const uint8_t*)confirmed_tx->account_balances, &tx->memory_area,
-        confirmed_tx->account_balances_count * sizeof(grdw_account_balance)
+        (uint8_t **)&tx->account_balances, (const uint8_t *)confirmed_tx->account_balances,
+        &tx->memory_area, confirmed_tx->account_balances_count * sizeof(grdw_account_balance)
     );
     if (GRD_SUCCESS != result) { return result; }
     tx->account_balances_count = confirmed_tx->account_balances_count;
@@ -161,7 +161,7 @@ grd_result grdm_complete_transaction_from_wire(
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
   if (transaction->sig_map_count) {
     result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->signature_pairs, (const uint8_t*)transaction->sig_map, &tx->memory_area,
+        (uint8_t **)&tx->signature_pairs, (const uint8_t *)transaction->sig_map, &tx->memory_area,
         transaction->sig_map_count * sizeof(grdw_signature_pair)
     );
     if (GRD_SUCCESS != result) { return result; }
@@ -179,8 +179,9 @@ grd_result grdm_complete_transaction_from_wire(
 
   if (GRDT_LEDGER_ANCHOR_UNSPECIFIED != transaction->pairing_ledger_anchor.type) {
     result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->pairing_ledger_anchor, (const uint8_t*)&transaction->pairing_ledger_anchor,
-        &tx->memory_area, sizeof(grdw_ledger_anchor)
+        (uint8_t **)&tx->pairing_ledger_anchor,
+        (const uint8_t *)&transaction->pairing_ledger_anchor, &tx->memory_area,
+        sizeof(grdw_ledger_anchor)
     );
     if (GRD_SUCCESS != result) { return result; }
   }

@@ -145,14 +145,14 @@ static grd_result hiero_transaction_id_from_wire(
   pb_hiero_transaction_id->nonce = 0;
   pb_hiero_transaction_id->scheduled = false;
   if (proto_gradido_transaction_id_transaction_valid_start_alloc(pb_hiero_transaction_id)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   timestamp_from_wire(
       pb_hiero_transaction_id->transaction_valid_start_p,
       &hiero_transaction_id->transactionValidStart
   );
   if (proto_gradido_transaction_id_account_id_alloc(pb_hiero_transaction_id)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   hiero_account_id_from_wire(
       pb_hiero_transaction_id->account_id_p, &hiero_transaction_id->accountID
@@ -167,7 +167,7 @@ static grd_result ledger_anchor_from_wire(
 
   if (GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID == ledger_anchor->type) {
     if (proto_gradido_ledger_anchor_hiero_transaction_id_alloc(pb_ledger_anchor)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_ledger_anchor->anchor_id = proto_gradido_ledger_anchor_anchor_id_hiero_transaction_id_e;
     hiero_transaction_id_from_wire(
@@ -219,12 +219,12 @@ static grd_result gradido_creation_from_wire(
   if (!gradido_creation || !pb_gradido_creation) { return GRD_ERROR_NULL_POINTER; }
 
   if (proto_gradido_gradido_creation_recipient_alloc(pb_gradido_creation)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   transfer_amount_from_wire(pb_gradido_creation->recipient_p, &gradido_creation->recipient);
 
   if (proto_gradido_gradido_creation_target_date_alloc(pb_gradido_creation)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   timestamp_seconds_from_wire(pb_gradido_creation->target_date_p, &gradido_creation->target_date);
   return GRD_SUCCESS;
@@ -240,7 +240,7 @@ static grd_result gradido_transfer_from_wire(
   pb_gradido_transfer->recipient.size = 32;
 
   if (proto_gradido_gradido_transfer_sender_alloc(pb_gradido_transfer)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   transfer_amount_from_wire(pb_gradido_transfer->sender_p, &gradido_transfer->sender);
   return GRD_SUCCESS;
@@ -256,13 +256,13 @@ static grd_result gradido_deferred_transfer_from_wire(
   if (proto_gradido_gradido_deferred_transfer_timeout_duration_alloc(
           pb_gradido_deferred_transfer
       )) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   pb_gradido_deferred_transfer->timeout_duration_p->seconds =
       gradido_deferred_transfer->timeout_duration;
 
   if (proto_gradido_gradido_deferred_transfer_transfer_alloc(pb_gradido_deferred_transfer)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
 
   return gradido_transfer_from_wire(
@@ -283,7 +283,7 @@ static grd_result gradido_redeem_deferred_transfer_from_wire(
   if (proto_gradido_gradido_redeem_deferred_transfer_transfer_alloc(
           pb_gradido_redeem_deferred_transfer
       )) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   return gradido_transfer_from_wire(
       pb_gradido_redeem_deferred_transfer->transfer_p, &gradido_redeem_deferred_transfer->transfer
@@ -335,7 +335,7 @@ grd_result grdm_transaction_body_from_wire(
     int memos_count = transaction_body->memos_count;
 
     if (proto_gradido_transaction_body_memos_alloc(pb_transaction_body, memos_count)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
 
     for (uint8_t i = 0; i < memos_count; ++i) {
@@ -348,7 +348,7 @@ grd_result grdm_transaction_body_from_wire(
   );
 
   if (proto_gradido_transaction_body_created_at_alloc(pb_transaction_body)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   timestamp_from_wire(pb_transaction_body->created_at_p, &transaction_body->created_at);
 
@@ -361,19 +361,19 @@ grd_result grdm_transaction_body_from_wire(
     return GRD_SUCCESS;
   case GRDT_TRANSACTION_TRANSFER:
     if (proto_gradido_transaction_body_transfer_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_transfer_e;
     return gradido_transfer_from_wire(pb_transaction_body->transfer_p, &transaction_body->transfer);
   case GRDT_TRANSACTION_CREATION:
     if (proto_gradido_transaction_body_creation_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_creation_e;
     return gradido_creation_from_wire(pb_transaction_body->creation_p, &transaction_body->creation);
   case GRDT_TRANSACTION_COMMUNITY_FRIENDS_UPDATE:
     if (proto_gradido_transaction_body_community_friends_update_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_community_friends_update_e;
     return community_friends_update_from_wire(
@@ -381,7 +381,7 @@ grd_result grdm_transaction_body_from_wire(
     );
   case GRDT_TRANSACTION_REGISTER_ADDRESS:
     if (proto_gradido_transaction_body_register_address_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_register_address_e;
     return register_address_from_wire(
@@ -389,7 +389,7 @@ grd_result grdm_transaction_body_from_wire(
     );
   case GRDT_TRANSACTION_DEFERRED_TRANSFER:
     if (proto_gradido_transaction_body_deferred_transfer_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_deferred_transfer_e;
     return gradido_deferred_transfer_from_wire(
@@ -397,7 +397,7 @@ grd_result grdm_transaction_body_from_wire(
     );
   case GRDT_TRANSACTION_COMMUNITY_ROOT:
     if (proto_gradido_transaction_body_community_root_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_community_root_e;
     return community_root_from_wire(
@@ -405,7 +405,7 @@ grd_result grdm_transaction_body_from_wire(
     );
   case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER:
     if (proto_gradido_transaction_body_redeem_deferred_transfer_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_redeem_deferred_transfer_e;
     return gradido_redeem_deferred_transfer_from_wire(
@@ -413,7 +413,7 @@ grd_result grdm_transaction_body_from_wire(
     );
   case GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER:
     if (proto_gradido_transaction_body_timeout_deferred_transfer_alloc(pb_transaction_body)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     pb_transaction_body->data = proto_gradido_transaction_body_data_timeout_deferred_transfer_e;
     return gradido_timeout_deferred_transfer_from_wire(
@@ -433,11 +433,9 @@ grd_result grdm_gradido_transaction_from_wire(
   if (tx->sig_map_count > 0) {
     int sig_map_count = tx->sig_map_count;
     if (sig_map_count >= 255) { return GRD_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
-    if (proto_gradido_gradido_transaction_sig_map_alloc(pbtx)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
-    }
+    if (proto_gradido_gradido_transaction_sig_map_alloc(pbtx)) { return GRD_ERROR_OUT_OF_MEMORY; }
     if (proto_gradido_signature_map_sig_pair_alloc(pbtx->sig_map_p, sig_map_count)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
 
     for (int i = 0; i < sig_map_count; ++i) {
@@ -447,7 +445,7 @@ grd_result grdm_gradido_transaction_from_wire(
 
   if (tx->pairing_ledger_anchor.type != GRDT_LEDGER_ANCHOR_UNSPECIFIED) {
     if (proto_gradido_gradido_transaction_pairing_ledger_anchor_alloc(pbtx)) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
     grd_result result =
         ledger_anchor_from_wire(pbtx->pairing_ledger_anchor_p, &tx->pairing_ledger_anchor);
@@ -470,7 +468,7 @@ grd_result grdm_confirmed_transaction_from_wire(
   pb_confirmed_tx->id = confirmed_tx->id;
 
   if (proto_gradido_confirmed_transaction_transaction_alloc(pb_confirmed_tx)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   result = grdm_gradido_transaction_from_wire(
       pb_confirmed_tx->transaction_p, &confirmed_tx->transaction
@@ -478,7 +476,7 @@ grd_result grdm_confirmed_transaction_from_wire(
   if (GRD_SUCCESS != result) { return result; }
 
   if (proto_gradido_confirmed_transaction_confirmed_at_alloc(pb_confirmed_tx)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   timestamp_from_wire(pb_confirmed_tx->confirmed_at_p, &confirmed_tx->confirmed_at);
 
@@ -486,7 +484,7 @@ grd_result grdm_confirmed_transaction_from_wire(
   pb_confirmed_tx->running_hash.size = 32;
 
   if (proto_gradido_confirmed_transaction_ledger_anchor_alloc(pb_confirmed_tx)) {
-    return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+    return GRD_ERROR_OUT_OF_MEMORY;
   }
   result = ledger_anchor_from_wire(pb_confirmed_tx->ledger_anchor_p, &confirmed_tx->ledger_anchor);
   if (GRD_SUCCESS != result) { return result; }
@@ -497,7 +495,7 @@ grd_result grdm_confirmed_transaction_from_wire(
     if (proto_gradido_confirmed_transaction_account_balances_alloc(
             pb_confirmed_tx, account_balances_count
         )) {
-      return GRD_ERROR_STATIC_BUFFER_TO_SMALL;
+      return GRD_ERROR_OUT_OF_MEMORY;
     }
 
     for (int i = 0; i < account_balances_count; i++) {
