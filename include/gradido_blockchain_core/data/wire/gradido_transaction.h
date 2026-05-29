@@ -86,7 +86,7 @@ grd_result grdw_gradido_transaction_copy_sig_map(
  * transaction form.
  *
  * @param[out] tx       Gradido transaction to populate.
- * @param[in]  binarySrc Source memory block containing binary data.
+ * @param[in]  binary_src Source memory block containing binary data.
  * @param[in]  allocator Area allocator for nested allocations.
  * @return              GRD_SUCCESS on success,
  *                      GRD_ERROR_OUT_OF_MEMORY if allocator hasn't enough space.
@@ -94,7 +94,7 @@ grd_result grdw_gradido_transaction_copy_sig_map(
  *                      not freed individually but as a whole.
  */
 grd_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const grd_memory_block *binarySrc, grd_memory *allocator
+    grdw_gradido_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
 );
 
 /**
@@ -104,11 +104,11 @@ grd_result grdw_gradido_transaction_decode(
  * The encoded form travels across the network, carrying signed intent between nodes.
  *
  * @param[out] binary_dst   Destination memory block for encoded data.
- * @param[out] final_size  Number of bytes written to binaryDst.
+ * @param[out] final_size  Number of bytes written to binary_dst.
  * @param[in]  tx          Gradido transaction to encode.
  * @param[in]  allocator   Memory allocator for temporary encoding buffers.
  * @return                GRD_SUCCESS on success
- *                        GRD_ERROR_DESTINATION_BUFFER_TO_SMALL if binaryDst is to small
+ *                        GRD_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
  *                        GRD_ERROR_OUT_OF_MEMORY if allocator hasn't enough capacity
  *                        GRD_ERROR_ENCODE_FAILED should only happen on message schema update
  * @whisper                Authorization becomes message
