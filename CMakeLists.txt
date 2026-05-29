@@ -12,13 +12,14 @@ option(ENABLE_TESTS "Enable test module" OFF)
 
 FILE(GLOB DATA "src/data/*.c" "include/gradido_blockchain_core/data/*.h")
 FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_blockchain_core/data/proto/gradido/*.h")
+FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB TYPES "include/gradido_blockchain_core/types/*.h")
 FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 
-set(GRADIDO_BLOCKCHAIN_CORE_SRC ${DATA} ${DATA_PROTO_GRADIDO} ${DATA_WIRE} ${MAPPING} ${SRC} ${TYPES} ${UTILS})
+set(GRADIDO_BLOCKCHAIN_CORE_SRC ${DATA} ${DATA_PROTO_GRADIDO} ${DATA_RUNTIME} ${DATA_WIRE} ${MAPPING} ${SRC} ${TYPES} ${UTILS})
 
 # Third Party
 FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
@@ -28,6 +29,7 @@ set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128})
 
 if(MSVC)
     source_group("data/proto/gradido" FILES ${DATA_PROTO_GRADIDO} )
+    source_group("data/runtime" FILES  ${DATA_RUNTIME} )
     source_group("data/wire" FILES ${DATA_WIRE} )
     source_group("data" FILES ${DATA} )
     source_group("mapping" FILES ${MAPPING} )
