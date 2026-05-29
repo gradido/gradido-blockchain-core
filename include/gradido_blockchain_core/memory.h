@@ -185,6 +185,10 @@ size_t grd_memory_overflow_total(const grd_memory *memory);
  */
 grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t size);
 
+grd_result grd_memory_buffer_copy(
+    uint8_t **dst_buffer, const uint8_t *src, grd_memory *memory, size_t size
+);
+
 /** @brief Free raw memory buffer.
  *
  *  Core deallocation primitive used by grd_memory_block_free().

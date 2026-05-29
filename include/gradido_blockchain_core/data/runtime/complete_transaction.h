@@ -4,6 +4,7 @@
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/types.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
+#include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
@@ -28,7 +29,6 @@ typedef struct grdr_complete_transaction {
   //   GRDT_TRANSACTION_TRANSFER                   -> transfer
   //   GRDT_TRANSACTION_DEFERRED_TRANSFER          -> transfer
   //   GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER   -> transfer
-  //   GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER  -> transfer
   //   GRDT_TRANSACTION_REGISTER_ADDRESS           -> register_address
   //   GRDT_TRANSACTION_COMMUNITY_ROOT             -> community_root
   union {
@@ -36,7 +36,7 @@ typedef struct grdr_complete_transaction {
       uint8_t sender_pubkey[32]; // set to 00000... on creation tx
       uint8_t recipient_pubkey[32];
       grdd_unit amount;
-      uint8_t tx_coin_community_uuid[16];
+      uint8_t coin_community_uuid[16];
     } transfer;
     struct {
       uint8_t user_public_key[32];
@@ -95,6 +95,11 @@ typedef struct grdr_complete_transaction {
   grd_memory memory_area;
 
 } grdr_complete_transaction;
+
+// will set everything to null
+void grdr_complete_transaction_init(grdr_complete_transaction *tx);
+// will release memory and call init to set everything to null
+void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 
 #ifdef __cplusplus
 }
