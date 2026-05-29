@@ -15,7 +15,7 @@ static size_t calculate_memory_size(
   result += ALIGN8(confirmed_tx->account_balances_count * sizeof(grdw_account_balance));
   if (body->memos_count) {
     result += ALIGN8(body->memos_count * sizeof(grdw_encrypted_memo));
-    for (int i = 0; i < body->memos_count; ++i) {}
+    for (int i = 0; i < body->memos_count; ++i) { result += ALIGN8(body->memos[i].memo.size); }
   }
   if (body->other_community_uuid) { result += 16; }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
