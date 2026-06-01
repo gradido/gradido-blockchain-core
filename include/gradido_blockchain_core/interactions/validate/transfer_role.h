@@ -1,5 +1,5 @@
-#ifndef GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_CONTEXT_H
-#define GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_CONTEXT_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_TRANSFER_ROLE_H
+#define GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_TRANSFER_ROLE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,7 +12,7 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
 typedef struct grd_error_details grd_error_details;
 
 //! \param error_details only used if not set to null
-grdi_validate_result_type grdi_validate_complete_transaction(
+grdi_validate_result_type grdi_validate_complete_transaction_transfer(
     const grdr_complete_transaction *input_tx,
     const grdi_validate_options *options,
     grd_error_details *error_details
@@ -22,4 +22,4 @@ grdi_validate_result_type grdi_validate_complete_transaction(
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_CONTEXT_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_INTERACTIONS_VALIDATE_TRANSFER_ROLE_H
