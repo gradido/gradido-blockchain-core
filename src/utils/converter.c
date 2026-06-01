@@ -49,6 +49,15 @@ size_t grdu_uint64_to_string_size(uint64_t v) {
   return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
 }
 
+size_t grdu_int64_to_string_size(int64_t v) {
+  if (v >= 0) {
+    return grdu_uint64_to_string_size((uint64_t)v);
+  } else {
+    return grdu_uint64_to_string_size((uint64_t)(v * -1)) + 1;
+  }
+}
+
+
 size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize) {
   if (value == 0) {
     if (stringSize < 1) {
@@ -102,6 +111,14 @@ size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, siz
   return len; // return number of characters written, not counting null terminator
 }
 
+size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_t stringSize) {
+  if (value >= 0) {
+    return grdu_uint64_to_string_known_string_size(buffer, (uint64_t)value, stringSize);
+  } else {
+    buffer[0] = '-';
+    return grdu_uint64_to_string_known_string_size(&buffer[1], (uint64_t)(value * -1), stringSize) + 1;
+  }
+}
 // for easy use, one call
 
 size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
@@ -112,4 +129,14 @@ size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
     return requiredSize; // return required size without null terminator
   }
   return grdu_uint64_to_string_known_string_size(buffer, value, requiredSize);
+}
+
+size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value) {
+  size_t requiredSize = grdu_int64_to_string_size(value);
+  if (bufferSize < requiredSize + 1) {
+    // better safe then sorry
+    if (bufferSize) { buffer[0] = '\0'; }
+    return requiredSize; // return required size without null terminator
+  }
+  return grdu_int64_to_string_known_string_size(buffer, value, requiredSize);
 }

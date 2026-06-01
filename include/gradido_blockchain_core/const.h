@@ -1,0 +1,14 @@
+#ifndef GRADIDO_BLOCKCHAIN_CORE_CONST_H
+#define GRADIDO_BLOCKCHAIN_CORE_CONST_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+const static int MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS = 120;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif //GRADIDO_BLOCKCHAIN_CORE_CONST_H

@@ -17,6 +17,7 @@ typedef enum grd_result {
   GRD_ERROR_NOT_INITIALIZED,
   GRD_ERROR_INVALID_PARAM,     // if parameter validation failed
   GRD_ERROR_INVALID_ENUM_TYPE, // enum type invalid for function call
+  GRD_ERROR_INVALID_STATE,
   GRD_ERROR_NULL_POINTER,
   GRD_ERROR_ARITHMETIC_OVERFLOW,
   GRD_ERROR_OUT_OF_MEMORY,
