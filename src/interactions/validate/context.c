@@ -51,7 +51,7 @@ static grdi_validate_result_type validateCommon(
   }
 
   // check if community id index is valid, therefore an entry exist in Community Id Dictionary
-  if (!IS_EMPTY_UUID(input_tx->tx_community_uuid)) {
+  if (IS_EMPTY_UUID(input_tx->tx_community_uuid)) {
     grd_error_details_fill(error_details, "empty community uuid", NULL, NULL);
     return GRDI_VALIDATE_INVALID_FIELD;
   }
