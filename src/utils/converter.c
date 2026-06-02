@@ -1,4 +1,12 @@
 #include "gradido_blockchain_core/utils/converter.h"
+#include "gradido_blockchain_core/result.h"
+
+#ifdef USE_SODIUM
+#include "sodium.h"
+#endif // USE_SODIUM
+
+#include <assert.h>
+#include <string.h>
 
 /**
  * @brief Compute the number of decimal digits of a uint64_t value.
@@ -140,3 +148,37 @@ size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value) {
   }
   return grdu_int64_to_string_known_string_size(buffer, value, requiredSize);
 }
+
+#ifdef USE_SODIUM
+
+void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[16]) {
+  char hex[33];
+  sodium_bin2hex(hex, sizeof(hex), uuid, 16);
+  memcpy(result_buffer, hex, 8);
+  result_buffer[8] = '-';
+  memcpy(result_buffer + 9, hex + 8, 4);
+  result_buffer[13] = '-';
+  memcpy(result_buffer + 14, hex + 12, 4);
+  result_buffer[18] = '-';
+  memcpy(result_buffer + 19, hex + 16, 4);
+  result_buffer[23] = '-';
+  memcpy(result_buffer + 24, hex + 20, 12);
+  result_buffer[36] = '\0';
+}
+
+grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
+  if (!uuid || !uuid_string) { return GRD_ERROR_NULL_POINTER; }
+  const size_t hex_len = strlen(uuid_string);
+  if (hex_len != 36) { return GRD_ERROR_INVALID_PARAM; }
+  size_t bin_len = 0;
+  const char *ignore_chars = "-";
+  uint8_t buffer[18];
+  if (sodium_hex2bin(buffer, 18, uuid_string, hex_len, ignore_chars, &bin_len, NULL) != 0) {
+    return GRD_ERROR_ENCODE_FAILED;
+  }
+  if (bin_len != 16) { return GRD_ERROR_INVALID_PARAM; }
+  memcpy(uuid, buffer, 16);
+  return GRD_SUCCESS;
+}
+
+#endif // USE_SODIUM

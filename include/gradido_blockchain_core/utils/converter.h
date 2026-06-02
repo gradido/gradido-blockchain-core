@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_C_UTILS_H
 #define GRADIDO_BLOCKCHAIN_C_UTILS_H
 
+#include "gradido_blockchain_core/result.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -77,6 +79,18 @@ size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_
 size_t grdu_uint64_to_string_size(uint64_t value);
 size_t grdu_int64_to_string_size(int64_t value);
 
+#ifdef USE_SODIUM
+/**
+ * @param[out] result_buffer expected to be 37 bytes for string uuid format with \0
+ */
+void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[16]);
+/**
+ * @param [out] uuid expect to be 16 bytes for uuid in binary representation
+ * @param [in] uuid_string expect to be exactly 37 (36 + \0) bytes long
+ */
+grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string);
+
+#endif // USE_SODIUM
 /**
  * @}
  */

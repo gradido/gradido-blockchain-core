@@ -20,6 +20,7 @@ FetchContent_Declare(
   URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
 )
 if (USE_SODIUM)
+  add_compile_definitions(USE_SODIUM)
   set(SODIUM_DISABLE_TESTS ON)
   if(USE_INSTALLED_SODIUM)
   	find_package(Sodium REQUIRED)
