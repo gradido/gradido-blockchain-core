@@ -168,16 +168,21 @@ void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[16]) {
 
 grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   if (!uuid || !uuid_string) { return GRD_ERROR_NULL_POINTER; }
-  const size_t hex_len = strlen(uuid_string);
-  if (hex_len != 36) { return GRD_ERROR_INVALID_PARAM; }
+  if (strlen(uuid_string) != 36) { return GRD_ERROR_INVALID_PARAM; }
+
+  char hex[33];
+  memcpy(hex, uuid_string, 8);
+  memcpy(hex + 8, uuid_string + 9, 4);
+  memcpy(hex + 12, uuid_string + 14, 4);
+  memcpy(hex + 16, uuid_string + 19, 4);
+  memcpy(hex + 20, uuid_string + 24, 12);
+  hex[32] = '\0';
+
   size_t bin_len = 0;
-  const char *ignore_chars = "-";
-  uint8_t buffer[18];
-  if (sodium_hex2bin(buffer, 18, uuid_string, hex_len, ignore_chars, &bin_len, NULL) != 0) {
+  if (sodium_hex2bin(uuid, 16, hex, 32, NULL, &bin_len, NULL) != 0) {
     return GRD_ERROR_ENCODE_FAILED;
   }
   if (bin_len != 16) { return GRD_ERROR_INVALID_PARAM; }
-  memcpy(uuid, buffer, 16);
   return GRD_SUCCESS;
 }
 
