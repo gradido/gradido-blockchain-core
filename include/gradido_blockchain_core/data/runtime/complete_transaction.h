@@ -101,6 +101,19 @@ void grdr_complete_transaction_init(grdr_complete_transaction *tx);
 // will release memory and call init to set everything to null
 void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 
+/**
+ * @param uuid [out]: expected to point on array with 16 Bytes to fill in with the correct uuid
+ */
+grd_result grdr_complete_transaction_get_sender_community_uuid(
+    uint8_t *uuid, const grdr_complete_transaction *tx
+);
+/**
+ * @param uuid [out]: expected to point on array with 16 Bytes to fill in with the correct uuid
+ */
+grd_result grdr_complete_transaction_get_recipient_community_uuid(
+    uint8_t *uuid, const grdr_complete_transaction *tx
+);
+
 #ifdef __cplusplus
 }
 #endif
