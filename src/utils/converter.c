@@ -188,17 +188,15 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
 }
 */
 // faster as memcpy uuid parts to get rid of - or as using sodium_hex2bin ignore chars
-grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string)
-{
+grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   if (!uuid || !uuid_string) return GRD_ERROR_NULL_POINTER;
   if (strlen(uuid_string) != 36) return GRD_ERROR_INVALID_PARAM;
 
   static const uint8_t hex_lookup[256] = {
-      ['0'] = 0,  ['1'] = 1,  ['2'] = 2,  ['3'] = 3,
-      ['4'] = 4,  ['5'] = 5,  ['6'] = 6,  ['7'] = 7,
-      ['8'] = 8,  ['9'] = 9,
-      ['a'] = 10, ['b'] = 11, ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15,
-      ['A'] = 10, ['B'] = 11, ['C'] = 12, ['D'] = 13, ['E'] = 14, ['F'] = 15,
+      ['0'] = 0,  ['1'] = 1,  ['2'] = 2,  ['3'] = 3,  ['4'] = 4,  ['5'] = 5,
+      ['6'] = 6,  ['7'] = 7,  ['8'] = 8,  ['9'] = 9,  ['a'] = 10, ['b'] = 11,
+      ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15, ['A'] = 10, ['B'] = 11,
+      ['C'] = 12, ['D'] = 13, ['E'] = 14, ['F'] = 15,
   };
 
   size_t j = 0;
@@ -209,7 +207,7 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string)
     ++i;
     uint8_t lo = hex_lookup[(unsigned char)uuid_string[i]];
     if (lo == 0 && uuid_string[i] != '0') { return GRD_ERROR_ENCODE_FAILED; }
-    if (hi == 0 && lo == 0 && uuid_string[i-1] != '0') continue;
+    if (hi == 0 && lo == 0 && uuid_string[i - 1] != '0') continue;
     uuid[j++] = (hi << 4) | lo;
   }
 
