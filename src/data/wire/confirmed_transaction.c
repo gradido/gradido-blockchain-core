@@ -37,10 +37,10 @@ grd_result grdw_confirmed_transaction_copy_account_balance(
 }
 
 grd_result grdw_confirmed_transaction_decode(
-    grdw_confirmed_transaction *tx, const grd_memory_block *binarySrc, grd_memory *allocator
+    grdw_confirmed_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
 ) {
-  if (!tx || !binarySrc || !binarySrc->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  if (!binarySrc->size) { return GRD_ERROR_INVALID_PARAM; }
+  if (!tx || !binary_src || !binary_src->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_src->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: calculate needed memory beforhand
   grd_memory_block pbBuffer;
@@ -52,15 +52,15 @@ grd_result grdw_confirmed_transaction_decode(
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;
   proto_tx = proto_gradido_confirmed_transaction_new(pbBuffer.data, pbBuffer.size);
-  if (!proto_tx) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  if (!proto_tx) { return GRD_ERROR_OUT_OF_MEMORY; }
   int resultSize =
-      proto_gradido_confirmed_transaction_decode(proto_tx, binarySrc->data, binarySrc->size);
+      proto_gradido_confirmed_transaction_decode(proto_tx, binary_src->data, binary_src->size);
 
   // release not from pbtools used part from allocator
   grd_memory_block_free_part(&pbBuffer, allocator, pbBuffer.size - proto_tx->base.heap_p->pos);
 
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
-  if (resultSize != binarySrc->size) { return GRD_ERROR_ENCODE_FAILED; }
+  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
+  if (resultSize != binary_src->size) { return GRD_ERROR_ENCODE_FAILED; }
 
   result = grdm_confirmed_transaction_from_pb(tx, proto_tx, allocator);
   grd_memory_block_free(&pbBuffer, allocator);
@@ -68,13 +68,13 @@ grd_result grdw_confirmed_transaction_decode(
 }
 
 grd_result grdw_confirmed_transaction_encode(
-    grd_memory_block *binaryDst,
+    grd_memory_block *binary_dst,
     size_t *final_size,
     const grdw_confirmed_transaction *tx,
     grd_memory *allocator
 ) {
-  if (!binaryDst || !tx) { return GRD_ERROR_NULL_POINTER; }
-  if (!binaryDst->size) { return GRD_ERROR_INVALID_PARAM; }
+  if (!binary_dst || !tx) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_dst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy
   grd_memory_block pbBuffer;
@@ -86,18 +86,18 @@ grd_result grdw_confirmed_transaction_encode(
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;
   proto_tx = proto_gradido_confirmed_transaction_new(pbBuffer.data, pbBuffer.size);
-  if (!proto_tx) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  if (!proto_tx) { return GRD_ERROR_OUT_OF_MEMORY; }
 
   result = grdm_confirmed_transaction_from_wire(proto_tx, tx);
   if (GRD_SUCCESS != result) { return result; }
 
   int resultSize =
-      proto_gradido_confirmed_transaction_encode(proto_tx, binaryDst->data, binaryDst->size);
+      proto_gradido_confirmed_transaction_encode(proto_tx, binary_dst->data, binary_dst->size);
 
   grd_memory_block_free(&pbBuffer, allocator);
 
   if (PBTOOLS_ENCODE_BUFFER_FULL == -resultSize) { return GRD_ERROR_DESTINATION_BUFFER_TO_SMALL; }
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
   if (resultSize < 0) { return GRD_ERROR_ENCODE_FAILED; }
   if (final_size) { *final_size = resultSize; }
   return GRD_SUCCESS;

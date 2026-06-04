@@ -49,67 +49,67 @@ grd_result grdw_gradido_transaction_copy_sig_map(
 */
 
 grd_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const grd_memory_block *binarySrc, grd_memory *allocator
+    grdw_gradido_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
 ) {
-  if (!tx || !binarySrc || !binarySrc->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
-  if (!binarySrc->size) { return GRD_ERROR_INVALID_PARAM; }
+  if (!tx || !binary_src || !binary_src->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_src->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: calculate needed memory beforhand
-  grd_memory_block pbBuffer;
+  grd_memory_block pb_buffer;
   // take whole static area from allocator for pbtools
   grd_result result = grd_memory_block_alloc(
-      &pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
+      &pb_buffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
   );
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_gradido_transaction_t *proto_tx;
-  proto_tx = proto_gradido_gradido_transaction_new(pbBuffer.data, pbBuffer.size);
-  if (!proto_tx) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  proto_tx = proto_gradido_gradido_transaction_new(pb_buffer.data, pb_buffer.size);
+  if (!proto_tx) { return GRD_ERROR_OUT_OF_MEMORY; }
   int resultSize =
-      proto_gradido_gradido_transaction_decode(proto_tx, binarySrc->data, binarySrc->size);
+      proto_gradido_gradido_transaction_decode(proto_tx, binary_src->data, binary_src->size);
 
   // release not from pbtools used part from allocator
-  grd_memory_block_free_part(&pbBuffer, allocator, pbBuffer.size - proto_tx->base.heap_p->pos);
+  grd_memory_block_free_part(&pb_buffer, allocator, pb_buffer.size - proto_tx->base.heap_p->pos);
 
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
-  if (resultSize != binarySrc->size) { return GRD_ERROR_ENCODE_FAILED; }
+  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
+  if (resultSize != binary_src->size) { return GRD_ERROR_ENCODE_FAILED; }
 
   result = grdm_gradido_transaction_from_pb(tx, proto_tx, allocator);
-  grd_memory_block_free(&pbBuffer, allocator);
+  grd_memory_block_free(&pb_buffer, allocator);
   return result;
 }
 
 grd_result grdw_gradido_transaction_encode(
-    grd_memory_block *binaryDst,
+    grd_memory_block *binary_dst,
     size_t *final_size,
     const grdw_gradido_transaction *tx,
     grd_memory *allocator
 ) {
-  if (!binaryDst || !tx) { return GRD_ERROR_NULL_POINTER; }
-  if (!binaryDst->size) { return GRD_ERROR_INVALID_PARAM; }
+  if (!binary_dst || !tx) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_dst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy
-  grd_memory_block pbBuffer;
+  grd_memory_block pb_buffer;
   // take whole static area from allocator for pbtools
   grd_result result = grd_memory_block_alloc(
-      &pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
+      &pb_buffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
   );
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_gradido_transaction_t *proto_tx;
-  proto_tx = proto_gradido_gradido_transaction_new(pbBuffer.data, pbBuffer.size);
-  if (!proto_tx) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  proto_tx = proto_gradido_gradido_transaction_new(pb_buffer.data, pb_buffer.size);
+  if (!proto_tx) { return GRD_ERROR_OUT_OF_MEMORY; }
 
   result = grdm_gradido_transaction_from_wire(proto_tx, tx);
   if (GRD_SUCCESS != result) { return result; }
 
   int resultSize =
-      proto_gradido_gradido_transaction_encode(proto_tx, binaryDst->data, binaryDst->size);
+      proto_gradido_gradido_transaction_encode(proto_tx, binary_dst->data, binary_dst->size);
 
-  grd_memory_block_free(&pbBuffer, allocator);
+  grd_memory_block_free(&pb_buffer, allocator);
 
   if (PBTOOLS_ENCODE_BUFFER_FULL == -resultSize) { return GRD_ERROR_DESTINATION_BUFFER_TO_SMALL; }
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_STATIC_BUFFER_TO_SMALL; }
+  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
   if (resultSize < 0) { return GRD_ERROR_ENCODE_FAILED; }
   if (final_size) { *final_size = resultSize; }
   return GRD_SUCCESS;

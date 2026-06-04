@@ -146,5 +146,40 @@ pub fn build(b: *std.Build) void {
         });
 
         b.installArtifact(test_pbtools);
+
+        // test_runtime
+        const test_runtime = b.addExecutable(.{
+            .name = "test_runtime",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        test_runtime.linkLibrary(lib);
+        if (b.lazyDependency("libsodium", .{
+            .target = target,
+            .optimize = optimize,
+            .static = true,
+            .shared = false,
+        })) |dep| {
+            test_runtime.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+        }
+        if (googletest_dep) |dep| {
+            test_runtime.linkLibrary(dep.artifact("gtest"));
+            test_runtime.linkLibrary(dep.artifact("gtest_main"));
+        }
+
+        test_runtime.addIncludePath(b.path("include"));
+        test_runtime.addIncludePath(b.path("third_party"));
+
+        test_runtime.addCSourceFiles(.{
+            .files = &.{
+                "tests/unit/src/test_runtime.cpp",
+                "tests/unit/src/key_pairs.cpp",
+            },
+        });
+
+        b.installArtifact(test_runtime);
     }
 }

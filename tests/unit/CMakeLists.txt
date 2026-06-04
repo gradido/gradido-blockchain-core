@@ -30,9 +30,6 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # one binary per unit
-add_executable(test_unit src/test_unit.cpp)
-target_link_libraries(test_unit gradido_blockchain_core GTest::gtest_main)
-
 add_executable(test_duration src/test_duration.cpp)
 target_link_libraries(test_duration gradido_blockchain_core GTest::gtest_main)
 
@@ -45,14 +42,21 @@ target_link_libraries(test_memory gradido_blockchain_core GTest::gtest_main)
 add_executable(test_pbtools src/test_pbtools.cpp src/key_pairs.cpp src/key_pairs.h terminal_colors.h)
 target_link_libraries(test_pbtools gradido_blockchain_core GTest::gtest_main sodium)
 
+add_executable(test_runtime src/test_runtime.cpp src/key_pairs.cpp src/key_pairs.h terminal_colors.h)
+target_link_libraries(test_runtime gradido_blockchain_core GTest::gtest_main sodium)
+
+add_executable(test_unit src/test_unit.cpp)
+target_link_libraries(test_unit gradido_blockchain_core GTest::gtest_main)
+
 enable_testing()
 
 include(GoogleTest)
 if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_CROSSCOMPILING_EMULATOR))
   message(STATUS "Enable test_unit tests")
-  add_test(NAME test_unit COMMAND test_unit)
   add_test(NAME test_duration COMMAND test_duration)
   add_test(NAME test_converter COMMAND test_converter)
   add_test(NAME test_memory COMMAND test_memory)
   add_test(NAME test_pbtools COMMAND test_pbtools)
+  add_test(NAME test_runtime COMMAND test_runtime)
+  add_test(NAME test_unit COMMAND test_unit)
 endif()

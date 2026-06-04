@@ -28,8 +28,6 @@ extern "C" {
  * @{
  */
 
-typedef int64_t grdd_unit;
-
 /**
  * @brief Round a fixed-point grdd_unit to a given decimal precision.
  *

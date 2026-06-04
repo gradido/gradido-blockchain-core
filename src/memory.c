@@ -90,6 +90,18 @@ grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t 
   return GRD_SUCCESS;
 }
 
+grd_result grd_memory_buffer_copy(
+    uint8_t **dst_buffer, const uint8_t *src, grd_memory *memory, size_t size
+) {
+  if (!dst_buffer || !src || !memory) { return GRD_ERROR_NULL_POINTER; }
+  if (!size) { return GRD_ERROR_INVALID_PARAM; }
+  grd_result result = grd_memory_buffer_alloc(dst_buffer, memory, size);
+  if (GRD_SUCCESS != result) { return result; }
+
+  memcpy(*dst_buffer, src, size);
+  return GRD_SUCCESS;
+}
+
 grd_result grd_memory_block_alloc(grd_memory_block *memory_block, grd_memory *memory, size_t size) {
   if (!memory_block || !memory) { return GRD_ERROR_NULL_POINTER; }
   grd_result result = grd_memory_buffer_alloc(&memory_block->data, memory, size);
