@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <string.h>
 
+#include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/data/proto/gradido/basic_types.h"
 #include "gradido_blockchain_core/data/proto/gradido/community_friends_update.h"
 #include "gradido_blockchain_core/data/proto/gradido/community_root.h"
@@ -36,13 +37,13 @@
 #include "gradido_blockchain_core/utils/version.h"
 
 static grd_result community_uuid_from_pbtools(
-    uint8_t community_uuid[16], const struct pbtools_bytes_t *bytes
+    uint8_t community_uuid[UUID_BINARY_SIZE], const struct pbtools_bytes_t *bytes
 ) {
   if (!community_uuid || !bytes) { return GRD_ERROR_NULL_POINTER; }
-  if (16 == bytes->size) {
-    memcpy(community_uuid, bytes->buf_p, 16);
+  if (UUID_BINARY_SIZE == bytes->size) {
+    memcpy(community_uuid, bytes->buf_p, UUID_BINARY_SIZE);
   } else if (0 == bytes->size) {
-    memset(community_uuid, 0, 16);
+    memset(community_uuid, 0, UUID_BINARY_SIZE);
   } else {
     return GRD_ERROR_INVALID_PARAM;
   }
@@ -66,8 +67,8 @@ static grd_result account_balance_from_pbtools(
     const struct proto_gradido_account_balance_t *pb_account_balance
 ) {
   if (!account_balance || !pb_account_balance) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_account_balance->pubkey.size != 32) { return GRD_ERROR_INVALID_PARAM; }
-  memcpy(account_balance->pubkey, pb_account_balance->pubkey.buf_p, 32);
+  if (pb_account_balance->pubkey.size != ED25519_PUBLIC_KEY_SIZE) { return GRD_ERROR_INVALID_PARAM; }
+  memcpy(account_balance->pubkey, pb_account_balance->pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
   account_balance->balance = pb_account_balance->balance;
   return community_uuid_from_pbtools(
       account_balance->community_uuid, &pb_account_balance->community_uuid
@@ -95,11 +96,11 @@ static grd_result signature_pair_from_pbtools(
     const struct proto_gradido_signature_pair_t *pb_signature_pair
 ) {
   if (!signature_pair || !pb_signature_pair) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_signature_pair->pubkey.size != 32 || pb_signature_pair->signature.size != 64) {
+  if (pb_signature_pair->pubkey.size != ED25519_PUBLIC_KEY_SIZE || pb_signature_pair->signature.size != ED25519_SIGNATURE_SIZE) {
     return GRD_ERROR_INVALID_PARAM;
   }
-  memcpy(signature_pair->public_key, pb_signature_pair->pubkey.buf_p, 32);
-  memcpy(signature_pair->signature, pb_signature_pair->signature.buf_p, 64);
+  memcpy(signature_pair->public_key, pb_signature_pair->pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(signature_pair->signature, pb_signature_pair->signature.buf_p, ED25519_SIGNATURE_SIZE);
   return GRD_SUCCESS;
 }
 
@@ -126,8 +127,8 @@ static grd_result transfer_amount_from_pbtools(
     const struct proto_gradido_transfer_amount_t *pb_transfer_amount
 ) {
   if (!transfer_amount || !pb_transfer_amount) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_transfer_amount->pubkey.size != 32) { return GRD_ERROR_INVALID_PARAM; }
-  memcpy(transfer_amount->pubkey, pb_transfer_amount->pubkey.buf_p, 32);
+  if (pb_transfer_amount->pubkey.size != ED25519_PUBLIC_KEY_SIZE) { return GRD_ERROR_INVALID_PARAM; }
+  memcpy(transfer_amount->pubkey, pb_transfer_amount->pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
   transfer_amount->amount = pb_transfer_amount->amount;
   return community_uuid_from_pbtools(
       transfer_amount->community_uuid, &pb_transfer_amount->community_uuid
@@ -203,13 +204,13 @@ static grd_result community_root_from_pbtools(
     const struct proto_gradido_community_root_t *pb_community_root
 ) {
   if (!community_root || !pb_community_root) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_community_root->pubkey.size != 32 || pb_community_root->gmw_pubkey.size != 32 ||
-      pb_community_root->auf_pubkey.size != 32) {
+  if (pb_community_root->pubkey.size != ED25519_PUBLIC_KEY_SIZE || pb_community_root->gmw_pubkey.size != ED25519_PUBLIC_KEY_SIZE ||
+      pb_community_root->auf_pubkey.size != ED25519_PUBLIC_KEY_SIZE) {
     return GRD_ERROR_INVALID_PARAM;
   }
-  memcpy(community_root->pubkey, pb_community_root->pubkey.buf_p, 32);
-  memcpy(community_root->gmw_pubkey, pb_community_root->gmw_pubkey.buf_p, 32);
-  memcpy(community_root->auf_pubkey, pb_community_root->auf_pubkey.buf_p, 32);
+  memcpy(community_root->pubkey, pb_community_root->pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(community_root->gmw_pubkey, pb_community_root->gmw_pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(community_root->auf_pubkey, pb_community_root->auf_pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
   return GRD_SUCCESS;
 }
 
@@ -234,8 +235,8 @@ static grd_result gradido_transfer_from_pbtools(
 ) {
   if (!gradido_transfer || !pb_gradido_transfer) { return GRD_ERROR_NULL_POINTER; }
 
-  if (pb_gradido_transfer->recipient.size != 32) { return GRD_ERROR_INVALID_PARAM; }
-  memcpy(gradido_transfer->recipient, pb_gradido_transfer->recipient.buf_p, 32);
+  if (pb_gradido_transfer->recipient.size != ED25519_PUBLIC_KEY_SIZE) { return GRD_ERROR_INVALID_PARAM; }
+  memcpy(gradido_transfer->recipient, pb_gradido_transfer->recipient.buf_p, ED25519_PUBLIC_KEY_SIZE);
   return transfer_amount_from_pbtools(&gradido_transfer->sender, pb_gradido_transfer->sender_p);
   ;
 }
@@ -290,15 +291,15 @@ static grd_result register_address_from_pbtools(
     const struct proto_gradido_register_address_t *pb_register_address
 ) {
   if (!register_address || !pb_register_address) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_register_address->user_pubkey.size != 32 || pb_register_address->name_hash.size != 32 ||
-      pb_register_address->account_pubkey.size != 32) {
+  if (pb_register_address->user_pubkey.size != ED25519_PUBLIC_KEY_SIZE || pb_register_address->name_hash.size != BLAKE2B_HASH_SIZE ||
+      pb_register_address->account_pubkey.size != ED25519_PUBLIC_KEY_SIZE) {
     return GRD_ERROR_INVALID_PARAM;
   }
-  memcpy(register_address->user_pubkey, pb_register_address->user_pubkey.buf_p, 32);
+  memcpy(register_address->user_pubkey, pb_register_address->user_pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
   register_address->address_type = (grdt_address)pb_register_address->address_type;
   register_address->derivation_index = pb_register_address->derivation_index;
-  memcpy(register_address->name_hash, pb_register_address->name_hash.buf_p, 32);
-  memcpy(register_address->account_pubkey, pb_register_address->account_pubkey.buf_p, 32);
+  memcpy(register_address->name_hash, pb_register_address->name_hash.buf_p, BLAKE2B_HASH_SIZE);
+  memcpy(register_address->account_pubkey, pb_register_address->account_pubkey.buf_p, ED25519_PUBLIC_KEY_SIZE);
   return GRD_SUCCESS;
 }
 
@@ -332,7 +333,7 @@ grd_result grdm_transaction_body_from_pbtools(
     }
   }
   if (pb_transaction_body->other_community_uuid.size) {
-    grd_memory_buffer_alloc(&transaction_body->other_community_uuid, allocator, 16);
+    grd_memory_buffer_alloc(&transaction_body->other_community_uuid, allocator, UUID_BINARY_SIZE);
     result = community_uuid_from_pbtools(
         transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
     );
@@ -445,8 +446,8 @@ grd_result grdm_confirmed_transaction_from_pb(
   result = timestamp_from_pbtools(&confirmed_tx->confirmed_at, pb_confirmed_tx->confirmed_at_p);
   if (GRD_SUCCESS != result) { return result; }
 
-  if (pb_confirmed_tx->running_hash.size != 32) { return GRD_ERROR_INVALID_PARAM; }
-  memcpy(confirmed_tx->running_hash, pb_confirmed_tx->running_hash.buf_p, 32);
+  if (pb_confirmed_tx->running_hash.size != BLAKE2B_HASH_SIZE) { return GRD_ERROR_INVALID_PARAM; }
+  memcpy(confirmed_tx->running_hash, pb_confirmed_tx->running_hash.buf_p, BLAKE2B_HASH_SIZE);
 
   result =
       ledger_anchor_from_pbtools(&confirmed_tx->ledger_anchor, pb_confirmed_tx->ledger_anchor_p);

@@ -2,6 +2,7 @@
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_RUNTIME_FROM_WIRE_H
 
 // make sure, that generated protobuf enum is identical with grdw enum
+#include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
 
 #include <stdint.h>
@@ -38,7 +39,7 @@ grd_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const grdw_transaction_body *body,
     const grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[16]
+    const uint8_t community_uuid[UUID_BINARY_SIZE]
 );
 
 /** @} */

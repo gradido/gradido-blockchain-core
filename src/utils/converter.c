@@ -151,7 +151,16 @@ size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value) {
 
 #ifdef USE_SODIUM
 
-void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[16]) {
+/*
+ * C11 static assert fallback safety
+ */
+#if !defined(static_assert)
+#define static_assert _Static_assert
+#endif
+
+static_assert(UUID_BINARY_SIZE == 16, "uuid binary size don't match 16 bytes");
+
+void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZE]) {
   char hex[33];
   sodium_bin2hex(hex, sizeof(hex), uuid, 16);
   memcpy(result_buffer, hex, 8);
@@ -187,7 +196,7 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   return GRD_SUCCESS;
 }
 */
-// faster as memcpy uuid parts to get rid of - or as using sodium_hex2bin ignore chars
+// faster as version above
 grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   if (!uuid || !uuid_string) return GRD_ERROR_NULL_POINTER;
   if (strlen(uuid_string) != 36) return GRD_ERROR_INVALID_PARAM;
