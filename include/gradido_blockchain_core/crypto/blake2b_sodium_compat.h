@@ -19,8 +19,8 @@ extern "C" {
 #endif
 
 static_assert(
-  BLAKE2B_HASH_SIZE == crypto_generichash_BYTES,
-  "sodium generic hash size don't match blake2b hash size"
+    BLAKE2B_HASH_SIZE == crypto_generichash_BYTES,
+    "sodium generic hash size don't match blake2b hash size"
 );
 
 #pragma warning(pop)

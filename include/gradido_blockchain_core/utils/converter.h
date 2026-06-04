@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+typedef struct grd_memory_block grd_memory_block;
+
 /** @defgroup utils Utilities */
 
 /**
@@ -85,11 +87,23 @@ size_t grdu_int64_to_string_size(int64_t value);
  * @param[out] result_buffer expected to be 37 bytes for string uuid format with \0
  */
 void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZE]);
+
 /**
  * @param [out] uuid expect to be 16 bytes for uuid in binary representation
  * @param [in] uuid_string expect to be exactly 37 (36 + \0) bytes long
  */
 grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string);
+
+/**
+ * @param result_buffer expected to be data->size * 2 + 1
+ */
+grd_result grdu_binary_to_hex(char *result_buffer, const grd_memory_block *data);
+
+/**
+ * @param result_buffer[out] expected to be strlen(hex) / 2
+ * @param hex[in] expected to be null terminated string
+ */
+grd_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex);
 
 #endif // USE_SODIUM
 /**

@@ -15,10 +15,7 @@ option(USE_SODIUM "Enable use of libsodium" OFF)
 option(USE_INSTALLED_SODIUM "Link against already installed sodium lib if USE_SODIUM was also set to On" OFF)
 
 include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
-)
+
 if (USE_SODIUM)
   add_compile_definitions(USE_SODIUM)
   set(SODIUM_DISABLE_TESTS ON)

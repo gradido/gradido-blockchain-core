@@ -47,9 +47,15 @@ static void copy_register_address(
     grdr_complete_transaction *tx, const grdw_register_address *register_address_tx
 ) {
   if (!tx || !register_address_tx) { return; }
-  memcpy(tx->register_address.user_public_key, register_address_tx->user_pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(
+      tx->register_address.user_public_key, register_address_tx->user_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
   memcpy(tx->register_address.name_hash, register_address_tx->name_hash, BLAKE2B_HASH_SIZE);
-  memcpy(tx->register_address.account_public_key, register_address_tx->account_pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(
+      tx->register_address.account_public_key, register_address_tx->account_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
   tx->address_type = register_address_tx->address_type;
   tx->derivation_index = register_address_tx->derivation_index;
 }
@@ -175,7 +181,8 @@ grd_result grdm_complete_transaction_from_wire(
 
   if (body->other_community_uuid) {
     result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, &tx->memory_area, UUID_BINARY_SIZE
+        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, &tx->memory_area,
+        UUID_BINARY_SIZE
     );
     if (GRD_SUCCESS != result) { return result; }
   }

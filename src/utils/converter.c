@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/utils/converter.h"
+#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 
 #ifdef USE_SODIUM
@@ -222,4 +223,27 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
 
   return GRD_SUCCESS;
 }
+
+grd_result grdu_binary_to_hex(char *result_buffer, const grd_memory_block *data) {
+  if (!result_buffer || !data || !data->size) { return GRD_ERROR_NULL_POINTER; }
+  size_t hex_size = data->size * 2 + 1;
+
+  sodium_bin2hex((char *)result_buffer, hex_size, data->data, data->size);
+  return GRD_SUCCESS;
+}
+
+grd_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex) {
+  if (!result_buffer || !hex) { return GRD_ERROR_NULL_POINTER; }
+  size_t hex_size = strlen(hex);
+  size_t bin_size = hex_size / 2;
+  // invalid hex if size isn't power of 2
+  if (bin_size * 2 != hex_size) { return GRD_ERROR_INVALID_PARAM; }
+  size_t result_bin_size = 0;
+  if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &result_bin_size, NULL)) {
+    return GRD_ERROR_DECODE_FAILED;
+  }
+  if (result_bin_size != bin_size) { return GRD_ERROR_INVALID_STATE; }
+  return GRD_SUCCESS;
+}
+
 #endif // USE_SODIUM

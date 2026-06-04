@@ -1,5 +1,5 @@
-#include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/data/wire/specific_transactions.h"
+#include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 
@@ -65,7 +65,9 @@ void grdw_gradido_deferred_transfer_assemble(
   }
   memcpy(gradido_deferred_transfer->transfer.sender.pubkey, sender_pubkey, ED25519_PUBLIC_KEY_SIZE);
   gradido_deferred_transfer->transfer.sender.amount = amount;
-  memcpy(gradido_deferred_transfer->transfer.sender.community_uuid, community_uuid, UUID_BINARY_SIZE);
+  memcpy(
+      gradido_deferred_transfer->transfer.sender.community_uuid, community_uuid, UUID_BINARY_SIZE
+  );
   memcpy(gradido_deferred_transfer->transfer.recipient, recipient_pubkey, ED25519_PUBLIC_KEY_SIZE);
   gradido_deferred_transfer->timeout_duration = timeout_duration;
 }
@@ -83,10 +85,19 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
   }
   gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr =
       deferred_transfer_transaction_nr;
-  memcpy(gradido_redeem_deferred_transfer->transfer.sender.pubkey, sender_pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(
+      gradido_redeem_deferred_transfer->transfer.sender.pubkey, sender_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
   gradido_redeem_deferred_transfer->transfer.sender.amount = amount;
-  memcpy(gradido_redeem_deferred_transfer->transfer.sender.community_uuid, community_uuid, UUID_BINARY_SIZE);
-  memcpy(gradido_redeem_deferred_transfer->transfer.recipient, recipient_pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(
+      gradido_redeem_deferred_transfer->transfer.sender.community_uuid, community_uuid,
+      UUID_BINARY_SIZE
+  );
+  memcpy(
+      gradido_redeem_deferred_transfer->transfer.recipient, recipient_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
 }
 
 void grdw_gradido_timeout_deferred_transfer_assemble(

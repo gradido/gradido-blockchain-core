@@ -11,6 +11,24 @@ FetchContent_Declare(
   URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
 )
 
+if (NOT USE_SODIUM)
+  add_compile_definitions(USE_SODIUM)
+  set(SODIUM_DISABLE_TESTS ON)
+  if(USE_INSTALLED_SODIUM)
+  	find_package(Sodium REQUIRED)
+  	message(STATUS "Using installed Sodium library")
+  else()
+  	message(STATUS "Fetch Sodium library from GitHub")
+  	# Update the commit to point to whatever libsodium-cmake-commit you want to target.
+  	FetchContent_Declare(Sodium
+  			GIT_REPOSITORY https://github.com/robinlinden/libsodium-cmake.git
+  			GIT_TAG e5b985ad0dd235d8c4307ea3a385b45e76c74c6a # HEAD, last updated at 2025-04-13
+  	)
+  	FetchContent_MakeAvailable(Sodium)
+  endif()
+  add_definitions(-DSODIUM_STATIC)
+endif()
+
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
@@ -21,6 +39,9 @@ target_link_libraries(test_duration gradido_blockchain_core GTest::gtest_main)
 
 add_executable(test_converter src/test_converter.cpp)
 target_link_libraries(test_converter gradido_blockchain_core GTest::gtest_main sodium)
+
+add_executable(test_crypto src/test_crypto.cpp src/utils.cpp)
+target_link_libraries(test_crypto gradido_blockchain_core GTest::gtest_main sodium)
 
 add_executable(test_memory src/test_memory.cpp)
 target_link_libraries(test_memory gradido_blockchain_core GTest::gtest_main)

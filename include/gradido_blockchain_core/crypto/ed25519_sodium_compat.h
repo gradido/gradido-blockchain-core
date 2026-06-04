@@ -19,20 +19,20 @@ extern "C" {
 #endif
 
 static_assert(
-  ED25519_PUBLIC_KEY_SIZE == crypto_sign_PUBLICKEYBYTES,
-  "sodium sign public key size don't match ed25519 public key size"
+    ED25519_PUBLIC_KEY_SIZE == crypto_sign_PUBLICKEYBYTES,
+    "sodium sign public key size don't match ed25519 public key size"
 );
 static_assert(
-  ED25519_SEED_SIZE == crypto_sign_SEEDBYTES,
-  "sodium sign seed size don't match ed25519 seed size"
+    ED25519_SEED_SIZE == crypto_sign_SEEDBYTES,
+    "sodium sign seed size don't match ed25519 seed size"
 );
 static_assert(
-  ED25519_PRIVATE_KEY_SIZE == crypto_sign_SECRETKEYBYTES,
-  "sodium sign private key size don't match ed25519 private key size"
+    ED25519_PRIVATE_KEY_SIZE == crypto_sign_SECRETKEYBYTES,
+    "sodium sign private key size don't match ed25519 private key size"
 );
 static_assert(
-  ED25519_SIGNATURE_SIZE == crypto_sign_BYTES,
-  "sodium sign signature size don't match ed25519 signature size"
+    ED25519_SIGNATURE_SIZE == crypto_sign_BYTES,
+    "sodium sign signature size don't match ed25519 signature size"
 );
 
 #pragma warning(pop)
