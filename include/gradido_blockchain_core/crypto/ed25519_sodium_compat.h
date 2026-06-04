@@ -1,15 +1,17 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_CRYPTO_ED25519_SODIUM_COMPAT_H
 #define GRADIDO_BLOCKCHAIN_CORE_CRYPTO_ED25519_SODIUM_COMPAT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef USE_SODIUM
+
 #include "gradido_blockchain_core/const.h"
 
 #include "sodium.h"
 
 #include <assert.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*
  * C11 static assert fallback safety
@@ -35,7 +37,7 @@ static_assert(
     "sodium sign signature size don't match ed25519 signature size"
 );
 
-#pragma warning(pop)
+#endif // USE_SODIUM
 
 #ifdef __cplusplus
 }

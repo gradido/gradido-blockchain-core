@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+#ifdef USE_SODIUM
+
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
 
@@ -52,6 +54,8 @@ grd_result ed25519_key_pair_slip10_derive_account_child_key_full(
     const uint8_t user_uuid[UUID_BINARY_SIZE],
     const uint32_t account_index
 );
+
+#endif // USE_SODIUM
 
 #ifdef __cplusplus
 }

@@ -27,12 +27,73 @@ fn addDirSources(
     }
 }
 
+const BuildTarget = struct {
+    name: []const u8,
+    src: []const []const u8,
+    use_sodium: bool = false,
+};
+
+fn processBuildTargets(
+  b: *std.Build,
+  target: std.Build.ResolvedTarget,
+  optimize: std.builtin.OptimizeMode,
+  lib: *std.Build.Step.Compile,
+  targets: []const BuildTarget,
+  path: []const u8
+) void {
+    const googletest_dep = b.lazyDependency("googletest", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sodium_dep = b.lazyDependency("libsodium", .{
+        .target = target,
+        .optimize = optimize,
+        .static = true,
+        .shared = false,
+    });
+
+    for (targets) |tt| {
+        const exe = b.addExecutable(.{
+            .name = tt.name,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        exe.linkLibrary(lib);
+
+        if (googletest_dep) |dep| {
+            exe.linkLibrary(dep.artifact("gtest"));
+            exe.linkLibrary(dep.artifact("gtest_main"));
+        }
+        if (tt.use_sodium) {
+          exe.root_module.addCMacro("USE_SODIUM", "1");
+          if (sodium_dep) |dep| {
+              exe.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+          }
+        }
+
+        exe.addIncludePath(b.path("include"));
+        exe.addIncludePath(b.path("third_party"));
+
+        for (tt.src) |src_file| {
+            exe.addCSourceFiles(.{
+                .files = &.{ b.fmt("{s}/{s}", .{ path, src_file}) },
+            });
+        }
+
+        b.installArtifact(exe);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const enable_benchmarks = b.option(bool, "benchmarks", "Enable benchmarks") orelse false;
     const enable_tests = b.option(bool, "tests", "Enable tests") orelse false;
+    const enable_sodium = b.option(bool, "sodium", "Enable sodium and crypto") orelse false;
 
     const lib = b.addLibrary(.{
         .name = "gradido_blockchain_core",
@@ -42,6 +103,17 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    if (enable_sodium) {
+      lib.root_module.addCMacro("USE_SODIUM", "1");
+      if (b.lazyDependency("libsodium", .{
+          .target = target,
+          .optimize = optimize,
+          .static = true,
+          .shared = false,
+      })) |dep| {
+          lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+      }
+    }
 
     lib.linkLibC();
 
@@ -55,131 +127,32 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
-    if (enable_benchmarks) {
-        const bench = b.addExecutable(.{ .name = "bench_numberToString", .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }) });
-
-        bench.linkLibrary(lib);
-        bench.addIncludePath(b.path("include"));
-        bench.addIncludePath(b.path("third_party"));
-
-        bench.addCSourceFiles(.{
-            .files = &.{"benchmarks/src/bench_numberToString.c"},
-        });
-
-        b.installArtifact(bench);
+    if (enable_benchmarks and enable_sodium) {
+        const path = "benchmarks/src";
+        const bench_targets = [_]BuildTarget {
+          .{ .name = "bench_numberToString", .src = &.{"bench_numberToString.c"}, .use_sodium = true },
+          .{ .name = "bench_crypto", .src = &.{"bench_crypto.c"}, .use_sodium = true }
+        };
+        processBuildTargets(b, target, optimize, lib, &bench_targets, path);
     }
 
     if (enable_tests) {
-        const googletest_dep = b.lazyDependency("googletest", .{
-            .target = target,
-            .optimize = optimize,
-        });
+        const path = "tests/unit/src";
+        var test_targets: std.ArrayList(BuildTarget) = .{};
+        test_targets.appendSlice(b.allocator, &[_]BuildTarget{
+            .{ .name = "test_converter", .src = &.{"test_converter.cpp"} },
+            .{ .name = "test_duration", .src = &.{"test_duration.cpp"} },
+            .{ .name = "test_memory", .src = &.{"test_memory.cpp"} },
+            .{ .name = "test_unit", .src = &.{"test_unit.cpp"} },
+        }) catch @panic("test targets array add failed");
 
-        const test_targets = [_]struct {
-            name: []const u8,
-            src: []const u8,
-        }{
-            .{ .name = "test_converter", .src = "tests/unit/src/test_converter.cpp" },
-            .{ .name = "test_duration", .src = "tests/unit/src/test_duration.cpp" },
-            .{ .name = "test_memory", .src = "tests/unit/src/test_memory.cpp" },
-            .{ .name = "test_unit", .src = "tests/unit/src/test_unit.cpp" },
-        };
-        for (test_targets) |tt| {
-            const exe = b.addExecutable(.{
-                .name = tt.name,
-                .root_module = b.createModule(.{
-                    .target = target,
-                    .optimize = optimize,
-                }),
-            });
-
-            exe.linkLibrary(lib);
-
-            if (googletest_dep) |dep| {
-                exe.linkLibrary(dep.artifact("gtest"));
-                exe.linkLibrary(dep.artifact("gtest_main"));
-            }
-
-            exe.addIncludePath(b.path("include"));
-            exe.addIncludePath(b.path("third_party"));
-
-            exe.addCSourceFiles(.{
-                .files = &.{tt.src},
-            });
-
-            b.installArtifact(exe);
+        if (enable_sodium) {
+            test_targets.appendSlice(b.allocator, &[_]BuildTarget{
+                .{ .name = "test_crypto", .src = &.{"test_crypto.cpp", "utils.cpp"}, .use_sodium = true },
+                .{ .name = "test_pbtools", .src = &.{"test_pbtools.cpp", "key_pairs.cpp"}, .use_sodium = true },
+                .{ .name = "test_runtime", .src = &.{"test_runtime.cpp", "key_pairs.cpp"}, .use_sodium = true },
+            }) catch @panic("test targets array add failed");
         }
-        // test_pbtools
-        const test_pbtools = b.addExecutable(.{
-            .name = "test_pbtools",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-
-        test_pbtools.linkLibrary(lib);
-        if (b.lazyDependency("libsodium", .{
-            .target = target,
-            .optimize = optimize,
-            .static = true,
-            .shared = false,
-        })) |dep| {
-            test_pbtools.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-        }
-        if (googletest_dep) |dep| {
-            test_pbtools.linkLibrary(dep.artifact("gtest"));
-            test_pbtools.linkLibrary(dep.artifact("gtest_main"));
-        }
-
-        test_pbtools.addIncludePath(b.path("include"));
-        test_pbtools.addIncludePath(b.path("third_party"));
-
-        test_pbtools.addCSourceFiles(.{
-            .files = &.{
-                "tests/unit/src/test_pbtools.cpp",
-                "tests/unit/src/key_pairs.cpp",
-            },
-        });
-
-        b.installArtifact(test_pbtools);
-
-        // test_runtime
-        const test_runtime = b.addExecutable(.{
-            .name = "test_runtime",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
-
-        test_runtime.linkLibrary(lib);
-        if (b.lazyDependency("libsodium", .{
-            .target = target,
-            .optimize = optimize,
-            .static = true,
-            .shared = false,
-        })) |dep| {
-            test_runtime.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-        }
-        if (googletest_dep) |dep| {
-            test_runtime.linkLibrary(dep.artifact("gtest"));
-            test_runtime.linkLibrary(dep.artifact("gtest_main"));
-        }
-
-        test_runtime.addIncludePath(b.path("include"));
-        test_runtime.addIncludePath(b.path("third_party"));
-
-        test_runtime.addCSourceFiles(.{
-            .files = &.{
-                "tests/unit/src/test_runtime.cpp",
-                "tests/unit/src/key_pairs.cpp",
-            },
-        });
-
-        b.installArtifact(test_runtime);
+        processBuildTargets(b, target, optimize, lib, test_targets.items, path);
     }
 }
