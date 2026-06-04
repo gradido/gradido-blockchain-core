@@ -85,9 +85,33 @@ static void test_unit_round(int stepCount)
 static void test_calculate_decay(int stepCount)
 {
     for (int i = 0; i < stepCount; ++i) {
-        grdd_unit_calculate_decay(getNextTestValue(), getNextTestValue() % 31556952 * 10);
+        grdd_unit_calculate_decay(abs((int64_t)getNextTestValue()), getNextTestValue() % 31556952 * 10);
     }
 }
+
+#ifdef USE_SODIUM
+#include "sodium.h"
+
+static void test_uuid_from_string(int stepCount)
+{
+  const char expected[] = "48066a47-a02f-4596-883c-302c2b1aa1e1";
+  int8_t uuid[16];
+  for (int i = 0; i < stepCount; ++i) {
+    grdu_uuid_from_string(uuid, expected);
+  }
+}
+
+static void test_uuid_to_string(int stepCount)
+{
+  char buffer[37];
+  for (int i = 0; i < stepCount; ++i) {
+    uint64_t uuid[2] = {getNextTestValue(), getNextTestValue()};
+    grdu_uuid_to_string(buffer, (uint8_t*)uuid);
+  }
+}
+
+
+#endif //USE_SODIUM
 
 static void test_r128_round(int stepCount)
 {
@@ -149,6 +173,10 @@ int main(void)
   bench_step(test_unit_round, stepCount, "unit round");
   bench_step(test_r128_round, stepCount, "r128 round");
   bench_step(test_calculate_decay, stepCount, "calculate decay");
+#ifdef USE_SODIUM
+  bench_step(test_uuid_from_string, stepCount, "uuid from string");
+  bench_step(test_uuid_to_string, stepCount, "uuid to string");
+#endif // USE_SODIUM
 
   grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
   printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);

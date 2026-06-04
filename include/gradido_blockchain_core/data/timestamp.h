@@ -32,8 +32,8 @@ static inline bool grdd_timestamp_lt(const grdd_timestamp *t1, const grdd_timest
   return t1->seconds < t2->seconds || t1->seconds == t2->seconds && t1->nanos < t2->nanos;
 }
 
-grdd_timestamp grdd_timestamp_minus(const grdd_timestamp *t1, grdd_timestamp *t2);
-grdd_timestamp grdd_timestamp_plus(const grdd_timestamp *t1, grdd_timestamp *t2);
+grdd_timestamp grdd_timestamp_minus(const grdd_timestamp *t1, const grdd_timestamp *t2);
+grdd_timestamp grdd_timestamp_plus(const grdd_timestamp *t1, const grdd_timestamp *t2);
 
 static inline grdd_timestamp grdd_timestamp_from_seconds(int64_t seconds) {
   grdd_timestamp timestamp;

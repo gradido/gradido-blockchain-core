@@ -1,4 +1,12 @@
 #include "gradido_blockchain_core/utils/converter.h"
+#include "gradido_blockchain_core/result.h"
+
+#ifdef USE_SODIUM
+#include "sodium.h"
+#endif // USE_SODIUM
+
+#include <assert.h>
+#include <string.h>
 
 /**
  * @brief Compute the number of decimal digits of a uint64_t value.
@@ -47,6 +55,14 @@ size_t grdu_uint64_to_string_size(uint64_t v) {
   }
 
   return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
+}
+
+size_t grdu_int64_to_string_size(int64_t v) {
+  if (v >= 0) {
+    return grdu_uint64_to_string_size((uint64_t)v);
+  } else {
+    return grdu_uint64_to_string_size((uint64_t)(v * -1)) + 1;
+  }
 }
 
 size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize) {
@@ -102,6 +118,15 @@ size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, siz
   return len; // return number of characters written, not counting null terminator
 }
 
+size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_t stringSize) {
+  if (value >= 0) {
+    return grdu_uint64_to_string_known_string_size(buffer, (uint64_t)value, stringSize);
+  } else {
+    buffer[0] = '-';
+    return grdu_uint64_to_string_known_string_size(&buffer[1], (uint64_t)(value * -1), stringSize) +
+           1;
+  }
+}
 // for easy use, one call
 
 size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
@@ -113,3 +138,79 @@ size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
   }
   return grdu_uint64_to_string_known_string_size(buffer, value, requiredSize);
 }
+
+size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value) {
+  size_t requiredSize = grdu_int64_to_string_size(value);
+  if (bufferSize < requiredSize + 1) {
+    // better safe then sorry
+    if (bufferSize) { buffer[0] = '\0'; }
+    return requiredSize; // return required size without null terminator
+  }
+  return grdu_int64_to_string_known_string_size(buffer, value, requiredSize);
+}
+
+#ifdef USE_SODIUM
+
+void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[16]) {
+  char hex[33];
+  sodium_bin2hex(hex, sizeof(hex), uuid, 16);
+  memcpy(result_buffer, hex, 8);
+  result_buffer[8] = '-';
+  memcpy(result_buffer + 9, hex + 8, 4);
+  result_buffer[13] = '-';
+  memcpy(result_buffer + 14, hex + 12, 4);
+  result_buffer[18] = '-';
+  memcpy(result_buffer + 19, hex + 16, 4);
+  result_buffer[23] = '-';
+  memcpy(result_buffer + 24, hex + 20, 12);
+  result_buffer[36] = '\0';
+}
+
+/*
+grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
+  if (!uuid || !uuid_string) { return GRD_ERROR_NULL_POINTER; }
+  if (strlen(uuid_string) != 36) { return GRD_ERROR_INVALID_PARAM; }
+
+  char hex[33];
+  memcpy(hex, uuid_string, 8);
+  memcpy(hex + 8, uuid_string + 9, 4);
+  memcpy(hex + 12, uuid_string + 14, 4);
+  memcpy(hex + 16, uuid_string + 19, 4);
+  memcpy(hex + 20, uuid_string + 24, 12);
+  hex[32] = '\0';
+
+  size_t bin_len = 0;
+  if (sodium_hex2bin(uuid, 16, hex, 32, NULL, &bin_len, NULL) != 0) {
+    return GRD_ERROR_ENCODE_FAILED;
+  }
+  if (bin_len != 16) { return GRD_ERROR_INVALID_PARAM; }
+  return GRD_SUCCESS;
+}
+*/
+// faster as memcpy uuid parts to get rid of - or as using sodium_hex2bin ignore chars
+grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
+  if (!uuid || !uuid_string) return GRD_ERROR_NULL_POINTER;
+  if (strlen(uuid_string) != 36) return GRD_ERROR_INVALID_PARAM;
+
+  static const uint8_t hex_lookup[256] = {
+      ['0'] = 0,  ['1'] = 1,  ['2'] = 2,  ['3'] = 3,  ['4'] = 4,  ['5'] = 5,
+      ['6'] = 6,  ['7'] = 7,  ['8'] = 8,  ['9'] = 9,  ['a'] = 10, ['b'] = 11,
+      ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15, ['A'] = 10, ['B'] = 11,
+      ['C'] = 12, ['D'] = 13, ['E'] = 14, ['F'] = 15,
+  };
+
+  size_t j = 0;
+  for (size_t i = 0; i < 36; i++) {
+    if (uuid_string[i] == '-') continue;
+    uint8_t hi = hex_lookup[(unsigned char)uuid_string[i]];
+    if (hi == 0 && uuid_string[i] != '0') { return GRD_ERROR_ENCODE_FAILED; }
+    ++i;
+    uint8_t lo = hex_lookup[(unsigned char)uuid_string[i]];
+    if (lo == 0 && uuid_string[i] != '0') { return GRD_ERROR_ENCODE_FAILED; }
+    if (hi == 0 && lo == 0 && uuid_string[i - 1] != '0') continue;
+    uuid[j++] = (hi << 4) | lo;
+  }
+
+  return GRD_SUCCESS;
+}
+#endif // USE_SODIUM

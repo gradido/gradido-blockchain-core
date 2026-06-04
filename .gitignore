@@ -61,3 +61,5 @@ doc
 # zig
 .zig-cache
 zig-out
+
+html

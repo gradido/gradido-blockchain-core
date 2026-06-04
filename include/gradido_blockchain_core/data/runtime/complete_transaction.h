@@ -3,6 +3,7 @@
 
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/types.h"
+#include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
@@ -96,10 +97,41 @@ typedef struct grdr_complete_transaction {
 
 } grdr_complete_transaction;
 
+typedef struct grdr_transaction_party grdr_transaction_party;
+
 // will set everything to null
 void grdr_complete_transaction_init(grdr_complete_transaction *tx);
 // will release memory and call init to set everything to null
 void grdr_complete_transaction_release(grdr_complete_transaction *tx);
+
+const grdw_account_balance *grdr_complete_transaction_get_account_balance_for_public_key(
+    const grdr_complete_transaction *tx, const uint8_t public_key[32]
+);
+/**
+ * @param return: pointer to 16 Byte Array with uuid or NULL
+ */
+const uint8_t *grdr_complete_transaction_get_sender_community_uuid(
+    const grdr_complete_transaction *tx
+);
+
+/**
+ * @param return: pointer to 16 Byte Array with uuid or NULL
+ */
+const uint8_t *grdr_complete_transaction_get_recipient_community_uuid(
+    const grdr_complete_transaction *tx
+);
+
+/**
+ * @param return: pointer to 32 Byte Array with public key or NULL
+ */
+const uint8_t *grdr_complete_transaction_get_sender_public_key(const grdr_complete_transaction *tx);
+
+/**
+ * @param return: pointer to 32 Byte Array with public key or NULL
+ */
+const uint8_t *grdr_complete_transaction_get_recipient_public_key(
+    const grdr_complete_transaction *tx
+);
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,7 @@
 #include "key_pairs.h"
 
 #include <sodium.h>
+#include <string.h>
 
 #include <array>
 
