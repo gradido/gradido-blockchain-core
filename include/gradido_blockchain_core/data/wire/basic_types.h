@@ -1,6 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 
+#include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/memo_key.h"
 
@@ -33,9 +34,9 @@ extern "C" {
  * 16-byte UUID of the community where the gdd where created.
  */
 typedef struct grdw_account_balance {
-  uint8_t pubkey[32];
+  uint8_t pubkey[ED25519_PUBLIC_KEY_SIZE];
   int64_t balance;
-  uint8_t community_uuid[16];
+  uint8_t community_uuid[UUID_BINARY_SIZE];
 } grdw_account_balance;
 
 /**
@@ -70,8 +71,8 @@ typedef struct grdw_encrypted_memo {
  * 64-byte Ed25519 signature over the signed data.
  */
 typedef struct grdw_signature_pair {
-  uint8_t public_key[32];
-  uint8_t signature[64];
+  uint8_t public_key[ED25519_PUBLIC_KEY_SIZE];
+  uint8_t signature[ED25519_SIGNATURE_SIZE];
 } grdw_signature_pair;
 
 /**
@@ -104,9 +105,9 @@ typedef struct grdw_timestamp_seconds {
  * 16-byte UUID of the community where the gdd where created.
  */
 typedef struct grdw_transfer_amount {
-  uint8_t pubkey[32];
+  uint8_t pubkey[ED25519_PUBLIC_KEY_SIZE];
   int64_t amount;
-  uint8_t community_uuid[16];
+  uint8_t community_uuid[UUID_BINARY_SIZE];
 } grdw_transfer_amount;
 
 /** @} */

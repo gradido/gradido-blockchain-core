@@ -17,7 +17,7 @@ static size_t calculate_memory_size(
     result += ALIGN8(body->memos_count * sizeof(grdw_encrypted_memo));
     for (int i = 0; i < body->memos_count; ++i) { result += ALIGN8(body->memos[i].memo.size); }
   }
-  if (body->other_community_uuid) { result += 16; }
+  if (body->other_community_uuid) { result += UUID_BINARY_SIZE; }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
   result += ALIGN8(transaction->sig_map_count * sizeof(grdw_signature_pair));
 
@@ -30,15 +30,15 @@ static size_t calculate_memory_size(
 
 static void copy_transfer(grdr_complete_transaction *tx, const grdw_gradido_transfer *transfer_tx) {
   if (!tx || !transfer_tx) { return; }
-  memcpy(tx->transfer.sender_pubkey, transfer_tx->sender.pubkey, 32);
-  memcpy(tx->transfer.recipient_pubkey, transfer_tx->recipient, 32);
+  memcpy(tx->transfer.sender_pubkey, transfer_tx->sender.pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(tx->transfer.recipient_pubkey, transfer_tx->recipient, ED25519_PUBLIC_KEY_SIZE);
   tx->transfer.amount = transfer_tx->sender.amount;
-  memcpy(tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, 16);
+  memcpy(tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, UUID_BINARY_SIZE);
 }
 
 static void copy_creation(grdr_complete_transaction *tx, const grdw_gradido_creation *creation_tx) {
   if (!tx || !creation_tx) { return; }
-  memcpy(tx->transfer.recipient_pubkey, creation_tx->recipient.pubkey, 32);
+  memcpy(tx->transfer.recipient_pubkey, creation_tx->recipient.pubkey, ED25519_PUBLIC_KEY_SIZE);
   tx->transfer.amount = creation_tx->recipient.amount;
   tx->target_date = creation_tx->target_date.seconds;
 }
@@ -47,9 +47,15 @@ static void copy_register_address(
     grdr_complete_transaction *tx, const grdw_register_address *register_address_tx
 ) {
   if (!tx || !register_address_tx) { return; }
-  memcpy(tx->register_address.user_public_key, register_address_tx->user_pubkey, 32);
-  memcpy(tx->register_address.name_hash, register_address_tx->name_hash, 32);
-  memcpy(tx->register_address.account_public_key, register_address_tx->account_pubkey, 32);
+  memcpy(
+      tx->register_address.user_public_key, register_address_tx->user_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
+  memcpy(tx->register_address.name_hash, register_address_tx->name_hash, BLAKE2B_HASH_SIZE);
+  memcpy(
+      tx->register_address.account_public_key, register_address_tx->account_pubkey,
+      ED25519_PUBLIC_KEY_SIZE
+  );
   tx->address_type = register_address_tx->address_type;
   tx->derivation_index = register_address_tx->derivation_index;
 }
@@ -83,16 +89,16 @@ static void copy_community_root(
     grdr_complete_transaction *tx, const grdw_community_root *community_root
 ) {
   if (!tx || !community_root) { return; }
-  memcpy(tx->community_root.public_key, community_root->pubkey, 32);
-  memcpy(tx->community_root.gmw_public_key, community_root->gmw_pubkey, 32);
-  memcpy(tx->community_root.auf_public_key, community_root->auf_pubkey, 32);
+  memcpy(tx->community_root.public_key, community_root->pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(tx->community_root.gmw_public_key, community_root->gmw_pubkey, ED25519_PUBLIC_KEY_SIZE);
+  memcpy(tx->community_root.auf_public_key, community_root->auf_pubkey, ED25519_PUBLIC_KEY_SIZE);
 }
 
 grd_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const struct grdw_transaction_body *body,
     const struct grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[16]
+    const uint8_t community_uuid[UUID_BINARY_SIZE]
 ) {
   if (!tx || !confirmed_tx) { return GRD_ERROR_NULL_POINTER; }
   grdr_complete_transaction_release(tx);
@@ -101,7 +107,7 @@ grd_result grdm_complete_transaction_from_wire(
   tx->tx_nr = confirmed_tx->id;
   tx->confirmed_at = confirmed_tx->confirmed_at;
   tx->created_at = body->created_at;
-  memcpy(tx->tx_community_uuid, community_uuid, 16);
+  memcpy(tx->tx_community_uuid, community_uuid, UUID_BINARY_SIZE);
   tx->ledger_anchor = confirmed_tx->ledger_anchor;
 
   // sorted by expected frequency of occurrence
@@ -133,7 +139,7 @@ grd_result grdm_complete_transaction_from_wire(
 
   tx->transaction_type = body->transaction_type;
   tx->balance_derivation_type = confirmed_tx->balance_derivation;
-  memcpy(tx->tx_running_hash, confirmed_tx->running_hash, 32);
+  memcpy(tx->tx_running_hash, confirmed_tx->running_hash, BLAKE2B_HASH_SIZE);
 
   grd_result result = GRD_SUCCESS;
   // arrays
@@ -175,7 +181,8 @@ grd_result grdm_complete_transaction_from_wire(
 
   if (body->other_community_uuid) {
     result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, &tx->memory_area, 16
+        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, &tx->memory_area,
+        UUID_BINARY_SIZE
     );
     if (GRD_SUCCESS != result) { return result; }
   }

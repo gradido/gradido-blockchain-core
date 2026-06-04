@@ -15,10 +15,7 @@ option(USE_SODIUM "Enable use of libsodium" OFF)
 option(USE_INSTALLED_SODIUM "Link against already installed sodium lib if USE_SODIUM was also set to On" OFF)
 
 include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
-)
+
 if (USE_SODIUM)
   add_compile_definitions(USE_SODIUM)
   set(SODIUM_DISABLE_TESTS ON)
@@ -37,6 +34,9 @@ if (USE_SODIUM)
   add_definitions(-DSODIUM_STATIC)
 endif()
 
+if (USE_SODIUM)
+FILE(GLOB CRYPTO "src/crypto/*.c" "include/gradido_blockchain_core/crypto/*.h")
+endif()
 FILE(GLOB DATA "src/data/*.c" "include/gradido_blockchain_core/data/*.h")
 FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_blockchain_core/data/proto/gradido/*.h")
 FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
@@ -63,6 +63,10 @@ set(GRADIDO_BLOCKCHAIN_CORE_SRC
   ${UTILS}
 )
 
+if (USE_SODIUM)
+set(GRADIDO_BLOCKCHAIN_CORE_SRC ${GRADIDO_BLOCKCHAIN_CORE_SRC} ${CRYPTO})
+endif()
+
 # Third Party
 FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
 FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
@@ -70,6 +74,9 @@ FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
 set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128})
 
 if(MSVC)
+if (USE_SODIUM)
+    source_group("crypto" FILES ${CRYPTO})
+endif()
     source_group("data/proto/gradido" FILES ${DATA_PROTO_GRADIDO} )
     source_group("data/runtime" FILES  ${DATA_RUNTIME} )
     source_group("data/wire" FILES ${DATA_WIRE} )
