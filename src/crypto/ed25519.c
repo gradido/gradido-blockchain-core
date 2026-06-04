@@ -1,3 +1,5 @@
+#ifdef USE_SODIUM
+
 #include "gradido_blockchain_core/crypto/ed25519.h"
 // make sure sodium expected key and seed size wasn't changed
 #include "gradido_blockchain_core/crypto/ed25519_sodium_compat.h"
@@ -136,3 +138,5 @@ grd_result ed25519_key_pair_slip10_derive_account_child_key_full(
   );
   return result;
 }
+
+#endif //USE_SODIUM

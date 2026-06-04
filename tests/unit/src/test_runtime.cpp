@@ -76,6 +76,7 @@ TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
       grdw_transaction_body_decode(&body, &confirmed_tx.transaction.body_bytes, &mem), GRD_SUCCESS
   );
   grdr_complete_transaction tx;
+  grdr_complete_transaction_init(&tx);
   ASSERT_EQ(
       grdm_complete_transaction_from_wire(&tx, &body, &confirmed_tx, community_uuid), GRD_SUCCESS
   );
