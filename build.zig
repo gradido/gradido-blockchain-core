@@ -27,132 +27,132 @@ fn addDirSources(
     }
 }
 
-const BuildTarget = struct {
-    name: []const u8,
-    src: []const []const u8,
-    use_sodium: bool = false,
+const BuildContext = struct {
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    core_lib: *std.Build.Step.Compile,
+    googletest_dep: ?*std.Build.Dependency,
+    sodium_dep: ?*std.Build.Dependency,
 };
 
-fn processBuildTargets(
-  b: *std.Build,
-  target: std.Build.ResolvedTarget,
-  optimize: std.builtin.OptimizeMode,
-  lib: *std.Build.Step.Compile,
-  targets: []const BuildTarget,
-  path: []const u8
-) void {
-    const googletest_dep = b.lazyDependency("googletest", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const sodium_dep = b.lazyDependency("libsodium", .{
-        .target = target,
-        .optimize = optimize,
-        .static = true,
-        .shared = false,
+const BuildTarget = struct {
+    link_googletest: bool = false,
+    link_sodium: bool = false,
+    name: []const u8,
+    srcs: []const []const u8,
+};
+
+fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, path: []const u8) void {
+    const b = context.b;
+    const exe = b.addExecutable(.{
+        .name = build_target.name,
+        .root_module = b.createModule(.{
+            .target = context.target,
+            .optimize = context.optimize,
+        }),
     });
 
-    for (targets) |tt| {
-        const exe = b.addExecutable(.{
-            .name = tt.name,
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-            }),
-        });
+    exe.linkLibrary(context.core_lib);
 
-        exe.linkLibrary(lib);
-
-        if (googletest_dep) |dep| {
+    if (build_target.link_googletest) {
+        if (context.googletest_dep) |dep| {
             exe.linkLibrary(dep.artifact("gtest"));
             exe.linkLibrary(dep.artifact("gtest_main"));
         }
-        if (tt.use_sodium) {
-          exe.root_module.addCMacro("USE_SODIUM", "1");
-          if (sodium_dep) |dep| {
-              exe.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-          }
-        }
-
-        exe.addIncludePath(b.path("include"));
-        exe.addIncludePath(b.path("third_party"));
-
-        for (tt.src) |src_file| {
-            exe.addCSourceFiles(.{
-                .files = &.{ b.fmt("{s}/{s}", .{ path, src_file}) },
-            });
-        }
-
-        b.installArtifact(exe);
     }
+    if (build_target.link_sodium) {
+        exe.root_module.addCMacro("USE_SODIUM", "1");
+        if (context.sodium_dep) |dep| {
+            exe.linkLibrary(dep.artifact(if (context.target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+        }
+    }
+
+    exe.addIncludePath(b.path("include"));
+    exe.addIncludePath(b.path("third_party"));
+
+    for (build_target.srcs) |src_file| {
+        exe.addCSourceFiles(.{
+            .files = &.{b.fmt("{s}/{s}", .{ path, src_file })},
+        });
+    }
+
+    b.installArtifact(exe);
 }
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
     const enable_benchmarks = b.option(bool, "benchmarks", "Enable benchmarks") orelse false;
     const enable_tests = b.option(bool, "tests", "Enable tests") orelse false;
     const enable_sodium = b.option(bool, "sodium", "Enable sodium and crypto") orelse false;
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+    const core_lib = b.addLibrary(.{ .name = "gradido_blockchain_core", .linkage = .static, .root_module = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+    }) });
 
-    const lib = b.addLibrary(.{
-        .name = "gradido_blockchain_core",
-        .linkage = .static,
-        .root_module = b.createModule(.{
+    const context: BuildContext = .{
+        .b = b,
+        .target = target,
+        .optimize = optimize,
+        .core_lib = core_lib,
+        .googletest_dep = b.lazyDependency("googletest", .{
             .target = target,
             .optimize = optimize,
         }),
-    });
+        .sodium_dep = b.lazyDependency("libsodium", .{
+            .target = target,
+            .optimize = optimize,
+            .static = true,
+            .shared = false,
+        }),
+    };
+
     if (enable_sodium) {
-      lib.root_module.addCMacro("USE_SODIUM", "1");
-      if (b.lazyDependency("libsodium", .{
-          .target = target,
-          .optimize = optimize,
-          .static = true,
-          .shared = false,
-      })) |dep| {
-          lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-      }
+        core_lib.root_module.addCMacro("USE_SODIUM", "1");
+        if (b.lazyDependency("libsodium", .{
+            .target = target,
+            .optimize = optimize,
+            .static = true,
+            .shared = false,
+        })) |dep| {
+            core_lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+        }
     }
 
-    lib.linkLibC();
+    core_lib.linkLibC();
 
-    lib.addIncludePath(b.path("include"));
-    lib.addIncludePath(b.path("include/gradido_blockchain_core/data/proto/gradido"));
-    lib.addIncludePath(b.path("third_party"));
-    lib.addIncludePath(b.path("third_party/pbtools"));
+    core_lib.addIncludePath(b.path("include"));
+    core_lib.addIncludePath(b.path("include/gradido_blockchain_core/data/proto/gradido"));
+    core_lib.addIncludePath(b.path("third_party"));
+    core_lib.addIncludePath(b.path("third_party/pbtools"));
 
-    addDirSources(lib, b, "src");
-    addDirSources(lib, b, "third_party");
+    addDirSources(core_lib, b, "src");
+    addDirSources(core_lib, b, "third_party");
 
-    b.installArtifact(lib);
+    b.installArtifact(core_lib);
 
     if (enable_benchmarks and enable_sodium) {
         const path = "benchmarks/src";
-        const bench_targets = [_]BuildTarget {
-          .{ .name = "bench_numberToString", .src = &.{"bench_numberToString.c"}, .use_sodium = true },
-          .{ .name = "bench_crypto", .src = &.{"bench_crypto.c"}, .use_sodium = true }
-        };
-        processBuildTargets(b, target, optimize, lib, &bench_targets, path);
+        processBuildTarget(&context, .{
+            .link_googletest = false,
+            .link_sodium = true,
+            .name = "bench_numberToString",
+            .srcs = &.{"bench_numberToString.c"},
+        }, path);
+        processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_crypto", .srcs = &.{"bench_crypto.c"} }, path);
     }
 
     if (enable_tests) {
         const path = "tests/unit/src";
-        var test_targets: std.ArrayList(BuildTarget) = .{};
-        test_targets.appendSlice(b.allocator, &[_]BuildTarget{
-            .{ .name = "test_converter", .src = &.{"test_converter.cpp"} },
-            .{ .name = "test_duration", .src = &.{"test_duration.cpp"} },
-            .{ .name = "test_memory", .src = &.{"test_memory.cpp"} },
-            .{ .name = "test_unit", .src = &.{"test_unit.cpp"} },
-        }) catch @panic("test targets array add failed");
-
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_duration", .srcs = &.{"test_duration.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_memory", .srcs = &.{"test_memory.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);
         if (enable_sodium) {
-            test_targets.appendSlice(b.allocator, &[_]BuildTarget{
-                .{ .name = "test_crypto", .src = &.{"test_crypto.cpp", "utils.cpp"}, .use_sodium = true },
-                .{ .name = "test_pbtools", .src = &.{"test_pbtools.cpp", "key_pairs.cpp"}, .use_sodium = true },
-                .{ .name = "test_runtime", .src = &.{"test_runtime.cpp", "key_pairs.cpp"}, .use_sodium = true },
-            }) catch @panic("test targets array add failed");
+            processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_crypto", .srcs = &.{ "test_crypto.cpp", "utils.cpp" } }, path);
+            processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_pbtools", .srcs = &.{ "test_pbtools.cpp", "key_pairs.cpp" } }, path);
+            processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_runtime", .srcs = &.{ "test_runtime.cpp", "key_pairs.cpp" } }, path);
         }
-        processBuildTargets(b, target, optimize, lib, test_targets.items, path);
     }
 }

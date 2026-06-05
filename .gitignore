@@ -63,3 +63,5 @@ doc
 zig-out
 
 html
+compile_commands.json
+.cache
