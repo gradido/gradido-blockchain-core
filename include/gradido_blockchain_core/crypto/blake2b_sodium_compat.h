@@ -1,8 +1,6 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_BLAKE2B_SODIUM_COMPAT_H
 #define GRADIDO_BLOCKCHAIN_CORE_BLAKE2B_SODIUM_COMPAT_H
 
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif

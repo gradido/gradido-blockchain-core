@@ -45,7 +45,7 @@ grd_result grdc_ed25519_key_pair_copy_slip10_public_key(
   return GRD_SUCCESS;
 }
 
-grd_result ed25519_key_pair_slip10_derive_child(
+grd_result grdc_ed25519_key_pair_slip10_derive_child(
     grdc_ed25519_key_pair *ed25519_key_pair,
     const grdc_ed25519_key_pair *ed25519_parent_key_pair,
     const uint32_t index
@@ -85,7 +85,7 @@ inline static uint32_t harden_derivation_key(const uint32_t index) {
   return (index | HARDENED_KEY_BITMASK) >> 0;
 }
 
-grd_result ed25519_key_pair_slip10_derive_user_child_key(
+grd_result grdc_ed25519_key_pair_slip10_derive_user_child_key(
     grdc_ed25519_key_pair *ed25519_key_pair,
     const grdc_ed25519_key_pair *ed25519_parent_key,
     const uint8_t user_uuid[UUID_BINARY_SIZE]
@@ -98,18 +98,20 @@ grd_result ed25519_key_pair_slip10_derive_user_child_key(
     memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
     uint32_t harden_index = harden_derivation_key(word);
     if (0 == i) {
-      result =
-          ed25519_key_pair_slip10_derive_child(ed25519_key_pair, ed25519_parent_key, harden_index);
+      result = grdc_ed25519_key_pair_slip10_derive_child(
+          ed25519_key_pair, ed25519_parent_key, harden_index
+      );
     } else {
-      result =
-          ed25519_key_pair_slip10_derive_child(ed25519_key_pair, ed25519_key_pair, harden_index);
+      result = grdc_ed25519_key_pair_slip10_derive_child(
+          ed25519_key_pair, ed25519_key_pair, harden_index
+      );
     }
     if (result != GRD_SUCCESS) { return result; }
   }
   return result;
 }
 
-grd_result ed25519_key_pair_slip10_derive_account_child_key_full(
+grd_result grdc_ed25519_key_pair_slip10_derive_account_child_key_full(
     grdc_ed25519_key_pair *ed25519_key_pair,
     const uint8_t community_root_seed[ED25519_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],
@@ -128,15 +130,16 @@ grd_result ed25519_key_pair_slip10_derive_account_child_key_full(
     uint32_t word;
     memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
     uint32_t harden_index = harden_derivation_key(word);
-    result = ed25519_key_pair_slip10_derive_child(ed25519_key_pair, ed25519_key_pair, harden_index);
+    result =
+        grdc_ed25519_key_pair_slip10_derive_child(ed25519_key_pair, ed25519_key_pair, harden_index);
     if (result != GRD_SUCCESS) { return result; }
   }
 
   // account
-  result = ed25519_key_pair_slip10_derive_child(
+  result = grdc_ed25519_key_pair_slip10_derive_child(
       ed25519_key_pair, ed25519_key_pair, harden_derivation_key(account_index)
   );
   return result;
 }
 
-#endif //USE_SODIUM
+#endif // USE_SODIUM
