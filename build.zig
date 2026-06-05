@@ -27,14 +27,7 @@ fn addDirSources(
     }
 }
 
-const BuildContext = struct {
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    core_lib: *std.Build.Step.Compile,
-    googletest_dep: ?*std.Build.Dependency,
-    sodium_dep: ?*std.Build.Dependency,
-};
+const BuildContext = struct { b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, core_lib: *std.Build.Step.Compile, googletest_dep: ?*std.Build.Dependency, sodium_dep: ?*std.Build.Dependency, singleOutputDir: bool };
 
 const BuildTarget = struct {
     link_googletest: bool = false,
@@ -77,45 +70,43 @@ fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, p
         });
     }
 
-    b.installArtifact(exe);
+    if (context.singleOutputDir) {
+        const bin_install_step = b.addInstallBinFile(exe.getEmittedBin(), b.fmt("../{s}", .{exe.out_filename}));
+        b.getInstallStep().dependOn(&bin_install_step.step);
+    } else {
+        b.installArtifact(exe);
+    }
 }
 
 pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    // Options
     const enable_benchmarks = b.option(bool, "benchmarks", "Enable benchmarks") orelse false;
     const enable_tests = b.option(bool, "tests", "Enable tests") orelse false;
     const enable_sodium = b.option(bool, "sodium", "Enable sodium and crypto") orelse false;
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-    const core_lib = b.addLibrary(.{ .name = "gradido_blockchain_core", .linkage = .static, .root_module = b.createModule(.{
+    const lib_shared = b.option(bool, "shared", "Make lib shared") orelse false;
+    const singleOutputDir = b.option(bool, "singleOutputDir", "Put direct into output folder, without lib or bin folder") orelse false;
+
+    const core_lib = b.addLibrary(.{ .name = "gradido_blockchain_core", .linkage = if (lib_shared) .dynamic else .static, .root_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
     }) });
 
-    const context: BuildContext = .{
-        .b = b,
+    const context: BuildContext = .{ .b = b, .target = target, .optimize = optimize, .core_lib = core_lib, .googletest_dep = b.lazyDependency("googletest", .{
         .target = target,
         .optimize = optimize,
-        .core_lib = core_lib,
-        .googletest_dep = b.lazyDependency("googletest", .{
-            .target = target,
-            .optimize = optimize,
-        }),
-        .sodium_dep = b.lazyDependency("libsodium", .{
-            .target = target,
-            .optimize = optimize,
-            .static = true,
-            .shared = false,
-        }),
-    };
+    }), .sodium_dep = b.lazyDependency("libsodium", .{
+        .target = target,
+        .optimize = optimize,
+        .static = true,
+        .shared = false,
+    }), .singleOutputDir = singleOutputDir };
 
     if (enable_sodium) {
         core_lib.root_module.addCMacro("USE_SODIUM", "1");
-        if (b.lazyDependency("libsodium", .{
-            .target = target,
-            .optimize = optimize,
-            .static = true,
-            .shared = false,
-        })) |dep| {
+        if (context.sodium_dep) |dep| {
             core_lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
         }
     }
@@ -130,7 +121,16 @@ pub fn build(b: *std.Build) void {
     addDirSources(core_lib, b, "src");
     addDirSources(core_lib, b, "third_party");
 
-    b.installArtifact(core_lib);
+    if (singleOutputDir) {
+        const bin_install_step = b.addInstallBinFile(core_lib.getEmittedBin(), b.fmt("../{s}", .{core_lib.out_filename}));
+        b.getInstallStep().dependOn(&bin_install_step.step);
+        if (target.result.os.tag == .windows) {
+            const lib_install_step = b.addInstallLibFile(core_lib.getEmittedImplib(), b.fmt("../{s}", .{core_lib.out_lib_filename}));
+            b.getInstallStep().dependOn(&lib_install_step.step);
+        }
+    } else {
+        b.installArtifact(core_lib);
+    }
 
     if (enable_benchmarks and enable_sodium) {
         const path = "benchmarks/src";
