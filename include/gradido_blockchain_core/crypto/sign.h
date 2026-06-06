@@ -60,7 +60,7 @@ typedef struct grdc_sign_key_pair {
  *
  * @param[out] sign_key_pair  Pointer to the key pair to initialize. Must not be NULL.
  */
-void grdc_sign_key_pair_init(grdc_sign_key_pair *_sign_key_pair);
+void grdc_sign_key_pair_init(grdc_sign_key_pair *sign_key_pair);
 
 /**
  * @brief Generate an Ed25519 key pair from a seed using SLIP-10.
@@ -82,7 +82,7 @@ void grdc_sign_key_pair_init(grdc_sign_key_pair *_sign_key_pair);
  * @whisper From one seed, a forest of keys
  */
 grd_result grdc_sign_key_pair_generate_from_seed(
-    grdc_sign_key_pair *_sign_key_pair, const uint8_t *seed, const size_t seed_size
+    grdc_sign_key_pair *sign_key_pair, const uint8_t *seed, const size_t seed_size
 );
 
 /**
@@ -103,7 +103,7 @@ grd_result grdc_sign_key_pair_generate_from_seed(
  * parameters are NULL.
  */
 grd_result grdc_sign_key_pair_copy_slip10_public_key(
-    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *_sign_key_pair
+    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *sign_key_pair
 );
 
 /**
@@ -111,7 +111,8 @@ grd_result grdc_sign_key_pair_copy_slip10_public_key(
  *
  * Derives a child Ed25519 key pair from a parent key pair at the specified
  * index using SLIP-10 HMAC-based key derivation. The index determines the
- * derivation path branch. The output and parent may point to the same memory,
+ * derivation path branch. It will always be hardened, so it must stay below 0x80000000.
+ * The output and parent may point to the same memory,
  * allowing in-place derivation.
  *
  * Each child branches from its parent along a numbered path, carrying forward
@@ -119,14 +120,14 @@ grd_result grdc_sign_key_pair_copy_slip10_public_key(
  *
  * @param[out] sign_key_pair         Derived child key pair. Must not be NULL.
  * @param[in]  sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
- * @param[in]  index                    Derivation index (32-bit unsigned).
+ * @param[in]  index                    Derivation index (32-bit unsigned) < 0x80000000.
  * @return                              GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER
  * if parameters are NULL.
  * @whisper A child grows from its parent's branch
  */
 grd_result grdc_sign_key_pair_derive(
-    grdc_sign_key_pair *_sign_key_pair,
-    const grdc_sign_key_pair *_sign_parent_key_pair,
+    grdc_sign_key_pair *sign_key_pair,
+    const grdc_sign_key_pair *sign_parent_key_pair,
     const uint32_t index
 );
 
@@ -149,8 +150,8 @@ grd_result grdc_sign_key_pair_derive(
  * @whisper Each user walks their own path
  */
 grd_result grdc_sign_key_pair_derive_uuid(
-    grdc_sign_key_pair *_sign_key_pair,
-    const grdc_sign_key_pair *_sign_parent_key,
+    grdc_sign_key_pair *sign_key_pair,
+    const grdc_sign_key_pair *sign_parent_key,
     const uint8_t uuid[UUID_BINARY_SIZE]
 );
 
@@ -175,7 +176,7 @@ grd_result grdc_sign_key_pair_derive_uuid(
  * @whisper From community to user to account, the path unfolds
  */
 grd_result grdc_sign_key_pair_derive_account_from_community(
-    grdc_sign_key_pair *_sign_key_pair,
+    grdc_sign_key_pair *sign_key_pair,
     const uint8_t community_root_seed[SIGN_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],
     const uint32_t account_index

@@ -54,7 +54,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
 
   // Chain m/0H
   grdc_sign_key_pair c0;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c0, &rootKeyPair, 0x80000000), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c0, &rootKeyPair, 0), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0),
       "008c8a13df77a28f3445213a0f432fde644acaa215fc72dcdf300d5efaa85d350c"
@@ -69,7 +69,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
 
   // Chain m/0H/1
   grdc_sign_key_pair c01;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c01, &c0, 0x80000001), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c01, &c0, 1), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c01),
       "001932a5270f335bed617d5b935c80aedb1a35bd9fc1e31acafd5372c30f5c1187"
@@ -84,7 +84,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
 
   // Chain m/0H/1/2H
   grdc_sign_key_pair c012;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c012, &c01, 0x80000002), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c012, &c01, 2), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c012),
       "00ae98736566d30ed0e9d2f4486a64bc95740d89c7db33f52121f8ea8f76ff0fc1"
@@ -99,7 +99,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
 
   // Chain m/0H/1/2H/2
   grdc_sign_key_pair c0122;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c0122, &c012, 0x80000002), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c0122, &c012, 2), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0122),
       "008abae2d66361c879b900d204ad2cc4984fa2aa344dd7ddc46007329ac76c429c"
@@ -114,7 +114,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
 
   // Chain m/0H/1/2H/2/1000000000
   grdc_sign_key_pair c01221Mrd;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c01221Mrd, &c0122, 0x80000000 + 1000000000), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c01221Mrd, &c0122, 1000000000), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c01221Mrd),
       "003c24da049451555d51a7014a37337aa4e12d41e485abccfa46b47dfb2af54b7a"
@@ -157,7 +157,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
 
   // Chain m/0H
   grdc_sign_key_pair c0;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c0, &root, 0x80000000), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c0, &root, 0), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0),
       "0086fab68dcb57aa196c77c5f264f215a112c22a912c10d123b0d03c3c28ef1037"
@@ -172,7 +172,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
 
   // Chain m/0H/2147483647H
   grdc_sign_key_pair c0_2147483647;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c0_2147483647, &c0, 0x80000000 + 2147483647), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c0_2147483647, &c0, 2147483647), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0_2147483647),
       "005ba3b9ac6e90e83effcd25ac4e58a1365a9e35a3d3ae5eb07b9e4d90bcf7506d"
@@ -190,7 +190,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
 
   // Chain m/0H/2147483647H/1H
   grdc_sign_key_pair c0_2147483647_1;
-  EXPECT_EQ(grdc_sign_key_pair_derive(&c0_2147483647_1, &c0_2147483647, 0x80000001), GRD_SUCCESS);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&c0_2147483647_1, &c0_2147483647, 1), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0_2147483647_1),
       "002e66aa57069c86cc18249aecf5cb5a9cebbfd6fadeab056254763874a9352b45"
@@ -210,9 +210,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // Chain m/0H/2147483647H/1H/2147483646H
   grdc_sign_key_pair c0_2147483647_1_2147483646;
   EXPECT_EQ(
-      grdc_sign_key_pair_derive(
-          &c0_2147483647_1_2147483646, &c0_2147483647_1, 0x80000000 + 2147483646
-      ),
+      grdc_sign_key_pair_derive(&c0_2147483647_1_2147483646, &c0_2147483647_1, 2147483646),
       GRD_SUCCESS
   );
   EXPECT_EQ(
@@ -234,9 +232,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // Chain m/0H/2147483647H/1H/2147483646H/2H
   grdc_sign_key_pair c0_2147483647_1_2147483646_2;
   EXPECT_EQ(
-      grdc_sign_key_pair_derive(
-          &c0_2147483647_1_2147483646_2, &c0_2147483647_1_2147483646, 0x80000002
-      ),
+      grdc_sign_key_pair_derive(&c0_2147483647_1_2147483646_2, &c0_2147483647_1_2147483646, 2),
       GRD_SUCCESS
   );
   EXPECT_EQ(

@@ -57,7 +57,8 @@ grd_result grdc_sign_key_pair_derive(
     const uint32_t index
 ) {
   if (!sign_key_pair || !sign_parent_key_pair) { return GRD_ERROR_NULL_POINTER; }
-  if (index < HARDENED_KEY_BITMASK) { return GRD_ERROR_INVALID_PARAM; }
+  if (index >= HARDENED_KEY_BITMASK) { return GRD_ERROR_INVALID_PARAM; }
+  uint32_t harden_index = (index | HARDENED_KEY_BITMASK) >> 0;
 
   uint8_t data[1 + 32 + 4];
 
@@ -68,10 +69,10 @@ grd_result grdc_sign_key_pair_derive(
   memcpy(data + 1, sign_parent_key_pair->seed, 32);
 
   // index (big endian!)
-  data[33] = (index >> 24) & 0xFF;
-  data[34] = (index >> 16) & 0xFF;
-  data[35] = (index >> 8) & 0xFF;
-  data[36] = index & 0xFF;
+  data[33] = (harden_index >> 24) & 0xFF;
+  data[34] = (harden_index >> 16) & 0xFF;
+  data[35] = (harden_index >> 8) & 0xFF;
+  data[36] = harden_index & 0xFF;
 
   uint8_t I[64];
 
@@ -87,10 +88,6 @@ grd_result grdc_sign_key_pair_derive(
   return GRD_SUCCESS;
 }
 
-inline static uint32_t harden_derivation_key(const uint32_t index) {
-  return (index | HARDENED_KEY_BITMASK) >> 0;
-}
-
 grd_result grdc_sign_key_pair_derive_uuid(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key,
@@ -103,11 +100,10 @@ grd_result grdc_sign_key_pair_derive_uuid(
     uint32_t word;
     memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
     word = ntohl(word); // Network-to-Host: convert from Big-Endian to Little-Endian
-    uint32_t harden_index = harden_derivation_key(word);
     if (0 == i) {
-      result = grdc_sign_key_pair_derive(sign_key_pair, sign_parent_key, harden_index);
+      result = grdc_sign_key_pair_derive(sign_key_pair, sign_parent_key, word);
     } else {
-      result = grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, harden_index);
+      result = grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, word);
     }
     if (result != GRD_SUCCESS) { return result; }
   }
@@ -121,7 +117,7 @@ grd_result grdc_sign_key_pair_derive_account_from_community(
     const uint32_t account_index
 ) {
   if (!sign_key_pair || !community_root_seed || !user_uuid) { return GRD_ERROR_NULL_POINTER; }
-  if (!account_index || account_index >= HARDENED_KEY_BITMASK) { return GRD_ERROR_INVALID_PARAM; }
+  if (!account_index) { return GRD_ERROR_INVALID_PARAM; }
   // community root key
   grd_result result =
       grdc_sign_key_pair_generate_from_seed(sign_key_pair, community_root_seed, SIGN_SEED_SIZE);
@@ -132,8 +128,7 @@ grd_result grdc_sign_key_pair_derive_account_from_community(
   if (result != GRD_SUCCESS) { return result; }
 
   // account
-  result =
-      grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, harden_derivation_key(account_index));
+  result = grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, account_index);
   return result;
 }
 
