@@ -48,8 +48,7 @@ static void copy_register_address(
 ) {
   if (!tx || !register_address_tx) { return; }
   memcpy(
-      tx->register_address.user_public_key, register_address_tx->user_pubkey,
-      SIGN_PUBLIC_KEY_SIZE
+      tx->register_address.user_public_key, register_address_tx->user_pubkey, SIGN_PUBLIC_KEY_SIZE
   );
   memcpy(tx->register_address.name_hash, register_address_tx->name_hash, GENERIC_HASH_SIZE);
   memcpy(

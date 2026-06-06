@@ -67,9 +67,7 @@ static grd_result account_balance_from_pbtools(
     const struct proto_gradido_account_balance_t *pb_account_balance
 ) {
   if (!account_balance || !pb_account_balance) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_account_balance->pubkey.size != SIGN_PUBLIC_KEY_SIZE) {
-    return GRD_ERROR_INVALID_PARAM;
-  }
+  if (pb_account_balance->pubkey.size != SIGN_PUBLIC_KEY_SIZE) { return GRD_ERROR_INVALID_PARAM; }
   memcpy(account_balance->pubkey, pb_account_balance->pubkey.buf_p, SIGN_PUBLIC_KEY_SIZE);
   account_balance->balance = pb_account_balance->balance;
   return community_uuid_from_pbtools(
@@ -130,9 +128,7 @@ static grd_result transfer_amount_from_pbtools(
     const struct proto_gradido_transfer_amount_t *pb_transfer_amount
 ) {
   if (!transfer_amount || !pb_transfer_amount) { return GRD_ERROR_NULL_POINTER; }
-  if (pb_transfer_amount->pubkey.size != SIGN_PUBLIC_KEY_SIZE) {
-    return GRD_ERROR_INVALID_PARAM;
-  }
+  if (pb_transfer_amount->pubkey.size != SIGN_PUBLIC_KEY_SIZE) { return GRD_ERROR_INVALID_PARAM; }
   memcpy(transfer_amount->pubkey, pb_transfer_amount->pubkey.buf_p, SIGN_PUBLIC_KEY_SIZE);
   transfer_amount->amount = pb_transfer_amount->amount;
   return community_uuid_from_pbtools(
@@ -244,9 +240,7 @@ static grd_result gradido_transfer_from_pbtools(
   if (pb_gradido_transfer->recipient.size != SIGN_PUBLIC_KEY_SIZE) {
     return GRD_ERROR_INVALID_PARAM;
   }
-  memcpy(
-      gradido_transfer->recipient, pb_gradido_transfer->recipient.buf_p, SIGN_PUBLIC_KEY_SIZE
-  );
+  memcpy(gradido_transfer->recipient, pb_gradido_transfer->recipient.buf_p, SIGN_PUBLIC_KEY_SIZE);
   return transfer_amount_from_pbtools(&gradido_transfer->sender, pb_gradido_transfer->sender_p);
   ;
 }

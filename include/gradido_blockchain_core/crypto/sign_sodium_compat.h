@@ -25,8 +25,7 @@ static_assert(
     "sodium sign public key size don't match ed25519 public key size"
 );
 static_assert(
-    SIGN_SEED_SIZE == crypto_sign_SEEDBYTES,
-    "sodium sign seed size don't match ed25519 seed size"
+    SIGN_SEED_SIZE == crypto_sign_SEEDBYTES, "sodium sign seed size don't match ed25519 seed size"
 );
 static_assert(
     SIGN_PRIVATE_KEY_SIZE == crypto_sign_SECRETKEYBYTES,

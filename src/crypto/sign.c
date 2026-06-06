@@ -9,6 +9,13 @@
 
 #include <string.h>
 
+// needed for ntohl
+#ifdef _WIN32
+#include <winsock.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #define HARDENED_KEY_BITMASK 0x80000000
 
 void grdc_sign_key_pair_init(grdc_sign_key_pair *sign_key_pair) {
@@ -36,8 +43,7 @@ grd_result grdc_sign_key_pair_generate_from_seed(
 }
 
 grd_result grdc_sign_key_pair_copy_slip10_public_key(
-    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1],
-    const grdc_sign_key_pair *sign_key_pair
+    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *sign_key_pair
 ) {
   if (!slip10_public_key || !sign_key_pair) { return GRD_ERROR_NULL_POINTER; }
   slip10_public_key[0] = 0x00;
@@ -45,7 +51,7 @@ grd_result grdc_sign_key_pair_copy_slip10_public_key(
   return GRD_SUCCESS;
 }
 
-grd_result grdc_sign_key_pair_slip10_derive_child(
+grd_result grdc_sign_key_pair_derive(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key_pair,
     const uint32_t index
@@ -85,7 +91,7 @@ inline static uint32_t harden_derivation_key(const uint32_t index) {
   return (index | HARDENED_KEY_BITMASK) >> 0;
 }
 
-grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
+grd_result grdc_sign_key_pair_derive_uuid(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key,
     const uint8_t user_uuid[UUID_BINARY_SIZE]
@@ -96,22 +102,19 @@ grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
   for (int i = 0; i < 4; i++) {
     uint32_t word;
     memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
+    word = ntohl(word); // Network-to-Host: convert from Big-Endian to Little-Endian
     uint32_t harden_index = harden_derivation_key(word);
     if (0 == i) {
-      result = grdc_sign_key_pair_slip10_derive_child(
-          sign_key_pair, sign_parent_key, harden_index
-      );
+      result = grdc_sign_key_pair_derive(sign_key_pair, sign_parent_key, harden_index);
     } else {
-      result = grdc_sign_key_pair_slip10_derive_child(
-          sign_key_pair, sign_key_pair, harden_index
-      );
+      result = grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, harden_index);
     }
     if (result != GRD_SUCCESS) { return result; }
   }
   return result;
 }
 
-grd_result grdc_sign_key_pair_slip10_derive_account_child_key_full(
+grd_result grdc_sign_key_pair_derive_account_from_community(
     grdc_sign_key_pair *sign_key_pair,
     const uint8_t community_root_seed[SIGN_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],
@@ -120,25 +123,17 @@ grd_result grdc_sign_key_pair_slip10_derive_account_child_key_full(
   if (!sign_key_pair || !community_root_seed || !user_uuid) { return GRD_ERROR_NULL_POINTER; }
   if (!account_index || account_index >= HARDENED_KEY_BITMASK) { return GRD_ERROR_INVALID_PARAM; }
   // community root key
-  grd_result result = grdc_sign_key_pair_generate_from_seed(
-      sign_key_pair, community_root_seed, SIGN_SEED_SIZE
-  );
+  grd_result result =
+      grdc_sign_key_pair_generate_from_seed(sign_key_pair, community_root_seed, SIGN_SEED_SIZE);
   if (result != GRD_SUCCESS) { return result; }
 
   // user key
-  for (int i = 0; i < 4; i++) {
-    uint32_t word;
-    memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
-    uint32_t harden_index = harden_derivation_key(word);
-    result =
-        grdc_sign_key_pair_slip10_derive_child(sign_key_pair, sign_key_pair, harden_index);
-    if (result != GRD_SUCCESS) { return result; }
-  }
+  result = grdc_sign_key_pair_derive_uuid(sign_key_pair, sign_key_pair, user_uuid);
+  if (result != GRD_SUCCESS) { return result; }
 
   // account
-  result = grdc_sign_key_pair_slip10_derive_child(
-      sign_key_pair, sign_key_pair, harden_derivation_key(account_index)
-  );
+  result =
+      grdc_sign_key_pair_derive(sign_key_pair, sign_key_pair, harden_derivation_key(account_index));
   return result;
 }
 

@@ -86,8 +86,7 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
   gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr =
       deferred_transfer_transaction_nr;
   memcpy(
-      gradido_redeem_deferred_transfer->transfer.sender.pubkey, sender_pubkey,
-      SIGN_PUBLIC_KEY_SIZE
+      gradido_redeem_deferred_transfer->transfer.sender.pubkey, sender_pubkey, SIGN_PUBLIC_KEY_SIZE
   );
   gradido_redeem_deferred_transfer->transfer.sender.amount = amount;
   memcpy(
@@ -95,8 +94,7 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
       UUID_BINARY_SIZE
   );
   memcpy(
-      gradido_redeem_deferred_transfer->transfer.recipient, recipient_pubkey,
-      SIGN_PUBLIC_KEY_SIZE
+      gradido_redeem_deferred_transfer->transfer.recipient, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE
   );
 }
 

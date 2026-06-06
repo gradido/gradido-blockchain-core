@@ -57,7 +57,7 @@ static void test_full_key_derivation(int stepCount)
 {
     grdc_sign_key_pair key_pair;
     for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_slip10_derive_account_child_key_full(&key_pair, getNextTestValue(), getNextTestValue(), 1);
+      grdc_sign_key_pair_derive_account_from_community(&key_pair, getNextTestValue(), getNextTestValue(), 1);
     }
 }
 
@@ -67,7 +67,7 @@ static void test_user_key_derivation(int stepCount)
     grdc_sign_key_pair key_pair;
     grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
     for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
+      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
     }
 }
 
@@ -77,8 +77,8 @@ static void test_account_key_derivation(int stepCount)
     grdc_sign_key_pair key_pair;
     grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
     for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
-      grdc_sign_key_pair_slip10_derive_child(&key_pair, &key_pair, 0x80000000 + 1);
+      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
+      grdc_sign_key_pair_derive(&key_pair, &key_pair, 0x80000000 + 1);
     }
 }
 

@@ -14,7 +14,7 @@ extern "C" {
 #include <stdint.h>
 
 /** @defgroup crypto Cryptographic Primitives */
-/** @defgroup grdc_ed25519 grdc_ed25519
+/** @defgroup grdc_sign grdc_sign
  *  @ingroup crypto
  *  @brief Ed25519 key pair management with SLIP-10 hierarchical derivation
  *  @{
@@ -58,7 +58,7 @@ typedef struct grdc_sign_key_pair {
  * The structure settles into a neutral state, ready to receive cryptographic
  * life from entropy.
  *
- * @param[out] _sign_key_pair  Pointer to the key pair to initialize. Must not be NULL.
+ * @param[out] sign_key_pair  Pointer to the key pair to initialize. Must not be NULL.
  */
 void grdc_sign_key_pair_init(grdc_sign_key_pair *_sign_key_pair);
 
@@ -74,7 +74,7 @@ void grdc_sign_key_pair_init(grdc_sign_key_pair *_sign_key_pair);
  * From a single seed of entropy, a tree of cryptographic identities emerges,
  * each branch deterministic yet isolated.
  *
- * @param[out] _sign_key_pair  Pointer to the key pair to populate. Must not be NULL.
+ * @param[out] sign_key_pair  Pointer to the key pair to populate. Must not be NULL.
  * @param[in]  seed              Input seed bytes. Must not be NULL.
  * @param[in]  seed_size         Size of the seed in bytes. Must be between 16 and 64.
  * @return                       GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
@@ -98,13 +98,12 @@ grd_result grdc_sign_key_pair_generate_from_seed(
  *
  * @param[out] slip10_public_key  Output buffer of 33 bytes (SIGN_PUBLIC_KEY_SIZE + 1). Must not
  * be NULL.
- * @param[in]  _sign_key_pair   Source key pair containing the public key. Must not be NULL.
+ * @param[in]  sign_key_pair   Source key pair containing the public key. Must not be NULL.
  * @return                        GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
  * parameters are NULL.
  */
 grd_result grdc_sign_key_pair_copy_slip10_public_key(
-    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1],
-    const grdc_sign_key_pair *_sign_key_pair
+    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *_sign_key_pair
 );
 
 /**
@@ -118,14 +117,14 @@ grd_result grdc_sign_key_pair_copy_slip10_public_key(
  * Each child branches from its parent along a numbered path, carrying forward
  * the chain of cryptographic descent while maintaining isolation from siblings.
  *
- * @param[out] _sign_key_pair         Derived child key pair. Must not be NULL.
- * @param[in]  _sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
+ * @param[out] sign_key_pair         Derived child key pair. Must not be NULL.
+ * @param[in]  sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
  * @param[in]  index                    Derivation index (32-bit unsigned).
  * @return                              GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER
  * if parameters are NULL.
  * @whisper A child grows from its parent's branch
  */
-grd_result grdc_sign_key_pair_slip10_derive_child(
+grd_result grdc_sign_key_pair_derive(
     grdc_sign_key_pair *_sign_key_pair,
     const grdc_sign_key_pair *_sign_parent_key_pair,
     const uint32_t index
@@ -142,17 +141,17 @@ grd_result grdc_sign_key_pair_slip10_derive_child(
  * The UUID seeds a unique path for each user, their cryptographic identity
  * flowing from the parent through the identifier of their existence.
  *
- * @param[out] _sign_key_pair  Derived user-specific key pair. Must not be NULL.
- * @param[in]  _sign_parent_key Parent key pair for derivation. Must not be NULL.
- * @param[in]  user_uuid          16-byte UUID identifying the user. Must not be NULL.
- * @return                        GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
+ * @param[out] sign_key_pair  Derived user-specific key pair. Must not be NULL.
+ * @param[in]  sign_parent_key Parent key pair for derivation. Must not be NULL.
+ * @param[in]  uuid            16-byte UUID. Must not be NULL.
+ * @return                     GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
  * parameters are NULL.
  * @whisper Each user walks their own path
  */
-grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
+grd_result grdc_sign_key_pair_derive_uuid(
     grdc_sign_key_pair *_sign_key_pair,
     const grdc_sign_key_pair *_sign_parent_key,
-    const uint8_t user_uuid[UUID_BINARY_SIZE]
+    const uint8_t uuid[UUID_BINARY_SIZE]
 );
 
 /**
@@ -167,7 +166,7 @@ grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
  * From the community's root seed, through the user's identifier, to the
  * numbered account—a complete descent from collective to individual.
  *
- * @param[out] _sign_key_pair       Derived account key pair. Must not be NULL.
+ * @param[out] sign_key_pair       Derived account key pair. Must not be NULL.
  * @param[in]  community_root_seed    32-byte community root seed. Must not be NULL.
  * @param[in]  user_uuid              16-byte UUID identifying the user. Must not be NULL.
  * @param[in]  account_index          Account index starting from 1.
@@ -175,7 +174,7 @@ grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
  * parameters are NULL or account_index is 0.
  * @whisper From community to user to account, the path unfolds
  */
-grd_result grdc_sign_key_pair_slip10_derive_account_child_key_full(
+grd_result grdc_sign_key_pair_derive_account_from_community(
     grdc_sign_key_pair *_sign_key_pair,
     const uint8_t community_root_seed[SIGN_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],
