@@ -1,5 +1,5 @@
-#ifndef GRADIDO_BLOCKCHAIN_CORE_CRYPTO_ED25519_H
-#define GRADIDO_BLOCKCHAIN_CORE_CRYPTO_ED25519_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_CRYPTO_SIGN_H
+#define GRADIDO_BLOCKCHAIN_CORE_CRYPTO_SIGN_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,16 +37,16 @@ extern "C" {
  * @var private_key    64-byte Ed25519 private key (seed + public key).
  * @var chain_code     32-byte chain code for SLIP-10 derivation.
  */
-typedef struct grdc_ed25519_key_pair {
+typedef struct grdc_sign_key_pair {
   union {
     struct {
-      uint8_t seed[ED25519_SEED_SIZE];
-      uint8_t public_key[ED25519_PUBLIC_KEY_SIZE];
+      uint8_t seed[SIGN_SEED_SIZE];
+      uint8_t public_key[SIGN_PUBLIC_KEY_SIZE];
     };
-    uint8_t private_key[ED25519_PRIVATE_KEY_SIZE];
+    uint8_t private_key[SIGN_PRIVATE_KEY_SIZE];
   };
-  uint8_t chain_code[ED25519_CHAIN_CODE_SIZE];
-} grdc_ed25519_key_pair;
+  uint8_t chain_code[SIGN_CHAIN_CODE_SIZE];
+} grdc_sign_key_pair;
 
 /**
  * @brief Initialize an Ed25519 key pair to zero.
@@ -58,9 +58,9 @@ typedef struct grdc_ed25519_key_pair {
  * The structure settles into a neutral state, ready to receive cryptographic
  * life from entropy.
  *
- * @param[out] ed25519_key_pair  Pointer to the key pair to initialize. Must not be NULL.
+ * @param[out] _sign_key_pair  Pointer to the key pair to initialize. Must not be NULL.
  */
-void grdc_ed25519_key_pair_init(grdc_ed25519_key_pair *ed25519_key_pair);
+void grdc_sign_key_pair_init(grdc_sign_key_pair *_sign_key_pair);
 
 /**
  * @brief Generate an Ed25519 key pair from a seed using SLIP-10.
@@ -74,15 +74,15 @@ void grdc_ed25519_key_pair_init(grdc_ed25519_key_pair *ed25519_key_pair);
  * From a single seed of entropy, a tree of cryptographic identities emerges,
  * each branch deterministic yet isolated.
  *
- * @param[out] ed25519_key_pair  Pointer to the key pair to populate. Must not be NULL.
+ * @param[out] _sign_key_pair  Pointer to the key pair to populate. Must not be NULL.
  * @param[in]  seed              Input seed bytes. Must not be NULL.
  * @param[in]  seed_size         Size of the seed in bytes. Must be between 16 and 64.
  * @return                       GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
  * parameters are NULL or seed size is invalid.
  * @whisper From one seed, a forest of keys
  */
-grd_result grdc_ed25519_key_pair_generate_from_seed(
-    grdc_ed25519_key_pair *ed25519_key_pair, const uint8_t *seed, const size_t seed_size
+grd_result grdc_sign_key_pair_generate_from_seed(
+    grdc_sign_key_pair *_sign_key_pair, const uint8_t *seed, const size_t seed_size
 );
 
 /**
@@ -96,15 +96,15 @@ grd_result grdc_ed25519_key_pair_generate_from_seed(
  * The public key emerges from its private counterpart, wearing its SLIP-10
  * identifier like a signature of origin.
  *
- * @param[out] slip10_public_key  Output buffer of 33 bytes (ED25519_PUBLIC_KEY_SIZE + 1). Must not
+ * @param[out] slip10_public_key  Output buffer of 33 bytes (SIGN_PUBLIC_KEY_SIZE + 1). Must not
  * be NULL.
- * @param[in]  ed25519_key_pair   Source key pair containing the public key. Must not be NULL.
+ * @param[in]  _sign_key_pair   Source key pair containing the public key. Must not be NULL.
  * @return                        GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
  * parameters are NULL.
  */
-grd_result grdc_ed25519_key_pair_copy_slip10_public_key(
-    uint8_t slip10_public_key[ED25519_PUBLIC_KEY_SIZE + 1],
-    const grdc_ed25519_key_pair *ed25519_key_pair
+grd_result grdc_sign_key_pair_copy_slip10_public_key(
+    uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1],
+    const grdc_sign_key_pair *_sign_key_pair
 );
 
 /**
@@ -118,16 +118,16 @@ grd_result grdc_ed25519_key_pair_copy_slip10_public_key(
  * Each child branches from its parent along a numbered path, carrying forward
  * the chain of cryptographic descent while maintaining isolation from siblings.
  *
- * @param[out] ed25519_key_pair         Derived child key pair. Must not be NULL.
- * @param[in]  ed25519_parent_key_pair  Parent key pair for derivation. Must not be NULL.
+ * @param[out] _sign_key_pair         Derived child key pair. Must not be NULL.
+ * @param[in]  _sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
  * @param[in]  index                    Derivation index (32-bit unsigned).
  * @return                              GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER
  * if parameters are NULL.
  * @whisper A child grows from its parent's branch
  */
-grd_result grdc_ed25519_key_pair_slip10_derive_child(
-    grdc_ed25519_key_pair *ed25519_key_pair,
-    const grdc_ed25519_key_pair *ed25519_parent_key_pair,
+grd_result grdc_sign_key_pair_slip10_derive_child(
+    grdc_sign_key_pair *_sign_key_pair,
+    const grdc_sign_key_pair *_sign_parent_key_pair,
     const uint32_t index
 );
 
@@ -142,16 +142,16 @@ grd_result grdc_ed25519_key_pair_slip10_derive_child(
  * The UUID seeds a unique path for each user, their cryptographic identity
  * flowing from the parent through the identifier of their existence.
  *
- * @param[out] ed25519_key_pair  Derived user-specific key pair. Must not be NULL.
- * @param[in]  ed25519_parent_key Parent key pair for derivation. Must not be NULL.
+ * @param[out] _sign_key_pair  Derived user-specific key pair. Must not be NULL.
+ * @param[in]  _sign_parent_key Parent key pair for derivation. Must not be NULL.
  * @param[in]  user_uuid          16-byte UUID identifying the user. Must not be NULL.
  * @return                        GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
  * parameters are NULL.
  * @whisper Each user walks their own path
  */
-grd_result grdc_ed25519_key_pair_slip10_derive_user_child_key(
-    grdc_ed25519_key_pair *ed25519_key_pair,
-    const grdc_ed25519_key_pair *ed25519_parent_key,
+grd_result grdc_sign_key_pair_slip10_derive_user_child_key(
+    grdc_sign_key_pair *_sign_key_pair,
+    const grdc_sign_key_pair *_sign_parent_key,
     const uint8_t user_uuid[UUID_BINARY_SIZE]
 );
 
@@ -167,7 +167,7 @@ grd_result grdc_ed25519_key_pair_slip10_derive_user_child_key(
  * From the community's root seed, through the user's identifier, to the
  * numbered account—a complete descent from collective to individual.
  *
- * @param[out] ed25519_key_pair       Derived account key pair. Must not be NULL.
+ * @param[out] _sign_key_pair       Derived account key pair. Must not be NULL.
  * @param[in]  community_root_seed    32-byte community root seed. Must not be NULL.
  * @param[in]  user_uuid              16-byte UUID identifying the user. Must not be NULL.
  * @param[in]  account_index          Account index starting from 1.
@@ -175,9 +175,9 @@ grd_result grdc_ed25519_key_pair_slip10_derive_user_child_key(
  * parameters are NULL or account_index is 0.
  * @whisper From community to user to account, the path unfolds
  */
-grd_result grdc_ed25519_key_pair_slip10_derive_account_child_key_full(
-    grdc_ed25519_key_pair *ed25519_key_pair,
-    const uint8_t community_root_seed[ED25519_SEED_SIZE],
+grd_result grdc_sign_key_pair_slip10_derive_account_child_key_full(
+    grdc_sign_key_pair *_sign_key_pair,
+    const uint8_t community_root_seed[SIGN_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],
     const uint32_t account_index
 );
@@ -190,4 +190,4 @@ grd_result grdc_ed25519_key_pair_slip10_derive_account_child_key_full(
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_CORE_CRYPTO_ED25519_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_CRYPTO_SIGN_H

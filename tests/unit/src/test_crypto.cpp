@@ -1,4 +1,4 @@
-#include "gradido_blockchain_core/crypto/ed25519.h"
+#include "gradido_blockchain_core/crypto/sign.h"
 #include "gradido_blockchain_core/utils/converter.h"
 
 #include "utils.h"
@@ -7,22 +7,22 @@
 #include <string>
 
 /*
- *grd_result grdc_ed25519_key_pair_copy_slip10_public_key(
-   uint8_t slip10_public_key[ED25519_PUBLIC_KEY_SIZE+1],
-   const grdc_ed25519_key_pair* ed25519_key_pair
+ *grd_result grdc_sign_key_pair_copy_slip10_public_key(
+   uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE+1],
+   const grdc_sign_key_pair* sign_key_pair
  );
  */
 
-std::string getSlip10PublicKeyHex(const grdc_ed25519_key_pair *keyPair) {
-  uint8_t slip10_public_key[ED25519_PUBLIC_KEY_SIZE + 1];
-  grdc_ed25519_key_pair_copy_slip10_public_key(slip10_public_key, keyPair);
-  return toHex(slip10_public_key, ED25519_PUBLIC_KEY_SIZE + 1);
+std::string getSlip10PublicKeyHex(const grdc_sign_key_pair *keyPair) {
+  uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1];
+  grdc_sign_key_pair_copy_slip10_public_key(slip10_public_key, keyPair);
+  return toHex(slip10_public_key, SIGN_PUBLIC_KEY_SIZE + 1);
 }
 
 /*
- * grd_result ed25519_key_pair_slip10_derive_child(
-   grdc_ed25519_key_pair* ed25519_key_pair,
-   const grdc_ed25519_key_pair* ed25519_parent_key_pair,
+ * grd_result sign_key_pair_slip10_derive_child(
+   grdc_sign_key_pair* sign_key_pair,
+   const grdc_sign_key_pair* sign_parent_key_pair,
    uint32_t index
  );
  */
@@ -30,9 +30,9 @@ std::string getSlip10PublicKeyHex(const grdc_ed25519_key_pair *keyPair) {
 TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   const char *seedString = "000102030405060708090a0b0c0d0e0f";
   const char *testPayload = "Test Payload for sign";
-  grdc_ed25519_key_pair rootKeyPair;
+  grdc_sign_key_pair rootKeyPair;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_generate_from_seed(&rootKeyPair, fromHex(seedString).data(), 16),
+      grdc_sign_key_pair_generate_from_seed(&rootKeyPair, fromHex(seedString).data(), 16),
       GRD_SUCCESS
   );
 
@@ -53,8 +53,8 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   // EXPECT_TRUE(root->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H
-  grdc_ed25519_key_pair c0;
-  EXPECT_EQ(grdc_ed25519_key_pair_slip10_derive_child(&c0, &rootKeyPair, 0x80000000), GRD_SUCCESS);
+  grdc_sign_key_pair c0;
+  EXPECT_EQ(grdc_sign_key_pair_slip10_derive_child(&c0, &rootKeyPair, 0x80000000), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0),
       "008c8a13df77a28f3445213a0f432fde644acaa215fc72dcdf300d5efaa85d350c"
@@ -68,8 +68,8 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   // EXPECT_TRUE(c0->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/1
-  grdc_ed25519_key_pair c01;
-  EXPECT_EQ(grdc_ed25519_key_pair_slip10_derive_child(&c01, &c0, 0x80000001), GRD_SUCCESS);
+  grdc_sign_key_pair c01;
+  EXPECT_EQ(grdc_sign_key_pair_slip10_derive_child(&c01, &c0, 0x80000001), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c01),
       "001932a5270f335bed617d5b935c80aedb1a35bd9fc1e31acafd5372c30f5c1187"
@@ -83,8 +83,8 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   // EXPECT_TRUE(c01->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/1/2H
-  grdc_ed25519_key_pair c012;
-  EXPECT_EQ(grdc_ed25519_key_pair_slip10_derive_child(&c012, &c01, 0x80000002), GRD_SUCCESS);
+  grdc_sign_key_pair c012;
+  EXPECT_EQ(grdc_sign_key_pair_slip10_derive_child(&c012, &c01, 0x80000002), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c012),
       "00ae98736566d30ed0e9d2f4486a64bc95740d89c7db33f52121f8ea8f76ff0fc1"
@@ -98,8 +98,8 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   // EXPECT_TRUE(c012->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/1/2H/2
-  grdc_ed25519_key_pair c0122;
-  EXPECT_EQ(grdc_ed25519_key_pair_slip10_derive_child(&c0122, &c012, 0x80000002), GRD_SUCCESS);
+  grdc_sign_key_pair c0122;
+  EXPECT_EQ(grdc_sign_key_pair_slip10_derive_child(&c0122, &c012, 0x80000002), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0122),
       "008abae2d66361c879b900d204ad2cc4984fa2aa344dd7ddc46007329ac76c429c"
@@ -113,9 +113,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors1) {
   // EXPECT_TRUE(c0122->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/1/2H/2/1000000000
-  grdc_ed25519_key_pair c01221Mrd;
+  grdc_sign_key_pair c01221Mrd;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_slip10_derive_child(&c01221Mrd, &c0122, 0x80000000 + 1000000000),
+      grdc_sign_key_pair_slip10_derive_child(&c01221Mrd, &c0122, 0x80000000 + 1000000000),
       GRD_SUCCESS
   );
   EXPECT_EQ(
@@ -140,9 +140,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
       "75726f6c696663605d5a5754514e4b484542"
   );
   std::string testPayload = "Test Payload for sign2";
-  grdc_ed25519_key_pair root;
+  grdc_sign_key_pair root;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_generate_from_seed(&root, fromHex(hexSeed.data()).data(), 64),
+      grdc_sign_key_pair_generate_from_seed(&root, fromHex(hexSeed.data()).data(), 64),
       GRD_SUCCESS
   );
 
@@ -160,8 +160,8 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // EXPECT_TRUE(root->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H
-  grdc_ed25519_key_pair c0;
-  EXPECT_EQ(grdc_ed25519_key_pair_slip10_derive_child(&c0, &root, 0x80000000), GRD_SUCCESS);
+  grdc_sign_key_pair c0;
+  EXPECT_EQ(grdc_sign_key_pair_slip10_derive_child(&c0, &root, 0x80000000), GRD_SUCCESS);
   EXPECT_EQ(
       getSlip10PublicKeyHex(&c0),
       "0086fab68dcb57aa196c77c5f264f215a112c22a912c10d123b0d03c3c28ef1037"
@@ -175,9 +175,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // EXPECT_TRUE(c0->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/2147483647H
-  grdc_ed25519_key_pair c0_2147483647;
+  grdc_sign_key_pair c0_2147483647;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_slip10_derive_child(&c0_2147483647, &c0, 0x80000000 + 2147483647),
+      grdc_sign_key_pair_slip10_derive_child(&c0_2147483647, &c0, 0x80000000 + 2147483647),
       GRD_SUCCESS
   );
   EXPECT_EQ(
@@ -196,9 +196,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // EXPECT_TRUE(c0_2147483647->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/2147483647H/1H
-  grdc_ed25519_key_pair c0_2147483647_1;
+  grdc_sign_key_pair c0_2147483647_1;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_slip10_derive_child(&c0_2147483647_1, &c0_2147483647, 0x80000001),
+      grdc_sign_key_pair_slip10_derive_child(&c0_2147483647_1, &c0_2147483647, 0x80000001),
       GRD_SUCCESS
   );
   EXPECT_EQ(
@@ -218,9 +218,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // EXPECT_TRUE(c0_2147483647_1->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/2147483647H/1H/2147483646H
-  grdc_ed25519_key_pair c0_2147483647_1_2147483646;
+  grdc_sign_key_pair c0_2147483647_1_2147483646;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_slip10_derive_child(
+      grdc_sign_key_pair_slip10_derive_child(
           &c0_2147483647_1_2147483646, &c0_2147483647_1, 0x80000000 + 2147483646
       ),
       GRD_SUCCESS
@@ -242,9 +242,9 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // EXPECT_TRUE(c0_2147483647_1_2147483646->verify(testPayload, signature.copyAsString()));
 
   // Chain m/0H/2147483647H/1H/2147483646H/2H
-  grdc_ed25519_key_pair c0_2147483647_1_2147483646_2;
+  grdc_sign_key_pair c0_2147483647_1_2147483646_2;
   EXPECT_EQ(
-      grdc_ed25519_key_pair_slip10_derive_child(
+      grdc_sign_key_pair_slip10_derive_child(
           &c0_2147483647_1_2147483646_2, &c0_2147483647_1_2147483646, 0x80000002
       ),
       GRD_SUCCESS

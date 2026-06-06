@@ -1,5 +1,5 @@
 #include "gradido_blockchain_core/const.h"
-#include "gradido_blockchain_core/crypto/ed25519.h"
+#include "gradido_blockchain_core/crypto/sign.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
 
 #include <sodium.h>
@@ -41,7 +41,7 @@ const char* test_seed_strings[] = {
     "Einstein",
     "Genius is one percent inspiration, ninety-nine percent perspiration. - Thomas Edison"
 };
-uint8_t test_seeds[TEST_SEEDS_COUNT][ED25519_SEED_SIZE];
+uint8_t test_seeds[TEST_SEEDS_COUNT][SIGN_SEED_SIZE];
 
 static const uint8_t* getNextTestValue() {
   static int cursor = 0;
@@ -55,30 +55,30 @@ static const uint8_t* getNextTestValue() {
 
 static void test_full_key_derivation(int stepCount)
 {
-    grdc_ed25519_key_pair key_pair;
+    grdc_sign_key_pair key_pair;
     for (int i = 0; i < stepCount; ++i) {
-      grdc_ed25519_key_pair_slip10_derive_account_child_key_full(&key_pair, getNextTestValue(), getNextTestValue(), 1);
+      grdc_sign_key_pair_slip10_derive_account_child_key_full(&key_pair, getNextTestValue(), getNextTestValue(), 1);
     }
 }
 
 static void test_user_key_derivation(int stepCount)
 {
-    grdc_ed25519_key_pair root_key_pair;
-    grdc_ed25519_key_pair key_pair;
-    grdc_ed25519_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), ED25519_SEED_SIZE);
+    grdc_sign_key_pair root_key_pair;
+    grdc_sign_key_pair key_pair;
+    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
     for (int i = 0; i < stepCount; ++i) {
-      grdc_ed25519_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
+      grdc_sign_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
     }
 }
 
 static void test_account_key_derivation(int stepCount)
 {
-    grdc_ed25519_key_pair root_key_pair;
-    grdc_ed25519_key_pair key_pair;
-    grdc_ed25519_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), ED25519_SEED_SIZE);
+    grdc_sign_key_pair root_key_pair;
+    grdc_sign_key_pair key_pair;
+    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
     for (int i = 0; i < stepCount; ++i) {
-      grdc_ed25519_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
-      grdc_ed25519_key_pair_slip10_derive_child(&key_pair, &key_pair, 0x80000000 + 1);
+      grdc_sign_key_pair_slip10_derive_user_child_key(&key_pair, &root_key_pair, getNextTestValue());
+      grdc_sign_key_pair_slip10_derive_child(&key_pair, &key_pair, 0x80000000 + 1);
     }
 }
 
@@ -87,7 +87,7 @@ static void prepare_test_data()
   srand(12812);
   for (int i = 0; i < TEST_SEEDS_COUNT; ++i) {
     crypto_generichash(
-      test_seeds[i], ED25519_SEED_SIZE, (const unsigned char *)test_seed_strings[i], strlen(test_seed_strings[i]), NULL,
+      test_seeds[i], SIGN_SEED_SIZE, (const unsigned char *)test_seed_strings[i], strlen(test_seed_strings[i]), NULL,
         0
     );
   }
