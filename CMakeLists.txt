@@ -43,7 +43,7 @@ FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/d
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
-FILE(GLOB TYPES "include/gradido_blockchain_core/types/*.h")
+FILE(GLOB TYPES "src/types/*.c" "include/gradido_blockchain_core/types/*.h")
 FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
 
 FILE(GLOB INTERACTION_VALIDATE
