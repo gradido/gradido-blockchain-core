@@ -100,6 +100,7 @@ grd_result grdc_sign_key_pair_derive_uuid(
     uint32_t word;
     memcpy(&word, &user_uuid[i * 4], sizeof(uint32_t));
     word = ntohl(word); // Network-to-Host: convert from Big-Endian to Little-Endian
+    if (word >= HARDENED_KEY_BITMASK) { word -= HARDENED_KEY_BITMASK; }
     if (0 == i) {
       result = grdc_sign_key_pair_derive(sign_key_pair, sign_parent_key, word);
     } else {
