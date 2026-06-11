@@ -110,6 +110,15 @@ void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 // call grdr_complete_transaction_release and will free memory where tx is pointing
 void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 
+grd_result grdr_complete_transaction_init_from_protobuf(
+    grdr_complete_transaction *tx,
+    const uint8_t *serialized_data,
+    size_t serialized_len,
+    const uint8_t community_uuid[16],
+    uint8_t *buffer,
+    size_t buffer_size
+);
+
 const grdw_account_balance *grdr_complete_transaction_get_account_balance_for_public_key(
     const grdr_complete_transaction *tx, const uint8_t public_key[SIGN_PUBLIC_KEY_SIZE]
 );

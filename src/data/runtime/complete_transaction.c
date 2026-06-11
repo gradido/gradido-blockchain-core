@@ -1,5 +1,8 @@
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
+#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
+#include "gradido_blockchain_core/data/wire/transaction_body.h"
+#include "gradido_blockchain_core/mapping/runtime_from_wire.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 
@@ -31,6 +34,36 @@ void grdr_complete_transaction_free(grdr_complete_transaction *tx) {
     free(tx);
     tx = NULL;
   }
+}
+
+grd_result grdr_complete_transaction_init_from_protobuf(
+    grdr_complete_transaction *tx,
+    const uint8_t *serialized_data,
+    size_t serialized_len,
+    const uint8_t community_uuid[16],
+    uint8_t *buffer,
+    size_t buffer_size
+) {
+  if (!tx || !serialized_data || !community_uuid || !buffer) { return GRD_ERROR_NULL_POINTER; }
+  if (!serialized_len || !buffer_size) { return GRD_ERROR_INVALID_PARAM; }
+
+  grd_memory alloc;
+  grd_memory_init_arena_static(&alloc, buffer, buffer_size);
+
+  grdw_confirmed_transaction wire_tx;
+  grdw_confirmed_transaction_init(&wire_tx);
+
+  grd_memory_block input_block = {(uint8_t *)serialized_data, serialized_len};
+  int result = grdw_confirmed_transaction_decode(&wire_tx, &input_block, &alloc);
+  if (result != GRD_SUCCESS) { return result; }
+
+  grdw_transaction_body body;
+  grdw_transaction_body_init(&body);
+  result = grdw_transaction_body_decode(&body, &wire_tx.transaction.body_bytes, &alloc);
+  if (result != GRD_SUCCESS) { return result; }
+
+  grdr_complete_transaction_release(tx);
+  return grdm_complete_transaction_from_wire(tx, &body, &wire_tx, community_uuid);
 }
 
 const grdw_account_balance *grdr_complete_transaction_get_account_balance_for_public_key(
