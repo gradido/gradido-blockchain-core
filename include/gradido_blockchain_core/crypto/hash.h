@@ -5,14 +5,19 @@
 extern "C" {
 #endif
 
-#include "gradido_blockchain_core/const.h"
+#ifdef USE_SODIUM
+
 #include "gradido_blockchain_core/result.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct grd_memory_block grd_memory_block;
+
 //! \param hash expect to be GENERIC_HASH_SIZE
-grd_result grdc_generic_hash(uint8_t *hash, const uint8_t *data, size_t size);
+grd_result grdc_generic_hash(uint8_t *hash, const grd_memory_block *data_block);
+
+#endif // USE_SODIUM
 
 #ifdef __cplusplus
 }
