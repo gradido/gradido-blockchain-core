@@ -100,10 +100,15 @@ typedef struct grdr_complete_transaction {
 
 typedef struct grdr_transaction_party grdr_transaction_party;
 
+// will malloc memory for grdr_complete_transaction, for using with FFI
+grdr_complete_transaction *grdr_complete_transaction_create();
+
 // will set everything to null
 void grdr_complete_transaction_init(grdr_complete_transaction *tx);
 // will release memory and call init to set everything to null
 void grdr_complete_transaction_release(grdr_complete_transaction *tx);
+// call grdr_complete_transaction_release and will free memory where tx is pointing
+void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 
 const grdw_account_balance *grdr_complete_transaction_get_account_balance_for_public_key(
     const grdr_complete_transaction *tx, const uint8_t public_key[SIGN_PUBLIC_KEY_SIZE]

@@ -2,7 +2,17 @@
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/cross_group.h"
+
+#include <stdlib.h>
 #include <string.h>
+
+grdr_complete_transaction *grdr_complete_transaction_create() {
+  grdr_complete_transaction *tx =
+      (grdr_complete_transaction *)malloc(sizeof(grdr_complete_transaction));
+  if (!tx) return NULL;
+  grdr_complete_transaction_init(tx);
+  return tx;
+}
 
 void grdr_complete_transaction_init(grdr_complete_transaction *tx) {
   if (tx) { memset(tx, 0, sizeof(grdr_complete_transaction)); }
@@ -12,6 +22,14 @@ void grdr_complete_transaction_release(grdr_complete_transaction *tx) {
   if (tx) {
     grd_memory_free(&tx->memory_area);
     grdr_complete_transaction_init(tx);
+  }
+}
+
+void grdr_complete_transaction_free(grdr_complete_transaction *tx) {
+  if (tx) {
+    grdr_complete_transaction_release(tx);
+    free(tx);
+    tx = NULL;
   }
 }
 
