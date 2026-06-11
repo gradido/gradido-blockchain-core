@@ -5,7 +5,7 @@
 
 #include "sodium.h"
 
-#include <string>
+#include <cstring>
 
 grd_memory_block fromBase64(
     const char *base64String, size_t size, int variant /* = sodium_base64_VARIANT_ORIGINAL  */

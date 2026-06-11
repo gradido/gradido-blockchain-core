@@ -48,6 +48,6 @@ void init_key_pairs() {
         hash, crypto_generichash_BYTES, (const unsigned char *)seeds[i], strlen(seeds[i]), nullptr,
         0
     );
-    crypto_sign_ed25519_seed_keypair(t.public_key, t.private_key, hash);
+    crypto_sign_seed_keypair(t.public_key, t.private_key, hash);
   }
 }
