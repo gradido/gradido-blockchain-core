@@ -139,4 +139,4 @@ grd_result ed25519_key_pair_slip10_derive_account_child_key_full(
   return result;
 }
 
-#endif //USE_SODIUM
+#endif // USE_SODIUM

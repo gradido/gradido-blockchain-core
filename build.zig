@@ -33,14 +33,7 @@ const BuildTarget = struct {
     use_sodium: bool = false,
 };
 
-fn processBuildTargets(
-  b: *std.Build,
-  target: std.Build.ResolvedTarget,
-  optimize: std.builtin.OptimizeMode,
-  lib: *std.Build.Step.Compile,
-  targets: []const BuildTarget,
-  path: []const u8
-) void {
+fn processBuildTargets(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, lib: *std.Build.Step.Compile, targets: []const BuildTarget, path: []const u8) void {
     const googletest_dep = b.lazyDependency("googletest", .{
         .target = target,
         .optimize = optimize,
@@ -68,10 +61,10 @@ fn processBuildTargets(
             exe.linkLibrary(dep.artifact("gtest_main"));
         }
         if (tt.use_sodium) {
-          exe.root_module.addCMacro("USE_SODIUM", "1");
-          if (sodium_dep) |dep| {
-              exe.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-          }
+            exe.root_module.addCMacro("USE_SODIUM", "1");
+            if (sodium_dep) |dep| {
+                exe.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+            }
         }
 
         exe.addIncludePath(b.path("include"));
@@ -79,7 +72,7 @@ fn processBuildTargets(
 
         for (tt.src) |src_file| {
             exe.addCSourceFiles(.{
-                .files = &.{ b.fmt("{s}/{s}", .{ path, src_file}) },
+                .files = &.{b.fmt("{s}/{s}", .{ path, src_file })},
             });
         }
 
@@ -104,15 +97,15 @@ pub fn build(b: *std.Build) void {
         }),
     });
     if (enable_sodium) {
-      lib.root_module.addCMacro("USE_SODIUM", "1");
-      if (b.lazyDependency("libsodium", .{
-          .target = target,
-          .optimize = optimize,
-          .static = true,
-          .shared = false,
-      })) |dep| {
-          lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
-      }
+        lib.root_module.addCMacro("USE_SODIUM", "1");
+        if (b.lazyDependency("libsodium", .{
+            .target = target,
+            .optimize = optimize,
+            .static = true,
+            .shared = false,
+        })) |dep| {
+            lib.linkLibrary(dep.artifact(if (target.result.os.tag == .windows) "libsodium-static" else "sodium"));
+        }
     }
 
     lib.linkLibC();
@@ -129,10 +122,7 @@ pub fn build(b: *std.Build) void {
 
     if (enable_benchmarks and enable_sodium) {
         const path = "benchmarks/src";
-        const bench_targets = [_]BuildTarget {
-          .{ .name = "bench_numberToString", .src = &.{"bench_numberToString.c"}, .use_sodium = true },
-          .{ .name = "bench_crypto", .src = &.{"bench_crypto.c"}, .use_sodium = true }
-        };
+        const bench_targets = [_]BuildTarget{ .{ .name = "bench_numberToString", .src = &.{"bench_numberToString.c"}, .use_sodium = true }, .{ .name = "bench_crypto", .src = &.{"bench_crypto.c"}, .use_sodium = true } };
         processBuildTargets(b, target, optimize, lib, &bench_targets, path);
     }
 
@@ -148,9 +138,9 @@ pub fn build(b: *std.Build) void {
 
         if (enable_sodium) {
             test_targets.appendSlice(b.allocator, &[_]BuildTarget{
-                .{ .name = "test_crypto", .src = &.{"test_crypto.cpp", "utils.cpp"}, .use_sodium = true },
-                .{ .name = "test_pbtools", .src = &.{"test_pbtools.cpp", "key_pairs.cpp"}, .use_sodium = true },
-                .{ .name = "test_runtime", .src = &.{"test_runtime.cpp", "key_pairs.cpp"}, .use_sodium = true },
+                .{ .name = "test_crypto", .src = &.{ "test_crypto.cpp", "utils.cpp" }, .use_sodium = true },
+                .{ .name = "test_pbtools", .src = &.{ "test_pbtools.cpp", "key_pairs.cpp" }, .use_sodium = true },
+                .{ .name = "test_runtime", .src = &.{ "test_runtime.cpp", "key_pairs.cpp" }, .use_sodium = true },
             }) catch @panic("test targets array add failed");
         }
         processBuildTargets(b, target, optimize, lib, test_targets.items, path);
