@@ -99,3 +99,14 @@ grdt_transaction grdr_complete_transaction_get_transaction_type(
   if (!tx) { return GRDT_TRANSACTION_NONE; }
   return tx->transaction_type;
 }
+
+grdd_unit grdr_complete_transaction_get_amount(const grdr_complete_transaction *tx) {
+  if (!tx) { return 0; }
+  if (GRDT_TRANSACTION_TRANSFER == tx->transaction_type ||
+      GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER == tx->transaction_type ||
+      GRDT_TRANSACTION_DEFERRED_TRANSFER == tx->transaction_type ||
+      GRDT_TRANSACTION_CREATION == tx->transaction_type) {
+    return tx->transfer.amount;
+  }
+  return 0;
+}

@@ -142,6 +142,8 @@ grdt_transaction grdr_complete_transaction_get_transaction_type(
     const grdr_complete_transaction *tx
 );
 
+grdd_unit grdr_complete_transaction_get_amount(const grdr_complete_transaction *tx);
+
 #ifdef __cplusplus
 }
 #endif
