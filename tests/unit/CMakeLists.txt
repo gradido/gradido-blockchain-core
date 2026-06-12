@@ -43,6 +43,9 @@ target_link_libraries(test_converter gradido_blockchain_core GTest::gtest_main s
 add_executable(test_crypto src/test_crypto.cpp src/utils.cpp)
 target_link_libraries(test_crypto gradido_blockchain_core GTest::gtest_main sodium)
 
+add_executable(test_data_wire src/test_data_wire.cpp)
+target_link_libraries(test_data_wire gradido_blockchain_core GTest::gtest_main)
+
 add_executable(test_memory src/test_memory.cpp)
 target_link_libraries(test_memory gradido_blockchain_core GTest::gtest_main)
 
@@ -62,6 +65,8 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   message(STATUS "Enable test_unit tests")
   add_test(NAME test_duration COMMAND test_duration)
   add_test(NAME test_converter COMMAND test_converter)
+  add_test(NAME test_crypto COMMAND test_crypto)
+  add_test(NAME test_data_wire COMMAND test_data_wire)
   add_test(NAME test_memory COMMAND test_memory)
   add_test(NAME test_pbtools COMMAND test_pbtools)
   add_test(NAME test_runtime COMMAND test_runtime)

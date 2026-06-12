@@ -172,6 +172,7 @@ pub fn build(b: *std.Build) void {
     if (enable_tests) {
         const path = "tests/unit/src";
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data_wire", .srcs = &.{"test_data_wire.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_duration", .srcs = &.{"test_duration.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_memory", .srcs = &.{"test_memory.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);

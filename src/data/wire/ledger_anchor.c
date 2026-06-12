@@ -45,3 +45,46 @@ grd_result grdw_ledger_anchor_set_node_trigger_transaction_id(
 
   return GRD_SUCCESS;
 }
+
+grdt_ledger_anchor grdw_ledger_anchor_get_type(grdw_ledger_anchor *ledger_anchor) {
+  if (!ledger_anchor) { return GRDT_LEDGER_ANCHOR_UNSPECIFIED; }
+  return ledger_anchor->type;
+}
+
+bool grdw_ledger_anchor_is_legacy(grdw_ledger_anchor *ledger_anchor) {
+  if (!ledger_anchor) { return false; }
+  return GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID == ledger_anchor->type ||
+         GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_COMMUNITY_ID == ledger_anchor->type ||
+         GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_USER_ID == ledger_anchor->type ||
+         GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_CONTRIBUTION_ID == ledger_anchor->type ||
+         GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_LINK_ID == ledger_anchor->type;
+}
+
+bool grdw_ledger_anchor_is_hiero_transaction_id(grdw_ledger_anchor *ledger_anchor) {
+  if (!ledger_anchor) { return false; }
+  return GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID == ledger_anchor->type;
+}
+
+bool grdw_ledger_anchor_is_node_trigger_transaction_id(grdw_ledger_anchor *ledger_anchor) {
+  if (!ledger_anchor) { return false; }
+  return GRDT_LEDGER_ANCHOR_NODE_TRIGGER_TRANSACTION_ID == ledger_anchor->type;
+}
+
+// @return 0 if wrong type for legacy id
+uint64_t grdw_ledger_anchor_get_legacy_id(grdw_ledger_anchor *ledger_anchor) {
+  if (!grdw_ledger_anchor_is_legacy(ledger_anchor)) { return 0; }
+  return ledger_anchor->id;
+}
+
+uint64_t grdw_ledger_anchor_get_node_trigger_id(grdw_ledger_anchor *ledger_anchor) {
+  if (!grdw_ledger_anchor_is_node_trigger_transaction_id(ledger_anchor)) { return 0; }
+  return ledger_anchor->id;
+}
+
+// @return NULL if wrong type hiero transaction id
+grdw_hiero_transaction_id *grdw_ledger_anchor_get_hiero_transaction_id(
+    grdw_ledger_anchor *ledger_anchor
+) {
+  if (!grdw_ledger_anchor_is_hiero_transaction_id(ledger_anchor)) { return NULL; }
+  return &ledger_anchor->hiero_transaction_id;
+}
