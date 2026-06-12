@@ -5,6 +5,7 @@
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/cross_group.h"
+#include "gradido_blockchain_core/types/transaction.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -159,5 +160,21 @@ grdd_unit grdr_complete_transaction_get_amount(const grdr_complete_transaction *
       GRDT_TRANSACTION_CREATION == tx->transaction_type) {
     return tx->transfer.amount;
   }
+  return 0;
+}
+
+grdd_timestamp_seconds grdr_complete_transaction_get_target_date(
+    const grdr_complete_transaction *tx
+) {
+  if (!tx) { return 0; }
+  if (GRDT_TRANSACTION_CREATION == tx->transaction_type) { return tx->target_date; }
+  return 0;
+}
+
+grdd_duration_seconds grdr_complete_transaction_get_timeout_duration(
+    const grdr_complete_transaction *tx
+) {
+  if (!tx) { return 0; }
+  if (GRDT_TRANSACTION_DEFERRED_TRANSFER == tx->transaction_type) { return tx->timeout_duration; }
   return 0;
 }

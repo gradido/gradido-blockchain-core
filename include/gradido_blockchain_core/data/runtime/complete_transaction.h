@@ -158,6 +158,13 @@ grdt_transaction grdr_complete_transaction_get_transaction_type(
 
 grdd_unit grdr_complete_transaction_get_amount(const grdr_complete_transaction *tx);
 
+grdd_timestamp_seconds grdr_complete_transaction_get_target_date(
+    const grdr_complete_transaction *tx
+);
+grdd_duration_seconds grdr_complete_transaction_get_timeout_duration(
+    const grdr_complete_transaction *tx
+);
+
 #ifdef __cplusplus
 }
 #endif
