@@ -2,6 +2,25 @@
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+grdw_ledger_anchor *grdw_ledger_anchor_create() {
+  grdw_ledger_anchor *ledger_anchor = (grdw_ledger_anchor *)malloc(sizeof(grdw_ledger_anchor));
+  memset(ledger_anchor, 0, sizeof(grdw_ledger_anchor));
+  return ledger_anchor;
+}
+
+grdw_ledger_anchor *grdw_ledger_anchor_create_copy(const grdw_ledger_anchor *ledger_anchor_input) {
+  grdw_ledger_anchor *ledger_anchor = (grdw_ledger_anchor *)malloc(sizeof(grdw_ledger_anchor));
+  memcpy(ledger_anchor, ledger_anchor_input, sizeof(grdw_ledger_anchor));
+  return ledger_anchor;
+}
+
+void grdw_ledger_anchor_free(grdw_ledger_anchor *ledger_anchor) {
+  if (ledger_anchor) { free(ledger_anchor); }
+}
+
 grd_result grdw_ledger_anchor_set_hiero_transaction_id(
     grdw_ledger_anchor *ledger_anchor,
     grdd_timestamp transaction_valid_start,

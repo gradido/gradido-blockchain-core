@@ -36,6 +36,10 @@ typedef struct grdw_ledger_anchor {
   };
 } grdw_ledger_anchor;
 
+grdw_ledger_anchor *grdw_ledger_anchor_create();
+grdw_ledger_anchor *grdw_ledger_anchor_create_copy(const grdw_ledger_anchor *ledger_anchor);
+void grdw_ledger_anchor_free(grdw_ledger_anchor *ledger_anchor);
+
 /**
  * @brief Set the ledger anchor to a Hiero transaction ID.
  *
