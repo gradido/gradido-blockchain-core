@@ -801,9 +801,8 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   crypto_generichash_init(&state, nullptr, 0, crypto_generichash_BYTES);
   crypto_generichash_update(&state, tx.transaction.body_bytes.data, tx.transaction.body_bytes.size);
   crypto_generichash_final(&state, tx.running_hash, 32);
-  ASSERT_EQ(
-      grdw_ledger_anchor_set_hiero_transaction_id(&tx.ledger_anchor, createdAt2, 0, 0, 121),
-      GRD_SUCCESS
+  grdw_ledger_anchor_assemble_hiero_transaction_id(
+      &tx.ledger_anchor, createdAt2.seconds, createdAt2.nanos, 0, 0, 121
   );
   ASSERT_EQ(grdw_confirmed_transaction_reserve_account_balances(&tx, 1, &mem), GRD_SUCCESS);
   grdw_account_balance accountBalance;
