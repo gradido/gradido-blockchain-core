@@ -23,6 +23,6 @@ TEST(HieroTransactionIdTest, toString) {
 
   char buffer[128];
   size_t written = grdw_hiero_transaction_id_to_string(buffer, 128, &transactionId);
-  ASSERT_EQ(written, 23);
-  EXPECT_STREQ(buffer, "0.0.1233@171627121.2912");
+  ASSERT_EQ(written, 28);
+  EXPECT_STREQ(buffer, "0.0.1233@171627121.000002912");
 }
