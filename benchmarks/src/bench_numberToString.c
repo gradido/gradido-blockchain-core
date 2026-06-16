@@ -2,6 +2,7 @@
 #include "gradido_blockchain_core/utils/duration.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
 #include "gradido_blockchain_core/data/unit.h"
+#include "gradido_blockchain_core/data/wire/hiero.h"
 
 #include "r128/r128.h"
 
@@ -82,11 +83,38 @@ static void test_unit_round(int stepCount)
   }
 }
 
+
 static void test_calculate_decay(int stepCount)
 {
     for (int i = 0; i < stepCount; ++i) {
         grdd_unit_calculate_decay(abs((int64_t)getNextTestValue()), getNextTestValue() % 31556952 * 10);
     }
+}
+
+grdw_hiero_transaction_id transactionId = {
+    .transactionValidStart = {.seconds = 171627121, .nanos = 2912},
+    .accountID = {.shardNum = 0, .realmNum = 0, .accountNum = 1233}
+};
+static void test_hiero_transaction_id_to_string_snprintf(int stepCount)
+{
+  char buffer[128];
+  for (int i = 0; i < stepCount; ++i) {
+    snprintf(buffer, 128, "%lld.%lld.%lld@%lld.%09d",
+      transactionId.accountID.shardNum,
+      transactionId.accountID.realmNum,
+      transactionId.accountID.accountNum,
+      transactionId.transactionValidStart.seconds,
+      transactionId.transactionValidStart.nanos
+    );
+  }
+}
+
+static void test_hiero_transaction_id_to_string(int stepCount)
+{
+  char buffer[128];
+  for (int i = 0; i < stepCount; ++i) {
+    grdw_hiero_transaction_id_to_string(buffer, 128, &transactionId);
+  }
 }
 
 #ifdef USE_SODIUM
@@ -173,6 +201,8 @@ int main(void)
   bench_step(test_unit_round, stepCount, "unit round");
   bench_step(test_r128_round, stepCount, "r128 round");
   bench_step(test_calculate_decay, stepCount, "calculate decay");
+  bench_step(test_hiero_transaction_id_to_string_snprintf, stepCount, "hiero::TransactionId toString snprintf");
+  bench_step(test_hiero_transaction_id_to_string, stepCount, "hiero::TransactionId toString manuell");
 #ifdef USE_SODIUM
   bench_step(test_uuid_from_string, stepCount, "uuid from string");
   bench_step(test_uuid_to_string, stepCount, "uuid to string");

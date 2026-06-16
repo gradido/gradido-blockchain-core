@@ -22,3 +22,6 @@ int grdc_generic_hash_size() {
 int uuid_binary_size() {
   return UUID_BINARY_SIZE;
 }
+int64_t grdc_decay_respite_cent() {
+  return GRADIDO_DECAY_RESPITE_CENT;
+}
