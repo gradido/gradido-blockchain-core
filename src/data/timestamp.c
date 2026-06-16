@@ -2,6 +2,8 @@
 #include "gradido_blockchain_core/data/types.h"
 #include "gradido_blockchain_core/utils/converter.h"
 
+#include <string.h>
+
 grdd_timestamp grdd_timestamp_minus(const grdd_timestamp *t1, const grdd_timestamp *t2) {
   int32_t nanos = t1->nanos - t2->nanos;
   if (nanos < 0) {
