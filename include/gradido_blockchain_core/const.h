@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_CONST_H
 #define GRADIDO_BLOCKCHAIN_CORE_CONST_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,7 +24,7 @@ int grdc_sign_chain_code_size();
 int grdc_sign_private_key_size();
 int grdc_sign_signature_size();
 int grdc_generic_hash_size();
-int uuid_binary_size();
+int grdc_uuid_binary_size();
 int64_t grdc_decay_respite_cent();
 
 #ifdef __cplusplus
