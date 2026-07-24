@@ -7,7 +7,7 @@ fn addDirSources(
     b: *std.Build,
     dir_path: []const u8,
 ) void {
-    var dir = b.build_target.openDir(dir_path, .{ .iterate = true }) catch |err| {
+    var dir = b.build_root.handle.openDir(dir_path, .{ .iterate = true }) catch |err| {
         std.debug.panic("Failed to open directory '{s}': {s}", .{ dir_path, @errorName(err) });
     };
     defer dir.close();
