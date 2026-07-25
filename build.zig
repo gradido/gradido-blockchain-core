@@ -157,20 +157,28 @@ pub fn build(b: *std.Build) void {
     } else {
         b.installArtifact(core_lib);
     }
-
-    if (enable_benchmarks and enable_sodium) {
-        const path = "benchmarks/src";
-        processBuildTarget(&context, .{
-            .link_googletest = false,
-            .link_sodium = true,
-            .name = "bench_numberToString",
-            .srcs = &.{"bench_numberToString.c"},
-        }, path);
+    if (enable_benchmarks) {
+      const path = "benchmarks/src";
+      processBuildTarget(&context, .{
+          .link_googletest = false,
+          .link_sodium = false,
+          .name = "bench_bucket_vector",
+          .srcs = &.{"bench_bucket_vector.c"},
+      }, path);
+      processBuildTarget(&context, .{
+          .link_googletest = false,
+          .link_sodium = enable_sodium,
+          .name = "bench_numberToString",
+          .srcs = &.{"bench_numberToString.c"},
+      }, path);
+      if (enable_sodium) {
         processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_crypto", .srcs = &.{"bench_crypto.c"} }, path);
+      }
     }
 
     if (enable_tests) {
         const path = "tests/unit/src";
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_bucket_vector", .srcs = &.{"test_bucket_vector.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data", .srcs = &.{"test_data.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data_wire", .srcs = &.{"test_data_wire.cpp"} }, path);

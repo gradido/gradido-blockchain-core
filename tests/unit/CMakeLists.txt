@@ -34,6 +34,9 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # one binary per unit
+add_executable(test_bucket_vector src/test_bucket_vector.cpp)
+target_link_libraries(test_bucket_vector gradido_blockchain_core GTest::gtest_main)
+
 add_executable(test_duration src/test_duration.cpp)
 target_link_libraries(test_duration gradido_blockchain_core GTest::gtest_main)
 
@@ -66,6 +69,7 @@ enable_testing()
 include(GoogleTest)
 if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_CROSSCOMPILING_EMULATOR))
   message(STATUS "Enable test_unit tests")
+  add_test(NAME test_bucket_vector COMMAND test_bucket_vector)
   add_test(NAME test_duration COMMAND test_duration)
   add_test(NAME test_converter COMMAND test_converter)
   add_test(NAME test_crypto COMMAND test_crypto)

@@ -7,6 +7,15 @@ if (USE_SODIUM)
 endif()
 
 # one binary per unit
+add_executable(bench_bucket_vector src/bench_bucket_vector.c)
+target_link_libraries(bench_bucket_vector gradido_blockchain_core)
+if (USE_SODIUM)
+  target_link_libraries(bench_bucket_vector sodium)
+endif()
+if(NOT WIN32)
+  target_link_libraries(bench_bucket_vector m)
+endif()
+
 add_executable(bench_numberToString src/bench_numberToString.c)
 target_link_libraries(bench_numberToString gradido_blockchain_core sodium)
 if(NOT WIN32)
