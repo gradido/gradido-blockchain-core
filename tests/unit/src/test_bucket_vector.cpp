@@ -750,8 +750,11 @@ template <typename Fn> double MeasureBestNs(Fn &&fn, size_t elements) {
 }
 
 void PrintTiming(const char *name, double nanos_per_element) {
-  std::printf("  %-36s %7.2f ns/element\n", name, nanos_per_element);
+  std::printf("  %-40s %7.2f ns/element\n", name, nanos_per_element);
 }
+
+/** Bytes an arena needs for @p elements uint64 plus the bucket index and alignment slack. */
+constexpr size_t kPerfArenaBytes = kPerfElements * sizeof(uint64_t) + 1024 * 1024;
 
 /** Sum every element of a prefilled bucket vector, bucket by bucket. */
 uint64_t SumBuckets(const perf_vec &v) {
@@ -770,6 +773,7 @@ TEST(BucketVectorPerformance, Append) {
   grdu_mono_timer_init();
   const size_t n = kPerfElements;
   uint64_t sum_bvec = 0, sum_bvec_reserved = 0, sum_emplace = 0;
+  uint64_t sum_arena = 0, sum_arena_fresh = 0;
   uint64_t sum_vector = 0, sum_vector_reserved = 0, sum_deque = 0, sum_array = 0;
 
   const double ns_bvec = MeasureBestNs(
@@ -806,6 +810,38 @@ TEST(BucketVectorPerformance, Append) {
         }
         sum_emplace = SumBuckets(v);
         perf_vec_free(&v);
+      },
+      n
+  );
+
+  // arena: every bucket is bump-allocated from one contiguous block, _free is a no-op
+  grd_memory arena;
+  ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
+  const double ns_arena = MeasureBestNs(
+      [&] {
+        grd_memory_reset(&arena);
+        perf_vec v;
+        perf_vec_init(&v, &arena);
+        perf_vec_reserve(&v, n);
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
+        sum_arena = SumBuckets(v);
+        perf_vec_free(&v);
+      },
+      n
+  );
+
+  // the same, but paying for the arena itself on every run
+  const double ns_arena_fresh = MeasureBestNs(
+      [&] {
+        grd_memory fresh;
+        grd_memory_init_arena(&fresh, kPerfArenaBytes);
+        perf_vec v;
+        perf_vec_init(&v, &fresh);
+        perf_vec_reserve(&v, n);
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
+        sum_arena_fresh = SumBuckets(v);
+        perf_vec_free(&v);
+        grd_memory_free(&fresh);
       },
       n
   );
@@ -856,6 +892,8 @@ TEST(BucketVectorPerformance, Append) {
   PrintTiming("grdu bucket vector push", ns_bvec);
   PrintTiming("grdu bucket vector push, reserved", ns_bvec_reserved);
   PrintTiming("grdu bucket vector emplace", ns_emplace);
+  PrintTiming("grdu bucket vector push, arena reset", ns_arena);
+  PrintTiming("grdu bucket vector push, fresh arena", ns_arena_fresh);
   PrintTiming("std::vector push_back", ns_vector);
   PrintTiming("std::vector push_back, reserved", ns_vector_reserved);
   PrintTiming("std::deque push_back", ns_deque);
@@ -866,6 +904,9 @@ TEST(BucketVectorPerformance, Append) {
   EXPECT_EQ(sum_bvec, expected);
   EXPECT_EQ(sum_bvec_reserved, expected);
   EXPECT_EQ(sum_emplace, expected);
+  EXPECT_EQ(sum_arena, expected);
+  EXPECT_EQ(sum_arena_fresh, expected);
+  grd_memory_free(&arena);
   EXPECT_EQ(sum_vector, expected);
   EXPECT_EQ(sum_vector_reserved, expected);
   EXPECT_EQ(sum_deque, expected);
@@ -878,13 +919,22 @@ TEST(BucketVectorPerformance, AppendIntoWarmStorage) {
   // and has been written once, so what remains is the append path itself.
   grdu_mono_timer_init();
   const size_t n = kPerfElements;
-  uint64_t sum_bvec = 0, sum_vector = 0, sum_deque = 0;
+  uint64_t sum_bvec = 0, sum_arena = 0, sum_vector = 0, sum_deque = 0;
 
   perf_vec v;
   ASSERT_EQ(perf_vec_init(&v, nullptr), GRD_SUCCESS);
   ASSERT_EQ(perf_vec_reserve(&v, n), GRD_SUCCESS);
   for (size_t i = 0; i < n; ++i) ASSERT_EQ(perf_vec_push(&v, i), GRD_SUCCESS);
   perf_vec_clear(&v); // keeps every bucket
+
+  // arena-backed twin: buckets already taken, and they lie back to back in one block
+  grd_memory arena;
+  ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
+  perf_vec av;
+  ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
+  ASSERT_EQ(perf_vec_reserve(&av, n), GRD_SUCCESS);
+  for (size_t i = 0; i < n; ++i) ASSERT_EQ(perf_vec_push(&av, i), GRD_SUCCESS);
+  perf_vec_clear(&av);
 
   std::vector<uint64_t> vec;
   vec.reserve(n);
@@ -900,6 +950,14 @@ TEST(BucketVectorPerformance, AppendIntoWarmStorage) {
         for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
         sum_bvec = SumBuckets(v);
         perf_vec_clear(&v);
+      },
+      n
+  );
+  const double ns_arena = MeasureBestNs(
+      [&] {
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&av, i);
+        sum_arena = SumBuckets(av);
+        perf_vec_clear(&av);
       },
       n
   );
@@ -926,14 +984,18 @@ TEST(BucketVectorPerformance, AppendIntoWarmStorage) {
 
   std::printf("\nappend %zu elements into storage already owned (fill + sum)\n", n);
   PrintTiming("grdu bucket vector push", ns_bvec);
+  PrintTiming("grdu bucket vector push, arena", ns_arena);
   PrintTiming("std::vector push_back", ns_vector);
   PrintTiming("std::deque push_back", ns_deque);
 
   const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
   EXPECT_EQ(sum_bvec, expected);
+  EXPECT_EQ(sum_arena, expected);
   EXPECT_EQ(sum_vector, expected);
   EXPECT_EQ(sum_deque, expected);
   perf_vec_free(&v);
+  perf_vec_free(&av);
+  grd_memory_free(&arena);
 }
 
 TEST(BucketVectorPerformance, SequentialRead) {
@@ -953,9 +1015,18 @@ TEST(BucketVectorPerformance, SequentialRead) {
     (*arr)[i] = i;
   }
 
-  uint64_t sum_buckets = 0, sum_foreach = 0, sum_vector = 0, sum_deque = 0, sum_array = 0;
+  // arena-backed twin: same bucket layout, but the buckets lie back to back in one block
+  grd_memory arena;
+  ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
+  perf_vec av;
+  ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
+  for (size_t i = 0; i < n; ++i) ASSERT_EQ(perf_vec_push(&av, i), GRD_SUCCESS);
+
+  uint64_t sum_buckets = 0, sum_arena = 0, sum_foreach = 0;
+  uint64_t sum_vector = 0, sum_deque = 0, sum_array = 0;
 
   const double ns_buckets = MeasureBestNs([&] { sum_buckets = SumBuckets(v); }, n);
+  const double ns_arena = MeasureBestNs([&] { sum_arena = SumBuckets(av); }, n);
   const double ns_foreach = MeasureBestNs(
       [&] {
         uint64_t sum = 0;
@@ -994,6 +1065,7 @@ TEST(BucketVectorPerformance, SequentialRead) {
 
   std::printf("\nsequential read of %zu elements\n", n);
   PrintTiming("grdu bucket vector, bucket wise", ns_buckets);
+  PrintTiming("grdu bucket vector, arena, bucket wise", ns_arena);
   PrintTiming("grdu bucket vector, FOREACH", ns_foreach);
   PrintTiming("std::vector, range for", ns_vector);
   PrintTiming("std::deque, range for", ns_deque);
@@ -1001,11 +1073,14 @@ TEST(BucketVectorPerformance, SequentialRead) {
 
   const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
   EXPECT_EQ(sum_buckets, expected);
+  EXPECT_EQ(sum_arena, expected);
   EXPECT_EQ(sum_foreach, expected);
   EXPECT_EQ(sum_vector, expected);
   EXPECT_EQ(sum_deque, expected);
   EXPECT_EQ(sum_array, expected);
   perf_vec_free(&v);
+  perf_vec_free(&av);
+  grd_memory_free(&arena);
 }
 
 TEST(BucketVectorPerformance, RandomAccess) {
@@ -1025,7 +1100,14 @@ TEST(BucketVectorPerformance, RandomAccess) {
     (*arr)[i] = i;
   }
 
-  uint64_t sum_bvec = 0, sum_vector = 0, sum_deque = 0, sum_array = 0;
+  // arena-backed twin: the extra indirection stays, but the buckets are contiguous
+  grd_memory arena;
+  ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
+  perf_vec av;
+  ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
+  for (size_t i = 0; i < n; ++i) ASSERT_EQ(perf_vec_push(&av, i), GRD_SUCCESS);
+
+  uint64_t sum_bvec = 0, sum_arena = 0, sum_vector = 0, sum_deque = 0, sum_array = 0;
 
   const double ns_bvec = MeasureBestNs(
       [&] {
@@ -1036,6 +1118,18 @@ TEST(BucketVectorPerformance, RandomAccess) {
           sum += *perf_vec_get(&v, index);
         }
         sum_bvec = sum;
+      },
+      n
+  );
+  const double ns_arena = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        size_t index = 0;
+        for (size_t i = 0; i < n; ++i) {
+          index = (index + kPerfStride) % n;
+          sum += *perf_vec_get(&av, index);
+        }
+        sum_arena = sum;
       },
       n
   );
@@ -1078,6 +1172,7 @@ TEST(BucketVectorPerformance, RandomAccess) {
 
   std::printf("\nrandom access, %zu scattered reads\n", n);
   PrintTiming("grdu bucket vector _get", ns_bvec);
+  PrintTiming("grdu bucket vector _get, arena", ns_arena);
   PrintTiming("std::vector operator[]", ns_vector);
   PrintTiming("std::deque operator[]", ns_deque);
   PrintTiming("std::array operator[]", ns_array);
@@ -1085,16 +1180,19 @@ TEST(BucketVectorPerformance, RandomAccess) {
   // the stride is coprime to n, so each container is hit exactly once per element
   const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
   EXPECT_EQ(sum_bvec, expected);
+  EXPECT_EQ(sum_arena, expected);
   EXPECT_EQ(sum_vector, expected);
   EXPECT_EQ(sum_deque, expected);
   EXPECT_EQ(sum_array, expected);
   perf_vec_free(&v);
+  perf_vec_free(&av);
+  grd_memory_free(&arena);
 }
 
 TEST(BucketVectorPerformance, AppendLargePayload) {
   grdu_mono_timer_init();
   const size_t n = kPerfElements / 4;
-  uint64_t sum_emplace = 0, sum_push = 0, sum_vector = 0, sum_deque = 0;
+  uint64_t sum_emplace = 0, sum_arena = 0, sum_push = 0, sum_vector = 0, sum_deque = 0;
 
   // 32 byte payload: here growth of a contiguous container means copying real weight
   const double ns_emplace = MeasureBestNs(
@@ -1110,6 +1208,27 @@ TEST(BucketVectorPerformance, AppendLargePayload) {
         }
         for (size_t i = 0; i < n; ++i) sum += perf_pay_vec_at(&v, i)->id;
         sum_emplace = sum;
+        perf_pay_vec_free(&v);
+      },
+      n
+  );
+
+  grd_memory arena;
+  ASSERT_EQ(grd_memory_init_arena(&arena, n * sizeof(payload) + 1024 * 1024), GRD_SUCCESS);
+  const double ns_arena = MeasureBestNs(
+      [&] {
+        grd_memory_reset(&arena);
+        perf_pay_vec v;
+        perf_pay_vec_init(&v, &arena);
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+          payload *slot = nullptr;
+          if (perf_pay_vec_emplace(&v, &slot) != GRD_SUCCESS) break;
+          std::memset(slot, 0, sizeof(*slot));
+          slot->id = i;
+        }
+        for (size_t i = 0; i < n; ++i) sum += perf_pay_vec_at(&v, i)->id;
+        sum_arena = sum;
         perf_pay_vec_free(&v);
       },
       n
@@ -1167,13 +1286,16 @@ TEST(BucketVectorPerformance, AppendLargePayload) {
 
   std::printf("\nappend %zu elements of %zu byte payload (fill + sum)\n", n, sizeof(payload));
   PrintTiming("grdu bucket vector emplace", ns_emplace);
+  PrintTiming("grdu bucket vector emplace, arena", ns_arena);
   PrintTiming("grdu bucket vector push by value", ns_push);
   PrintTiming("std::vector push_back", ns_vector);
   PrintTiming("std::deque push_back", ns_deque);
 
   const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
   EXPECT_EQ(sum_emplace, expected);
+  EXPECT_EQ(sum_arena, expected);
   EXPECT_EQ(sum_push, expected);
   EXPECT_EQ(sum_vector, expected);
   EXPECT_EQ(sum_deque, expected);
+  grd_memory_free(&arena);
 }
