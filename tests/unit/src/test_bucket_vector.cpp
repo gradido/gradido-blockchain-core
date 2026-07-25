@@ -1,7 +1,12 @@
 #include "gradido_blockchain_core/utils/bucket_vector.h"
+#include "gradido_blockchain_core/utils/mono_timer.h"
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstdio>
 #include <cstring>
+#include <deque>
+#include <memory>
 #include <random>
 #include <set>
 #include <vector>
@@ -704,4 +709,471 @@ TEST(BucketVectorInvariants, PayloadTypeHoldsTheSameInvariants) {
   }
   ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, pay_vec_BUCKET_CAPACITY));
   pay_vec_free(&v);
+}
+
+// --- performance comparison against the C++ standard containers -----------------------------
+//
+// These tests measure, they do not gate: the only assertions are on the computed results, so a
+// slow or loaded machine can never turn them red. The timings are printed for reading, in the
+// same build configuration the rest of the suite runs in.
+
+// realistic bucket size for the comparison: 512 * 8 B = 4 KiB
+GRDU_BVEC_STATIC(perf_vec, uint64_t, 9)
+GRDU_BVEC_STATIC(perf_pay_vec, payload, 7) // 128 * 32 B = 4 KiB
+
+namespace {
+
+constexpr size_t kPerfElements = 1000000;
+constexpr int kPerfRepeats = 5;
+/** Prime stride: long orbit through the whole range, no prefetchable pattern. */
+constexpr size_t kPerfStride = 524287;
+
+/**
+ * Run @p fn a few times and keep the fastest — the run least disturbed by the machine.
+ *
+ * One untimed warm-up runs first. Without it the first measurement carries the cost of the
+ * heap growing into a size it has never held, which says more about the allocator's history
+ * than about the container under test.
+ */
+template <typename Fn> double MeasureBestNs(Fn &&fn, size_t elements) {
+  double best = -1.0;
+  fn();
+  for (int repeat = 0; repeat < kPerfRepeats; ++repeat) {
+    grdu_mono_timer timer;
+    grdu_mono_timer_reset(&timer);
+    fn();
+    const double ns =
+        static_cast<double>(grdu_mono_timer_nanos(timer)) / static_cast<double>(elements);
+    if (best < 0.0 || ns < best) best = ns;
+  }
+  return best;
+}
+
+void PrintTiming(const char *name, double nanos_per_element) {
+  std::printf("  %-36s %7.2f ns/element\n", name, nanos_per_element);
+}
+
+/** Sum every element of a prefilled bucket vector, bucket by bucket. */
+uint64_t SumBuckets(const perf_vec &v) {
+  uint64_t sum = 0;
+  for (size_t b = 0, buckets = perf_vec_bucket_count(&v); b < buckets; ++b) {
+    const uint64_t *data = perf_vec_bucket_data(&v, b);
+    const size_t count = perf_vec_bucket_size(&v, b);
+    for (size_t k = 0; k < count; ++k) sum += data[k];
+  }
+  return sum;
+}
+
+} // namespace
+
+TEST(BucketVectorPerformance, Append) {
+  grdu_mono_timer_init();
+  const size_t n = kPerfElements;
+  uint64_t sum_bvec = 0, sum_bvec_reserved = 0, sum_emplace = 0;
+  uint64_t sum_vector = 0, sum_vector_reserved = 0, sum_deque = 0, sum_array = 0;
+
+  const double ns_bvec = MeasureBestNs(
+      [&] {
+        perf_vec v;
+        perf_vec_init(&v, nullptr);
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
+        sum_bvec = SumBuckets(v);
+        perf_vec_free(&v);
+      },
+      n
+  );
+
+  const double ns_bvec_reserved = MeasureBestNs(
+      [&] {
+        perf_vec v;
+        perf_vec_init(&v, nullptr);
+        perf_vec_reserve(&v, n);
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
+        sum_bvec_reserved = SumBuckets(v);
+        perf_vec_free(&v);
+      },
+      n
+  );
+
+  const double ns_emplace = MeasureBestNs(
+      [&] {
+        perf_vec v;
+        perf_vec_init(&v, nullptr);
+        for (size_t i = 0; i < n; ++i) {
+          uint64_t *slot = nullptr;
+          if (perf_vec_emplace(&v, &slot) != GRD_SUCCESS) break;
+          *slot = i;
+        }
+        sum_emplace = SumBuckets(v);
+        perf_vec_free(&v);
+      },
+      n
+  );
+
+  const double ns_vector = MeasureBestNs(
+      [&] {
+        std::vector<uint64_t> v;
+        for (size_t i = 0; i < n; ++i) v.push_back(i);
+        sum_vector = 0;
+        for (uint64_t value : v) sum_vector += value;
+      },
+      n
+  );
+
+  const double ns_vector_reserved = MeasureBestNs(
+      [&] {
+        std::vector<uint64_t> v;
+        v.reserve(n);
+        for (size_t i = 0; i < n; ++i) v.push_back(i);
+        sum_vector_reserved = 0;
+        for (uint64_t value : v) sum_vector_reserved += value;
+      },
+      n
+  );
+
+  const double ns_deque = MeasureBestNs(
+      [&] {
+        std::deque<uint64_t> d;
+        for (size_t i = 0; i < n; ++i) d.push_back(i);
+        sum_deque = 0;
+        for (uint64_t value : d) sum_deque += value;
+      },
+      n
+  );
+
+  // std::array is fixed size — no growth, no allocation, the floor this can be measured against
+  const double ns_array = MeasureBestNs(
+      [&] {
+        auto a = std::make_unique<std::array<uint64_t, kPerfElements>>();
+        for (size_t i = 0; i < n; ++i) (*a)[i] = i;
+        sum_array = 0;
+        for (uint64_t value : *a) sum_array += value;
+      },
+      n
+  );
+
+  std::printf("\nappend %zu elements (uint64, fill + sum)\n", n);
+  PrintTiming("grdu bucket vector push", ns_bvec);
+  PrintTiming("grdu bucket vector push, reserved", ns_bvec_reserved);
+  PrintTiming("grdu bucket vector emplace", ns_emplace);
+  PrintTiming("std::vector push_back", ns_vector);
+  PrintTiming("std::vector push_back, reserved", ns_vector_reserved);
+  PrintTiming("std::deque push_back", ns_deque);
+  PrintTiming("std::array indexed write", ns_array);
+
+  // every container has to have produced the very same sequence
+  const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
+  EXPECT_EQ(sum_bvec, expected);
+  EXPECT_EQ(sum_bvec_reserved, expected);
+  EXPECT_EQ(sum_emplace, expected);
+  EXPECT_EQ(sum_vector, expected);
+  EXPECT_EQ(sum_vector_reserved, expected);
+  EXPECT_EQ(sum_deque, expected);
+  EXPECT_EQ(sum_array, expected);
+}
+
+TEST(BucketVectorPerformance, AppendIntoWarmStorage) {
+  // The append test above measures container *and* allocator: fresh buckets have to be taken
+  // and their pages touched for the first time. Here every container already owns its memory
+  // and has been written once, so what remains is the append path itself.
+  grdu_mono_timer_init();
+  const size_t n = kPerfElements;
+  uint64_t sum_bvec = 0, sum_vector = 0, sum_deque = 0;
+
+  perf_vec v;
+  ASSERT_EQ(perf_vec_init(&v, nullptr), GRD_SUCCESS);
+  ASSERT_EQ(perf_vec_reserve(&v, n), GRD_SUCCESS);
+  for (size_t i = 0; i < n; ++i) ASSERT_EQ(perf_vec_push(&v, i), GRD_SUCCESS);
+  perf_vec_clear(&v); // keeps every bucket
+
+  std::vector<uint64_t> vec;
+  vec.reserve(n);
+  for (size_t i = 0; i < n; ++i) vec.push_back(i);
+  vec.clear(); // keeps the capacity
+
+  std::deque<uint64_t> deq;
+  for (size_t i = 0; i < n; ++i) deq.push_back(i);
+  deq.clear(); // keeps some of its chunks
+
+  const double ns_bvec = MeasureBestNs(
+      [&] {
+        for (size_t i = 0; i < n; ++i) perf_vec_push(&v, i);
+        sum_bvec = SumBuckets(v);
+        perf_vec_clear(&v);
+      },
+      n
+  );
+  const double ns_vector = MeasureBestNs(
+      [&] {
+        for (size_t i = 0; i < n; ++i) vec.push_back(i);
+        uint64_t sum = 0;
+        for (uint64_t value : vec) sum += value;
+        sum_vector = sum;
+        vec.clear();
+      },
+      n
+  );
+  const double ns_deque = MeasureBestNs(
+      [&] {
+        for (size_t i = 0; i < n; ++i) deq.push_back(i);
+        uint64_t sum = 0;
+        for (uint64_t value : deq) sum += value;
+        sum_deque = sum;
+        deq.clear();
+      },
+      n
+  );
+
+  std::printf("\nappend %zu elements into storage already owned (fill + sum)\n", n);
+  PrintTiming("grdu bucket vector push", ns_bvec);
+  PrintTiming("std::vector push_back", ns_vector);
+  PrintTiming("std::deque push_back", ns_deque);
+
+  const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
+  EXPECT_EQ(sum_bvec, expected);
+  EXPECT_EQ(sum_vector, expected);
+  EXPECT_EQ(sum_deque, expected);
+  perf_vec_free(&v);
+}
+
+TEST(BucketVectorPerformance, SequentialRead) {
+  grdu_mono_timer_init();
+  const size_t n = kPerfElements;
+
+  perf_vec v;
+  ASSERT_EQ(perf_vec_init(&v, nullptr), GRD_SUCCESS);
+  std::vector<uint64_t> vec;
+  vec.reserve(n);
+  std::deque<uint64_t> deq;
+  auto arr = std::make_unique<std::array<uint64_t, kPerfElements>>();
+  for (size_t i = 0; i < n; ++i) {
+    ASSERT_EQ(perf_vec_push(&v, i), GRD_SUCCESS);
+    vec.push_back(i);
+    deq.push_back(i);
+    (*arr)[i] = i;
+  }
+
+  uint64_t sum_buckets = 0, sum_foreach = 0, sum_vector = 0, sum_deque = 0, sum_array = 0;
+
+  const double ns_buckets = MeasureBestNs([&] { sum_buckets = SumBuckets(v); }, n);
+  const double ns_foreach = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        uint64_t *item = nullptr;
+        GRDU_BVEC_FOREACH(perf_vec, &v, item, index) {
+          sum += *item;
+        }
+        sum_foreach = sum;
+      },
+      n
+  );
+  const double ns_vector = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        for (uint64_t value : vec) sum += value;
+        sum_vector = sum;
+      },
+      n
+  );
+  const double ns_deque = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        for (uint64_t value : deq) sum += value;
+        sum_deque = sum;
+      },
+      n
+  );
+  const double ns_array = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        for (uint64_t value : *arr) sum += value;
+        sum_array = sum;
+      },
+      n
+  );
+
+  std::printf("\nsequential read of %zu elements\n", n);
+  PrintTiming("grdu bucket vector, bucket wise", ns_buckets);
+  PrintTiming("grdu bucket vector, FOREACH", ns_foreach);
+  PrintTiming("std::vector, range for", ns_vector);
+  PrintTiming("std::deque, range for", ns_deque);
+  PrintTiming("std::array, range for", ns_array);
+
+  const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
+  EXPECT_EQ(sum_buckets, expected);
+  EXPECT_EQ(sum_foreach, expected);
+  EXPECT_EQ(sum_vector, expected);
+  EXPECT_EQ(sum_deque, expected);
+  EXPECT_EQ(sum_array, expected);
+  perf_vec_free(&v);
+}
+
+TEST(BucketVectorPerformance, RandomAccess) {
+  grdu_mono_timer_init();
+  const size_t n = kPerfElements;
+
+  perf_vec v;
+  ASSERT_EQ(perf_vec_init(&v, nullptr), GRD_SUCCESS);
+  std::vector<uint64_t> vec;
+  vec.reserve(n);
+  std::deque<uint64_t> deq;
+  auto arr = std::make_unique<std::array<uint64_t, kPerfElements>>();
+  for (size_t i = 0; i < n; ++i) {
+    ASSERT_EQ(perf_vec_push(&v, i), GRD_SUCCESS);
+    vec.push_back(i);
+    deq.push_back(i);
+    (*arr)[i] = i;
+  }
+
+  uint64_t sum_bvec = 0, sum_vector = 0, sum_deque = 0, sum_array = 0;
+
+  const double ns_bvec = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        size_t index = 0;
+        for (size_t i = 0; i < n; ++i) {
+          index = (index + kPerfStride) % n;
+          sum += *perf_vec_get(&v, index);
+        }
+        sum_bvec = sum;
+      },
+      n
+  );
+  const double ns_vector = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        size_t index = 0;
+        for (size_t i = 0; i < n; ++i) {
+          index = (index + kPerfStride) % n;
+          sum += vec[index];
+        }
+        sum_vector = sum;
+      },
+      n
+  );
+  const double ns_deque = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        size_t index = 0;
+        for (size_t i = 0; i < n; ++i) {
+          index = (index + kPerfStride) % n;
+          sum += deq[index];
+        }
+        sum_deque = sum;
+      },
+      n
+  );
+  const double ns_array = MeasureBestNs(
+      [&] {
+        uint64_t sum = 0;
+        size_t index = 0;
+        for (size_t i = 0; i < n; ++i) {
+          index = (index + kPerfStride) % n;
+          sum += (*arr)[index];
+        }
+        sum_array = sum;
+      },
+      n
+  );
+
+  std::printf("\nrandom access, %zu scattered reads\n", n);
+  PrintTiming("grdu bucket vector _get", ns_bvec);
+  PrintTiming("std::vector operator[]", ns_vector);
+  PrintTiming("std::deque operator[]", ns_deque);
+  PrintTiming("std::array operator[]", ns_array);
+
+  // the stride is coprime to n, so each container is hit exactly once per element
+  const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
+  EXPECT_EQ(sum_bvec, expected);
+  EXPECT_EQ(sum_vector, expected);
+  EXPECT_EQ(sum_deque, expected);
+  EXPECT_EQ(sum_array, expected);
+  perf_vec_free(&v);
+}
+
+TEST(BucketVectorPerformance, AppendLargePayload) {
+  grdu_mono_timer_init();
+  const size_t n = kPerfElements / 4;
+  uint64_t sum_emplace = 0, sum_push = 0, sum_vector = 0, sum_deque = 0;
+
+  // 32 byte payload: here growth of a contiguous container means copying real weight
+  const double ns_emplace = MeasureBestNs(
+      [&] {
+        perf_pay_vec v;
+        perf_pay_vec_init(&v, nullptr);
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+          payload *slot = nullptr;
+          if (perf_pay_vec_emplace(&v, &slot) != GRD_SUCCESS) break;
+          std::memset(slot, 0, sizeof(*slot));
+          slot->id = i;
+        }
+        for (size_t i = 0; i < n; ++i) sum += perf_pay_vec_at(&v, i)->id;
+        sum_emplace = sum;
+        perf_pay_vec_free(&v);
+      },
+      n
+  );
+
+  const double ns_push = MeasureBestNs(
+      [&] {
+        perf_pay_vec v;
+        perf_pay_vec_init(&v, nullptr);
+        payload p;
+        std::memset(&p, 0, sizeof(p));
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+          p.id = i;
+          perf_pay_vec_push(&v, p);
+        }
+        for (size_t i = 0; i < n; ++i) sum += perf_pay_vec_at(&v, i)->id;
+        sum_push = sum;
+        perf_pay_vec_free(&v);
+      },
+      n
+  );
+
+  const double ns_vector = MeasureBestNs(
+      [&] {
+        std::vector<payload> v;
+        payload p;
+        std::memset(&p, 0, sizeof(p));
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+          p.id = i;
+          v.push_back(p);
+        }
+        for (const payload &stored : v) sum += stored.id;
+        sum_vector = sum;
+      },
+      n
+  );
+
+  const double ns_deque = MeasureBestNs(
+      [&] {
+        std::deque<payload> d;
+        payload p;
+        std::memset(&p, 0, sizeof(p));
+        uint64_t sum = 0;
+        for (size_t i = 0; i < n; ++i) {
+          p.id = i;
+          d.push_back(p);
+        }
+        for (const payload &stored : d) sum += stored.id;
+        sum_deque = sum;
+      },
+      n
+  );
+
+  std::printf("\nappend %zu elements of %zu byte payload (fill + sum)\n", n, sizeof(payload));
+  PrintTiming("grdu bucket vector emplace", ns_emplace);
+  PrintTiming("grdu bucket vector push by value", ns_push);
+  PrintTiming("std::vector push_back", ns_vector);
+  PrintTiming("std::deque push_back", ns_deque);
+
+  const uint64_t expected = (static_cast<uint64_t>(n) - 1) * static_cast<uint64_t>(n) / 2;
+  EXPECT_EQ(sum_emplace, expected);
+  EXPECT_EQ(sum_push, expected);
+  EXPECT_EQ(sum_vector, expected);
+  EXPECT_EQ(sum_deque, expected);
 }
