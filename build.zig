@@ -28,6 +28,30 @@ fn addDirSources(
     }
 }
 
+/// Sanitizers the zig toolchain can apply to the C/C++ sources of this project.
+///
+/// AddressSanitizer is deliberately absent: zig does not ship the asan runtime, so
+/// `-fsanitize=address` would compile but fail to link. Use the CMake build with
+/// `-DENABLE_SANITIZERS=ON` for a leak and out-of-bounds check.
+const SanitizeMode = enum {
+    /// no instrumentation
+    off,
+    /// UndefinedBehaviorSanitizer, aborting with a diagnostic on the first finding
+    undefined_behavior,
+    /// ThreadSanitizer, reporting data races between threads
+    thread,
+};
+
+/// Instrument a module according to @p mode. Applied to every target of the build so that
+/// library and test binary always agree on their instrumentation.
+fn applySanitize(module: *std.Build.Module, mode: SanitizeMode) void {
+    switch (mode) {
+        .off => {},
+        .undefined_behavior => module.sanitize_c = .full,
+        .thread => module.sanitize_thread = true,
+    }
+}
+
 const BuildContext = struct {
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -36,6 +60,7 @@ const BuildContext = struct {
     googletest_dep: ?*std.Build.Dependency,
     sodium_dep: ?*std.Build.Dependency,
     singleOutputDir: bool,
+    sanitize: SanitizeMode,
     cdb: *std.ArrayList(*std.Build.Step.Compile),
 };
 
@@ -56,6 +81,7 @@ fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, p
         }),
     });
 
+    applySanitize(exe.root_module, context.sanitize);
     exe.linkLibrary(context.core_lib);
 
     if (build_target.link_googletest) {
@@ -102,11 +128,13 @@ pub fn build(b: *std.Build) void {
     const enable_sodium = b.option(bool, "sodium", "Enable sodium and crypto") orelse false;
     const lib_shared = b.option(bool, "shared", "Make lib shared") orelse false;
     const singleOutputDir = b.option(bool, "singleOutputDir", "Put direct into output folder, without lib or bin folder") orelse false;
+    const sanitize = b.option(SanitizeMode, "sanitize", "Instrument C sources: undefined_behavior (UBSan) or thread (TSan). AddressSanitizer needs the CMake build with -DENABLE_SANITIZERS=ON") orelse .off;
 
     const core_lib = b.addLibrary(.{ .name = "gradido_blockchain_core", .linkage = if (lib_shared) .dynamic else .static, .root_module = b.createModule(.{
         .target = target,
         .optimize = optimize,
     }) });
+    applySanitize(core_lib.root_module, sanitize);
 
     const context: BuildContext = .{
         .b = b,
@@ -124,6 +152,7 @@ pub fn build(b: *std.Build) void {
             .shared = false,
         }),
         .singleOutputDir = singleOutputDir,
+        .sanitize = sanitize,
         .cdb = &cdbTargets,
     };
 
