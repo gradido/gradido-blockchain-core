@@ -20,12 +20,6 @@ void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator) {
   return buffer;
 }
 
-int grdu_bvec_allocator_reclaims(const grd_memory *allocator) {
-  // no allocator means malloc/free, and default mode frees each block individually
-  if (!allocator) return 1;
-  return allocator->allocation_type == GRD_MEMORY_ALLOC_TYPE_DEFAULT;
-}
-
 bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator) {
   if (!ptr) return true;
   if (size > UINT32_MAX) return false;

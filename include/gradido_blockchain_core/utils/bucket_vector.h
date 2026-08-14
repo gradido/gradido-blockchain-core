@@ -139,17 +139,6 @@ extern "C" {
 void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator);
 
 /**
- * @brief Report whether this allocator frees blocks individually.
- *
- * True for NULL (malloc/free) and @ref GRD_MEMORY_ALLOC_TYPE_DEFAULT, false for the arena
- * modes, which can only give back their most recent allocation.
- *
- * @param[in] allocator Allocator to inspect, or NULL for malloc/free.
- * @return 1 if every free reclaims, 0 if the allocator releases collectively.
- */
-int grdu_bvec_allocator_reclaims(const grd_memory *allocator);
-
-/**
  * @brief Release a block obtained from grdu_bvec_raw_alloc().
  *
  * An arena only takes back its most recent allocation; anything before it stays until reset.
