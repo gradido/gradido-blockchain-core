@@ -43,10 +43,13 @@ template <typename V> void CheckInvariants(const V &v, size_t capacity) {
   }
 
   if (v.size == 0) {
-    // the empty marker: no tail, and tail_used parked at capacity so the next push grows
+    // the empty marker is the missing tail. Two encodings reach it: _init and _clear park
+    // tail_used at capacity, a zero-initialized descriptor leaves it at 0. Both are inert,
+    // because every write path gates on tail before it reads tail_used.
     EXPECT_EQ(v.tail, nullptr);
     EXPECT_EQ(v.tail_index, 0u);
-    EXPECT_EQ(v.tail_used, capacity);
+    EXPECT_TRUE(v.tail_used == capacity || v.tail_used == 0u)
+        << "tail_used " << v.tail_used << " is neither the parked capacity nor zero";
     return;
   }
   ASSERT_NE(v.tail, nullptr);
@@ -268,7 +271,7 @@ TEST(BucketVector, CopyTo) {
 }
 
 TEST(BucketVector, ArenaAllocator) {
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, 1024 * 1024), GRD_SUCCESS);
 
   pay_vec v;
@@ -286,7 +289,7 @@ TEST(BucketVector, ArenaAllocator) {
 
 TEST(BucketVector, ExhaustedArenaReportsOutOfMemory) {
   uint8_t buffer[256];
-  grd_memory small;
+  grd_memory small{};
   ASSERT_EQ(grd_memory_init_arena_static(&small, buffer, sizeof(buffer)), GRD_SUCCESS);
 
   u32_vec v;
@@ -300,6 +303,297 @@ TEST(BucketVector, ExhaustedArenaReportsOutOfMemory) {
   for (size_t i = 0; i < pushed; ++i) ASSERT_EQ(*u32_vec_at(&v, i), static_cast<uint32_t>(i));
   u32_vec_free(&v);
   grd_memory_free(&small);
+}
+
+// --- zero-initialized descriptors ------------------------------------------------------------
+//
+// `name v = {0};` is the C idiom for an empty aggregate, and reaching for it instead of _init
+// must not be a trap: an all-zero descriptor has to be a usable empty vector.
+
+TEST(BucketVectorZeroInit, ZeroedDescriptorAnswersEveryReadPath) {
+  u32_vec v;
+  std::memset(&v, 0, sizeof(v)); // strictly all bytes zero, whatever the padding
+
+  EXPECT_EQ(u32_vec_size(&v), 0u);
+  EXPECT_EQ(u32_vec_bucket_count(&v), 0u);
+  EXPECT_EQ(u32_vec_front(&v), nullptr);
+  EXPECT_EQ(u32_vec_back(&v), nullptr);
+  EXPECT_EQ(u32_vec_at(&v, 0), nullptr);
+  EXPECT_EQ(u32_vec_at(&v, 12345), nullptr);
+  EXPECT_EQ(u32_vec_pop(&v), GRD_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS);
+  uint32_t sink = 0;
+  EXPECT_EQ(u32_vec_copy_to(&v, &sink, 1), GRD_SUCCESS); // nothing to copy, no read of buckets
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+
+  // the first push has to open the first bucket instead of writing through the null tail
+  for (uint32_t i = 0; i < 300; ++i) ASSERT_EQ(u32_vec_push(&v, i * 3), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 300; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i * 3);
+  EXPECT_EQ(*u32_vec_front(&v), 0u);
+  EXPECT_EQ(*u32_vec_back(&v), 299u * 3);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+  u32_vec_free(&v);
+}
+
+TEST(BucketVectorZeroInit, ConvergesWithAnInitialisedVector) {
+  u32_vec zeroed;
+  std::memset(&zeroed, 0, sizeof(zeroed));
+  u32_vec inited;
+  ASSERT_EQ(u32_vec_init(&inited, nullptr), GRD_SUCCESS);
+
+  // the two empty encodings differ in exactly one field, and it is never read while tail is null
+  EXPECT_EQ(zeroed.tail_used, 0u);
+  EXPECT_EQ(inited.tail_used, static_cast<size_t>(u32_vec_BUCKET_CAPACITY));
+
+  for (uint32_t i = 0; i < 40; ++i) {
+    ASSERT_EQ(u32_vec_push(&zeroed, i), GRD_SUCCESS);
+    ASSERT_EQ(u32_vec_push(&inited, i), GRD_SUCCESS);
+  }
+  // from the first push onwards the states are indistinguishable
+  EXPECT_EQ(zeroed.size, inited.size);
+  EXPECT_EQ(zeroed.bucket_count, inited.bucket_count);
+  EXPECT_EQ(zeroed.bucket_capacity, inited.bucket_capacity);
+  EXPECT_EQ(zeroed.tail_index, inited.tail_index);
+  EXPECT_EQ(zeroed.tail_used, inited.tail_used);
+  u32_vec_free(&zeroed);
+  u32_vec_free(&inited);
+}
+
+TEST(BucketVectorZeroInit, EmplaceReserveClearAndShrinkAllHold) {
+  pay_vec v = {}; // the aggregate form a C++ caller reaches for
+  payload *slot = nullptr;
+  ASSERT_EQ(pay_vec_emplace(&v, &slot), GRD_SUCCESS);
+  ASSERT_NE(slot, nullptr);
+  slot->id = 4711;
+  EXPECT_EQ(pay_vec_size(&v), 1u);
+  EXPECT_EQ(pay_vec_back(&v)->id, 4711u);
+  pay_vec_free(&v);
+
+  pay_vec fresh;
+  std::memset(&fresh, 0, sizeof(fresh));
+  EXPECT_EQ(pay_vec_reserve(&fresh, 100), GRD_SUCCESS);
+  EXPECT_GT(fresh.bucket_count, 0u);
+  EXPECT_EQ(pay_vec_shrink(&fresh), GRD_SUCCESS); // nothing pushed, so everything goes back
+  EXPECT_EQ(fresh.bucket_count, 0u);
+  pay_vec_clear(&fresh);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(fresh, pay_vec_BUCKET_CAPACITY));
+  pay_vec_free(&fresh);
+
+  one_vec degenerate; // one element per bucket: every push takes the cold path
+  std::memset(&degenerate, 0, sizeof(degenerate));
+  for (uint32_t i = 0; i < 50; ++i) ASSERT_EQ(one_vec_push(&degenerate, i), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 50; ++i) ASSERT_EQ(*one_vec_at(&degenerate, i), i);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(degenerate, one_vec_BUCKET_CAPACITY));
+  one_vec_free(&degenerate);
+}
+
+// --- _shrink ---------------------------------------------------------------------------------
+
+TEST(BucketVectorShrink, ReleasesTheBucketsPastTheLastElement) {
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 500; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  const size_t peak = v.bucket_count;
+
+  for (int i = 0; i < 450; ++i) ASSERT_EQ(u32_vec_pop(&v), GRD_SUCCESS);
+  EXPECT_EQ(v.bucket_count, peak); // popping alone never hands anything back
+
+  const uint32_t *stable = u32_vec_at(&v, 7);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+
+  const size_t used = (50 + u32_vec_BUCKET_MASK) / u32_vec_BUCKET_CAPACITY;
+  EXPECT_EQ(v.bucket_count, used);
+  EXPECT_EQ(v.bucket_capacity, used); // the index array is tightened along with the buckets
+  EXPECT_LT(v.bucket_count, peak);
+  EXPECT_EQ(u32_vec_size(&v), 50u);
+  EXPECT_EQ(u32_vec_at(&v, 7), stable); // not one live element moved
+  for (uint32_t i = 0; i < 50; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+
+  // and the vector grows again from the tightened state
+  for (uint32_t i = 50; i < 500; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 500; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+  u32_vec_free(&v);
+}
+
+TEST(BucketVectorShrink, AfterClearHandsBackEverything) {
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 300; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  u32_vec_clear(&v);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+
+  // an empty vector keeps no bucket and no index array at all
+  EXPECT_EQ(v.buckets, nullptr);
+  EXPECT_EQ(v.bucket_count, 0u);
+  EXPECT_EQ(v.bucket_capacity, 0u);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+
+  ASSERT_EQ(u32_vec_push(&v, 9u), GRD_SUCCESS); // usable immediately afterwards
+  EXPECT_EQ(*u32_vec_front(&v), 9u);
+  EXPECT_EQ(*u32_vec_back(&v), 9u);
+  u32_vec_free(&v);
+}
+
+TEST(BucketVectorShrink, DropsReservedButUntouchedBuckets) {
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_reserve(&v, 1000), GRD_SUCCESS);
+  ASSERT_GT(v.bucket_count, 0u);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS); // nothing was ever pushed into the reservation
+  EXPECT_EQ(v.bucket_count, 0u);
+  EXPECT_EQ(v.bucket_capacity, 0u);
+  EXPECT_EQ(v.buckets, nullptr);
+
+  // reserve again, fill a corner of it: only the untouched tail goes
+  ASSERT_EQ(u32_vec_reserve(&v, 1000), GRD_SUCCESS);
+  const size_t reserved = v.bucket_count;
+  for (uint32_t i = 0; i < 20; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+  EXPECT_LT(v.bucket_count, reserved);
+  EXPECT_EQ(v.bucket_count, u32_vec_bucket_count(&v));
+  for (uint32_t i = 0; i < 20; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+  u32_vec_free(&v);
+}
+
+TEST(BucketVectorShrink, IsIdempotentAndNullSafe) {
+  EXPECT_EQ(u32_vec_shrink(nullptr), GRD_ERROR_NULL_POINTER);
+
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS); // on a vector that never allocated
+  EXPECT_EQ(v.bucket_count, 0u);
+  EXPECT_EQ(v.buckets, nullptr);
+
+  for (uint32_t i = 0; i < 100; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+  const size_t buckets_after_first = v.bucket_count;
+  const size_t capacity_after_first = v.bucket_capacity;
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS); // the second pass finds nothing left to release
+  EXPECT_EQ(v.bucket_count, buckets_after_first);
+  EXPECT_EQ(v.bucket_capacity, capacity_after_first);
+  EXPECT_EQ(u32_vec_size(&v), 100u);
+  for (uint32_t i = 0; i < 100; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  u32_vec_free(&v);
+}
+
+TEST(BucketVectorShrink, DefaultModeAllocatorReclaims) {
+  // a grd_memory in default mode frees each block individually, so shrinking pays off — and
+  // this is the one path where the superseded index array is really handed back
+  grd_memory heap{}; // zeroed is default mode: malloc/free
+
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, &heap), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 600; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  const size_t peak = v.bucket_count;
+  for (int i = 0; i < 590; ++i) ASSERT_EQ(u32_vec_pop(&v), GRD_SUCCESS);
+
+  ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+  EXPECT_LT(v.bucket_count, peak);
+  EXPECT_EQ(v.bucket_count, u32_vec_bucket_count(&v));
+  EXPECT_EQ(v.bucket_capacity, v.bucket_count);
+  for (uint32_t i = 0; i < 10; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+
+  // growing again after the index array was replaced must not read the released one
+  for (uint32_t i = 10; i < 600; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 600; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
+  u32_vec_free(&v);
+  grd_memory_free(&heap);
+}
+
+TEST(BucketVectorShrink, ArenaReclaimsWhatItCanAndStopsThere) {
+  grd_memory arena{};
+  ASSERT_EQ(grd_memory_init_arena(&arena, 256 * 1024), GRD_SUCCESS);
+
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, &arena), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 400; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  for (int i = 0; i < 380; ++i) ASSERT_EQ(u32_vec_pop(&v), GRD_SUCCESS);
+
+  const size_t buckets_before = v.bucket_count;
+  const size_t live = (20 + u32_vec_BUCKET_MASK) >> u32_vec_BUCKET_SHIFT;
+  const uint32_t arena_before = arena.last_index;
+
+  // An arena only gives back its most recent allocation, so _shrink unwinds from the top
+  // and stops at the first bucket it cannot reclaim — here the index array, which was
+  // re-allocated part way through the growth and now sits between the buckets.
+  EXPECT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+  EXPECT_LT(v.bucket_count, buckets_before);
+  EXPECT_GE(v.bucket_count, live);
+  // whatever it released really came back
+  EXPECT_LT(arena.last_index, arena_before);
+
+  // and the vector is intact either way
+  EXPECT_EQ(u32_vec_size(&v), 20u);
+  for (uint32_t i = 0; i < 20; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+
+  for (uint32_t i = 20; i < 400; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 400; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  u32_vec_free(&v);
+  grd_memory_free(&arena);
+}
+
+TEST(BucketVectorShrink, ArenaTailBucketsComeBack) {
+  // the clean case: nothing was allocated after the buckets, so every empty one is at the
+  // arena tail when _shrink reaches it and the whole peak is handed back
+  grd_memory arena{};
+  ASSERT_EQ(grd_memory_init_arena(&arena, 256 * 1024), GRD_SUCCESS);
+
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, &arena), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_reserve(&v, 400), GRD_SUCCESS);
+  for (uint32_t i = 0; i < 400; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
+  for (int i = 0; i < 380; ++i) ASSERT_EQ(u32_vec_pop(&v), GRD_SUCCESS);
+
+  const uint32_t arena_before = arena.last_index;
+  const size_t live = (20 + u32_vec_BUCKET_MASK) >> u32_vec_BUCKET_SHIFT;
+
+  EXPECT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+  EXPECT_EQ(v.bucket_count, live);
+  EXPECT_LT(arena.last_index, arena_before);
+
+  EXPECT_EQ(u32_vec_size(&v), 20u);
+  for (uint32_t i = 0; i < 20; ++i) ASSERT_EQ(*u32_vec_at(&v, i), i);
+  u32_vec_free(&v);
+  grd_memory_free(&arena);
+}
+
+TEST(BucketVectorShrink, HoldsInvariantsThroughRandomShrinking) {
+  std::mt19937 rng(777001u);
+  std::uniform_int_distribution<int> pick(0, 99);
+
+  u32_vec v;
+  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  std::vector<uint32_t> ref;
+
+  for (int step = 0; step < 20000; ++step) {
+    const int roll = pick(rng);
+    if (roll < 55) {
+      ASSERT_EQ(u32_vec_push(&v, static_cast<uint32_t>(step)), GRD_SUCCESS);
+      ref.push_back(static_cast<uint32_t>(step));
+    } else if (roll < 85) {
+      if (ref.empty()) {
+        ASSERT_EQ(u32_vec_pop(&v), GRD_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS);
+      } else {
+        ASSERT_EQ(u32_vec_pop(&v), GRD_SUCCESS);
+        ref.pop_back();
+      }
+    } else if (roll < 97) {
+      ASSERT_EQ(u32_vec_shrink(&v), GRD_SUCCESS);
+      // after a shrink nothing beyond the used buckets survives, in either counter
+      ASSERT_EQ(v.bucket_count, u32_vec_bucket_count(&v)) << "step " << step;
+      ASSERT_EQ(v.bucket_capacity, v.bucket_count) << "step " << step;
+    } else {
+      u32_vec_clear(&v);
+      ref.clear();
+    }
+    ASSERT_EQ(u32_vec_size(&v), ref.size()) << "step " << step;
+    ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY)) << "step " << step;
+  }
+  for (size_t i = 0; i < ref.size(); ++i) ASSERT_EQ(*u32_vec_at(&v, i), ref[i]) << "at " << i;
+  u32_vec_free(&v);
 }
 
 // --- reference tests against std::vector ---------------------------------------------------
@@ -442,7 +736,7 @@ TEST(BucketVectorReference, SingleElementBucketsMatchStdVector) {
 }
 
 TEST(BucketVectorReference, ArenaBackedSequence) {
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, 4 * 1024 * 1024), GRD_SUCCESS);
 
   // the arena has no realloc, so index growth takes the copy path here
@@ -815,7 +1109,7 @@ TEST(BucketVectorPerformance, Append) {
   );
 
   // arena: every bucket is bump-allocated from one contiguous block, _free is a no-op
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
   const double ns_arena = MeasureBestNs(
       [&] {
@@ -833,7 +1127,7 @@ TEST(BucketVectorPerformance, Append) {
   // the same, but paying for the arena itself on every run
   const double ns_arena_fresh = MeasureBestNs(
       [&] {
-        grd_memory fresh;
+        grd_memory fresh{};
         grd_memory_init_arena(&fresh, kPerfArenaBytes);
         perf_vec v;
         perf_vec_init(&v, &fresh);
@@ -928,7 +1222,7 @@ TEST(BucketVectorPerformance, AppendIntoWarmStorage) {
   perf_vec_clear(&v); // keeps every bucket
 
   // arena-backed twin: buckets already taken, and they lie back to back in one block
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
   perf_vec av;
   ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
@@ -1016,7 +1310,7 @@ TEST(BucketVectorPerformance, SequentialRead) {
   }
 
   // arena-backed twin: same bucket layout, but the buckets lie back to back in one block
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
   perf_vec av;
   ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
@@ -1101,7 +1395,7 @@ TEST(BucketVectorPerformance, RandomAccess) {
   }
 
   // arena-backed twin: the extra indirection stays, but the buckets are contiguous
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, kPerfArenaBytes), GRD_SUCCESS);
   perf_vec av;
   ASSERT_EQ(perf_vec_init(&av, &arena), GRD_SUCCESS);
@@ -1213,7 +1507,7 @@ TEST(BucketVectorPerformance, AppendLargePayload) {
       n
   );
 
-  grd_memory arena;
+  grd_memory arena{};
   ASSERT_EQ(grd_memory_init_arena(&arena, n * sizeof(payload) + 1024 * 1024), GRD_SUCCESS);
   const double ns_arena = MeasureBestNs(
       [&] {

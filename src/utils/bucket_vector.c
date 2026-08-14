@@ -15,35 +15,34 @@
 void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator) {
   uint8_t *buffer = NULL;
   if (!size) return NULL;
-  if (!allocator) return malloc(size);
-  if (grd_memory_buffer_alloc(&buffer, allocator, size) != GRD_SUCCESS) return NULL;
+  // grd_alloc counts in uint32_t; a request beyond that could never be served anyway
+  if (size > UINT32_MAX) return NULL;
+  if (grd_alloc(&buffer, (uint32_t)size, allocator) != GRD_SUCCESS) return NULL;
   return buffer;
 }
 
-void grdu_bvec_raw_free(void *ptr, grd_memory *allocator) {
-  if (!ptr) return;
-  if (!allocator) {
-    free(ptr);
-    return;
-  }
-  grd_memory_buffer_free((uint8_t *)ptr, allocator);
+int grdu_bvec_allocator_reclaims(const grd_memory *allocator) {
+  // no allocator means malloc/free, and default mode frees each block individually
+  if (!allocator) return 1;
+  return allocator->allocation_type == GRD_MEMORY_ALLOC_TYPE_DEFAULT;
 }
 
-void **grdu_bvec_index_grow(
-    void **old_index, size_t used, size_t new_capacity, grd_memory *allocator
+bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator) {
+  if (!ptr) return true;
+  if (size > UINT32_MAX) return false;
+  // strict on purpose: a warning means the arena kept the block, which _shrink must notice
+  return GRD_SUCCESS == grd_free((uint8_t *)ptr, (uint32_t)size, allocator);
+}
+
+bool grdu_bvec_index_grow(
+    void ***index, size_t old_capacity, size_t new_capacity, grd_memory *allocator
 ) {
-  void **grown = NULL;
-  if (!new_capacity || new_capacity > SIZE_MAX / sizeof(void *)) return NULL;
-  if (!allocator) {
-    // realloc carries the pointers over and usually keeps the block in place
-    return (void **)realloc(old_index, new_capacity * sizeof(void *));
-  }
-  grown = (void **)grdu_bvec_raw_alloc(new_capacity * sizeof(void *), allocator);
-  if (!grown) return NULL;
-  if (old_index && used) {
-    memcpy(grown, old_index, used * sizeof(void *));
-    // no-op in arena modes: the superseded array stays behind until the arena resets
-    grdu_bvec_raw_free(old_index, allocator);
-  }
-  return grown;
+  if (!index || !new_capacity || new_capacity > SIZE_MAX / sizeof(void *)) return false;
+  size_t new_bytes = new_capacity * sizeof(void *);
+  size_t old_bytes = old_capacity * sizeof(void *);
+  if (new_bytes > UINT32_MAX || old_bytes > UINT32_MAX) return false;
+  // an arena that had to move the block still resized it
+  grd_result result =
+      grd_realloc((uint8_t **)index, (uint32_t)old_bytes, (uint32_t)new_bytes, allocator);
+  return GRD_SUCCESS == result || GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED == result;
 }

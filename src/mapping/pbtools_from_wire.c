@@ -47,7 +47,7 @@ static void community_uuid_from_wire(
 /*
  * simply copy ptr to dst, or do nothing if at least one parameter is NULL
  */
-static void memory_block_from_wire(struct pbtools_bytes_t *dst, const grd_memory_block *bytes) {
+static void memory_block_from_wire(struct pbtools_bytes_t *dst, const grdu_memory_block *bytes) {
   if (!dst || !bytes || !bytes->size) { return; }
 
   dst->buf_p = bytes->data;

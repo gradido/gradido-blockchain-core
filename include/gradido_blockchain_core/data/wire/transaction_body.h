@@ -3,10 +3,10 @@
 
 #include "basic_types.h"
 
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 #include "specific_transactions.h"
 
 /** @defgroup wire Wire Format Serialization
@@ -153,7 +153,7 @@ grd_result grdw_transaction_body_copy_memo(
  * @whisper                From chaos comes form
  */
 grd_result grdw_transaction_body_decode(
-    grdw_transaction_body *body, const grd_memory_block *binary_src, grd_memory *allocator
+    grdw_transaction_body *body, const grdu_memory_block *binary_src, grd_memory *allocator
 );
 
 /**
@@ -174,7 +174,7 @@ grd_result grdw_transaction_body_decode(
  * @whisper                Form becomes message
  */
 grd_result grdw_transaction_body_encode(
-    grd_memory_block *binary_dst,
+    grdu_memory_block *binary_dst,
     size_t *final_size,
     const grdw_transaction_body *body,
     grd_memory *allocator

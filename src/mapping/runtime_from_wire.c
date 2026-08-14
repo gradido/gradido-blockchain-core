@@ -143,23 +143,23 @@ grd_result grdm_complete_transaction_from_wire(
   grd_result result = GRD_SUCCESS;
   // arrays
   if (confirmed_tx->account_balances_count) {
-    result = grd_memory_buffer_copy(
+    result = grd_clone(
         (uint8_t **)&tx->account_balances, (const uint8_t *)confirmed_tx->account_balances,
-        &tx->memory_area, confirmed_tx->account_balances_count * sizeof(grdw_account_balance)
+        confirmed_tx->account_balances_count * sizeof(grdw_account_balance), &tx->memory_area
     );
     if (GRD_SUCCESS != result) { return result; }
     tx->account_balances_count = confirmed_tx->account_balances_count;
   }
   if (body->memos_count) {
-    result = grd_memory_buffer_alloc(
-        (uint8_t **)&tx->encrypted_memos, &tx->memory_area,
-        body->memos_count * sizeof(grdw_encrypted_memo)
+    result = grd_alloc(
+        (uint8_t **)&tx->encrypted_memos, body->memos_count * sizeof(grdw_encrypted_memo),
+        &tx->memory_area
     );
     if (GRD_SUCCESS != result) { return result; }
 
     for (int i = 0; i < body->memos_count; ++i) {
       tx->encrypted_memos[i].type = body->memos[i].type;
-      result = grd_memory_block_copy(
+      result = grdu_memory_block_clone(
           &tx->encrypted_memos[i].memo, &body->memos[i].memo, &tx->memory_area
       );
       if (GRD_SUCCESS != result) { return result; }
@@ -168,9 +168,9 @@ grd_result grdm_complete_transaction_from_wire(
   }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
   if (transaction->sig_map_count) {
-    result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->signature_pairs, (const uint8_t *)transaction->sig_map, &tx->memory_area,
-        transaction->sig_map_count * sizeof(grdw_signature_pair)
+    result = grd_clone(
+        (uint8_t **)&tx->signature_pairs, (const uint8_t *)transaction->sig_map,
+        transaction->sig_map_count * sizeof(grdw_signature_pair), &tx->memory_area
     );
     if (GRD_SUCCESS != result) { return result; }
     tx->signature_pairs_count = transaction->sig_map_count;
@@ -179,21 +179,21 @@ grd_result grdm_complete_transaction_from_wire(
   tx->cross_group_type = body->type;
 
   if (body->other_community_uuid) {
-    result = grd_memory_buffer_copy(
-        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, &tx->memory_area,
-        UUID_BINARY_SIZE
+    result = grd_clone(
+        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, UUID_BINARY_SIZE,
+        &tx->memory_area
     );
     if (GRD_SUCCESS != result) { return result; }
   }
 
   if (GRDT_LEDGER_ANCHOR_UNSPECIFIED != transaction->pairing_ledger_anchor.type) {
-    result = grd_memory_buffer_copy(
+    result = grd_clone(
         (uint8_t **)&tx->pairing_ledger_anchor,
-        (const uint8_t *)&transaction->pairing_ledger_anchor, &tx->memory_area,
-        sizeof(grdw_ledger_anchor)
+        (const uint8_t *)&transaction->pairing_ledger_anchor, sizeof(grdw_ledger_anchor),
+        &tx->memory_area
     );
     if (GRD_SUCCESS != result) { return result; }
   }
 
-  return grd_memory_block_copy(&tx->body_bytes, &transaction->body_bytes, &tx->memory_area);
+  return grdu_memory_block_clone(&tx->body_bytes, &transaction->body_bytes, &tx->memory_area);
 }

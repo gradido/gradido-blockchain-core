@@ -1,6 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 #define GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,20 +13,23 @@ extern "C" {
 
 /** @defgroup grd_memory grd_memory
  *  @ingroup utils
- *  @brief Memory allocator supporting arena and default malloc modes.
+ *  @brief Allocator that is either a bump arena or plain malloc/free.
  *
- *  A flexible allocation system offering three operational modes:
- *  - Arena with owned heap buffer: pre-allocated block via malloc, linear bump allocation
- *  - Arena with external buffer: wraps caller-provided memory, no allocation overhead
- *  - Default malloc/free: fallback to standard heap for individual allocations
+ *  Every allocating call takes a @ref grd_memory as its last argument and NULL
+ *  is a valid value there: it means malloc/free. The same call site therefore
+ *  serves both strategies, and a caller decides between them by what it passes,
+ *  not by which function it calls.
  *
- *  Arena modes provide fast, deterministic allocation with O(1) bump pointer
- *  semantics. Once arena capacity is exhausted, allocation fails with
- *  GRD_ERROR_OUT_OF_MEMORY. The overflow accumulator tracks total failed
- *  requests for capacity tuning. Individual deallocation is not supported in
- *  arena modes; free the entire arena or reset for reuse.
+ *  Sizes are passed in, never stored. The allocator keeps a bump index and
+ *  nothing else, so freeing and resizing need the size the caller allocated with
+ *  — see @ref grd_free and @ref grd_realloc. @ref grdu_memory_block in
+ *  utils/memory_block.h pairs pointer and size when that bookkeeping should not
+ *  be the caller's job.
  *
- *  Modelled after Zig's ArenaAllocator, adapted for multi-mode operation.
+ *  In arena mode only the most recent allocation can be given back; anything
+ *  before it stays reserved until @ref grd_memory_reset. Calls that could not
+ *  reclaim say so with @ref GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED — a warning,
+ *  not a failure: the operation itself succeeded.
  *
  *  @{
  */
@@ -51,214 +55,243 @@ typedef enum grd_memory_alloc_type {
 
 /** @brief Memory allocator state container.
  *
- *  Tracks allocation state across three operational modes. In arena modes,
- *  maintains a bump pointer within a contiguous region. In default mode,
- *  capacity remains zero and each allocation is independent.
+ *  @warning Must be zero initialized before the first grd_memory_init_arena() or
+ *  grd_memory_init_arena_static() call — write @c grd_memory mem = {0}; (or use
+ *  grd_memory_create()). Init inspects the previous state to release an arena it
+ *  already owns, so uninitialized stack bytes would be read as a live allocation.
  *
- *  @note All sizes are in bytes. @p out_of_memory_capacity accumulates
- *  total requested size beyond capacity in arena modes, useful for tuning.
+ *  @note @p last_index and @p capacity are kept as multiples of 8, so every
+ *  handed out pointer is 8 byte aligned. Do not write these fields directly.
  */
 typedef struct grd_memory {
-  uint8_t *data;                 /**< Base of the arena (owned or external). */
-  size_t last_index;             /**< Next free offset from @p data. */
-  size_t capacity;               /**< Total bytes available in the arena. */
-  size_t out_of_memory_capacity; /**< Accumulated overflow since last reset. */
-  grd_memory_alloc_type allocation_type;
+  uint8_t *data;                   /**< Base of the arena (owned or external), 8 byte aligned. */
+  uint32_t last_index;             /**< Next free offset from @p data, always a multiple of 8. */
+  uint32_t capacity;               /**< Total bytes available in the arena, rounded up to 8. */
+  uint32_t out_of_memory_capacity; /**< Accumulated overflow since last reset, saturating. */
+  uint8_t allocation_type; // grd_memory_alloc_type but as uint8_t because we don't need more than 1
+                           // Byte for this
 } grd_memory;
 
-typedef struct grd_memory_block {
-  uint8_t *data;
-  size_t size;
-} grd_memory_block;
+// ********** manage memory allocator themself *******************
+
+/** @brief Allocate and zero a grd_memory on the heap.
+ *
+ *  The result is in default mode (malloc/free) and ready for an init call.
+ *  Pair with grd_memory_destroy(), which also releases an owned arena.
+ *
+ *  @return Zeroed allocator, or NULL when the heap is exhausted.
+ *  @whisper A vessel for vessels, itself drawn from the stream
+ */
+grd_memory *grd_memory_create();
 
 /** @brief Initialize arena mode with owned heap buffer.
  *
- *  Allocates @p capacity bytes via malloc and binds the arena to this buffer.
- *  The allocator owns the buffer and will free it on grd_memory_free().
- *  All state fields (last_index, out_of_memory_capacity) reset to zero.
+ *  Rounds @p capacity up to a multiple of 8 and takes that many bytes from the
+ *  heap. Calling this on an allocator that already owns an arena releases the old
+ *  buffer first, so re-sizing an arena is a single call.
  *
- *  @param[in,out] memory   Allocator to initialize; must not be NULL.
- *  @param[in]     capacity Bytes to allocate; must be > 0.
+ *  @param[in,out] memory   Allocator to initialize; must not be NULL and must be
+ *                          zero initialized before its first init (see @ref grd_memory).
+ *  @param[in]     capacity Bytes to reserve; must be > 0.
  *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS              Arena initialized and ready.
- *  @retval GRD_ERROR_NULL_POINTER   @p memory is NULL.
- *  @retval GRD_ERROR_INVALID_PARAM  @p capacity is 0.
- *  @retval GRD_ERROR_OUT_OF_MEMORY  malloc failed; buffer not allocated.
- *  @note The allocator owns the heap buffer; use grd_memory_free() to release.
- *  @whisper Fresh soil prepared; seeds may now take root
+ *  @retval GRD_SUCCESS                 Arena ready, bump index at 0.
+ *  @retval GRD_ERROR_NULL_POINTER      @p memory is NULL.
+ *  @retval GRD_ERROR_INVALID_PARAM     @p capacity is 0.
+ *  @retval GRD_ERROR_ARITHMETIC_OVERFLOW Rounding @p capacity up to 8 would wrap uint32_t.
+ *  @retval GRD_ERROR_OUT_OF_MEMORY     malloc failed; the old arena is already gone.
+ *  @whisper The basin is dug, and waits for water
  */
-grd_result grd_memory_init_arena(grd_memory *memory, size_t capacity);
+grd_result grd_memory_init_arena(grd_memory *memory, uint32_t capacity);
 
 /** @brief Initialize arena mode with external buffer.
  *
- *  Binds the allocator to a caller-provided buffer without copying or
- *  allocation. The caller retains ownership of @p data; the allocator
- *  merely tracks position within it. Suitable for stack buffers, static
- *  storage, or memory-mapped regions.
+ *  Borrows @p data without taking ownership — grd_memory_free() will not release
+ *  it. Suited to stack or static storage that outlives the allocator.
  *
- *  @param[in,out] memory   Allocator to initialize; must not be NULL.
- *  @param[in]     data     External buffer to use as backing store; must not be NULL.
- *  @param[in]     capacity Size of @p data in bytes; must be > 0.
+ *  @param[in,out] memory   Allocator to initialize; must not be NULL and must be
+ *                          zero initialized before its first init.
+ *  @param[in]     data     Buffer to bump through; must not be NULL and must be
+ *                          8 byte aligned (@c alignas(8) on the definition).
+ *  @param[in]     capacity Usable bytes in @p data; must be > 0. Rounded up to a
+ *                          multiple of 8, so @p data must be that large.
  *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS             Arena bound to external buffer.
- *  @retval GRD_ERROR_NULL_POINTER  @p memory or @p data is NULL.
- *  @retval GRD_ERROR_INVALID_PARAM @p capacity is 0.
- *  @note The allocator must not outlive the external buffer it wraps.
- *  @whisper A river channel carved through known earth
+ *  @retval GRD_SUCCESS                 Arena ready, bump index at 0.
+ *  @retval GRD_ERROR_NULL_POINTER      @p memory or @p data is NULL.
+ *  @retval GRD_ERROR_INVALID_PARAM     @p capacity is 0, or @p data is not 8 byte aligned.
+ *  @retval GRD_ERROR_ARITHMETIC_OVERFLOW Rounding @p capacity up to 8 would wrap uint32_t.
+ *  @warning Rounding up means an unaligned @c capacity lets the arena hand out up to
+ *           7 bytes past what the caller declared. Size the buffer to a multiple of 8.
+ *  @whisper Borrowed ground, returned unbroken
  */
-grd_result grd_memory_init_arena_static(grd_memory *memory, uint8_t *data, size_t capacity);
-
-/** @brief Initialize default mode using malloc/free.
- *
- *  Configures the allocator as a thin wrapper around standard malloc/free.
- *  Each allocation request calls malloc individually; each free releases
- *  the specific block. No pre-allocation occurs; capacity remains zero.
- *
- *  @param[in,out] memory   Allocator to initialize; must not be NULL.
- *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS             Allocator configured for default malloc mode.
- *  @retval GRD_ERROR_NULL_POINTER  @p memory is NULL.
- *  @whisper Open water; each drop finds its own level
- */
-grd_result grd_memory_init_default(grd_memory *memory);
+grd_result grd_memory_init_arena_static(grd_memory *memory, uint8_t *data, uint32_t capacity);
 
 /** @brief Reset arena position to initial state.
  *
- *  In arena modes (owned or external), resets the bump pointer to zero
- *  and clears the overflow accumulator. Previously allocated blocks become
- *  invalid; do not access them after reset. In default mode, this is a
- *  no-op as allocations are managed individually.
+ *  Drops every outstanding allocation at once by moving the bump index back to 0
+ *  and clearing the overflow counter. The arena buffer itself is kept, so the
+ *  next allocation reuses it. O(1), and a no-op worth calling on a default mode
+ *  allocator (there is nothing to move).
  *
- *  @param[in,out] memory   Allocator to reset; must not be NULL.
- *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS             Arena position reset to zero.
- *  @retval GRD_ERROR_NULL_POINTER  @p memory is NULL.
- *  @note In arena modes, all prior allocations become invalid after reset.
- *  @whisper Waters recede; the basin returns to silence
+ *  @param[in,out] memory Allocator to rewind; may be NULL.
+ *  @warning Every pointer previously handed out by this arena dangles afterwards.
+ *  @whisper The tide goes out, the basin whole again
  */
-grd_result grd_memory_reset(grd_memory *memory);
+static inline void grd_memory_reset(grd_memory *memory) {
+  if (memory) {
+    memory->last_index = 0;
+    memory->out_of_memory_capacity = 0;
+  }
+}
 
 /** @brief Release allocator resources.
  *
- *  In arena-owned mode, frees the internally allocated buffer. In arena-external
- *  mode, merely drops the reference without affecting the caller's buffer.
- *  In default mode, no action is needed as individual blocks are freed
- *  separately via grd_memory_buffer_free(). Safe to call on NULL.
+ *  Frees the arena buffer in @ref GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED mode and
+ *  rewinds the state. External buffers are left untouched, and in default mode
+ *  there is nothing held to release. Releases what the allocator owns, not the
+ *  allocator itself — see grd_memory_destroy() for that.
  *
- *  @param[in,out] memory   Allocator to release; may be NULL.
- *  @post All internal state is zeroed; no dangling pointers remain in owned mode.
+ *  @param[in,out] memory Allocator to empty; may be NULL.
+ *  @note @p allocation_type is kept, so the allocator stays the kind it was.
  *  @whisper Waters recede; the basin returns to silence
  */
 void grd_memory_free(grd_memory *memory);
 
+/** @brief Release an allocator obtained from grd_memory_create().
+ *
+ *  Calls grd_memory_free() and then releases the grd_memory itself.
+ *
+ *  @param[in] memory Allocator to destroy; may be NULL. Must come from
+ *                    grd_memory_create(), never from stack or static storage.
+ *  @whisper The vessel that held vessels returns to the stream
+ */
+void grd_memory_destroy(grd_memory *memory);
+
 /** @brief Retrieve total accumulated overflow in arena modes.
  *
- *  Returns the sum of all allocation requests that exceeded arena capacity
- *  since initialization or last reset. Useful for capacity planning and
- *  tuning initial arena sizes. In default mode, always returns 0.
+ *  Sums the (8 byte aligned) sizes of all requests that did not fit since the
+ *  last reset, which says how much larger the arena would have to be. Saturates
+ *  at UINT32_MAX rather than wrapping. Always 0 in default mode, where a request
+ *  either succeeds or the heap itself is exhausted.
  *
- *  @param[in] memory   Allocator to query; may be NULL.
- *  @return Total bytes of failed requests, or 0 if @p memory is NULL
- *          or allocator is in default mode.
- *  @note The counter resets to zero on grd_memory_reset() or re-initialization.
+ *  @param[in] memory Allocator to query; may be NULL.
+ *  @return Total bytes of failed requests, or 0 if @p memory is NULL.
+ *  @note grd_memory_reset() clears the counter.
  *  @whisper The measure of need that exceeded the vessel
  */
 size_t grd_memory_overflow_total(const grd_memory *memory);
 
-/** @brief Allocate raw memory buffer.
+// ********** manage memory allocations with data ptr and size explicit *******************
+
+/** @brief Allocate a raw buffer.
  *
- *  Core allocation primitive used by grd_memory_buffer_alloc().
- *  In arena modes, performs bump-pointer allocation from the arena.
- *  In default mode, calls malloc individually.
+ *  With @p memory NULL or in default mode this is malloc(). In arena mode it is a
+ *  bump: @p size is rounded up to a multiple of 8 and the index moves on, which
+ *  keeps every returned pointer 8 byte aligned.
  *
- *  @param[out]    buffer  Pointer to receive allocated memory; must not be NULL.
- *  @param[in,out] memory  Allocator to use; must not be NULL.
- *  @param[in]     size    Bytes to allocate; must be > 0.
+ *  @param[out]    buffer Receives the allocation; must not be NULL. Untouched on failure.
+ *  @param[in]     size   Bytes to allocate; must be > 0. The arena reserves ALIGN8(size).
+ *  @param[in,out] memory Allocator to draw from, or NULL for malloc.
  *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS              Buffer allocated successfully.
- *  @retval GRD_ERROR_NULL_POINTER  @p buffer or @p memory is NULL.
- *  @retval GRD_ERROR_INVALID_PARAM @p size is 0.
- *  @retval GRD_ERROR_NOT_INITIALIZED Arena buffer not initialized.
- *  @retval GRD_ERROR_OUT_OF_MEMORY  Arena exhausted or malloc failed.
- *  @note In arena modes, the returned pointer is valid until reset or free.
+ *  @retval GRD_SUCCESS                   Buffer allocated.
+ *  @retval GRD_ERROR_NULL_POINTER        @p buffer is NULL.
+ *  @retval GRD_ERROR_INVALID_PARAM       @p size is 0.
+ *  @retval GRD_ERROR_INVALID_STATE       Arena mode without a buffer — the allocator
+ *                                        was never initialized, or its fields were written
+ * directly.
+ *  @retval GRD_ERROR_ARITHMETIC_OVERFLOW Rounding @p size up to 8 would wrap uint32_t.
+ *  @retval GRD_ERROR_OUT_OF_MEMORY       malloc failed, or the arena has no room left;
+ *                                        in arena mode the shortfall is added to the overflow
+ * counter.
+ *  @note Arena memory is not zeroed and holds whatever the previous tenant left.
  *  @whisper Raw earth shaped by the hand of need
  */
-grd_result grd_memory_buffer_alloc(uint8_t **buffer, grd_memory *memory, size_t size);
+grd_result grd_alloc(uint8_t **buffer, uint32_t size, grd_memory *memory);
 
-grd_result grd_memory_buffer_copy(
-    uint8_t **dst_buffer, const uint8_t *src, grd_memory *memory, size_t size
-);
-
-/** @brief Free raw memory buffer.
+/** @brief Resize a buffer, in place where the allocator allows it.
  *
- *  Core deallocation primitive used by grd_memory_block_free().
- *  In default mode, calls free() on the buffer. In arena modes,
- *  performs no action as arena memory is freed collectively.
+ *  With @p memory NULL or in default mode this is realloc(): the block may move
+ *  and its contents are preserved. In arena mode the outcome depends on where the
+ *  buffer sits, because only the most recent allocation touches the bump index:
+ *  - tail block, shrinking: the index moves back and the bytes are reusable.
+ *  - tail block, growing: the index moves on, the buffer keeps its address.
+ *  - non tail, growing: a fresh block is taken and @p old_size bytes are copied
+ *    over; the old block stays reserved until reset.
+ *  - non tail, shrinking: nothing happens at all. @p buffer keeps its address and
+ *    its bytes, and the arena keeps the full reservation.
  *
- *  @param[in]     buffer  Buffer to free; must not be NULL.
- *  @param[in]     memory  Allocator used for allocation; must not be NULL.
+ *  The last two cases return @ref GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED, so a
+ *  caller that only wanted the resize can treat it as done, while a caller that
+ *  wanted the memory back learns it did not get it.
+ *
+ *  Passing @p new_size 0 is a free: the block goes back through grd_free(), and
+ *  @c *buffer is cleared on the same terms that function uses — only when the
+ *  bytes really came back. A buried arena block therefore leaves @c *buffer as it
+ *  was and reports the warning, because the block is still there. An empty
+ *  @c *buffer takes the same route and gets the same answer, so releasing through
+ *  this function and through grd_free() are interchangeable.
+ *
+ *  @param[in,out] buffer   Buffer to resize; must not be NULL, but may point to
+ *                          NULL to allocate from scratch. Updated when the block moves.
+ *  @param[in]     old_size Size the buffer was allocated with. Only the arena needs it,
+ *                          to recognize the tail; realloc() gets it from the heap.
+ *  @param[in]     new_size Requested size, or 0 to free.
+ *  @param[in,out] memory   Allocator the buffer came from, or NULL for realloc.
  *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS             Buffer freed or no-op completed.
- *  @retval GRD_ERROR_NULL_POINTER @p buffer or @p memory is NULL.
- *  @note In arena modes, this does not reclaim space; reset the arena instead.
+ *  @retval GRD_SUCCESS                   Resized, or @p old_size already equals @p new_size.
+ *  @retval GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED Resize done, but the arena kept the
+ *                                        old bytes. Not a failure. On a @p new_size of 0
+ *                                        it means the block was not released at all.
+ *  @retval GRD_ERROR_NULL_POINTER        @p buffer is NULL.
+ *  @retval GRD_ERROR_ARITHMETIC_OVERFLOW Rounding a size up to 8 would wrap uint32_t.
+ *  @retval GRD_ERROR_OUT_OF_MEMORY       realloc failed, or the arena has no room to
+ *                                        grow; @c *buffer stays valid and unchanged either way.
+ *  @warning An @p old_size that does not match the allocation makes the arena
+ *           misjudge the tail and move its index by the wrong amount.
+ *  @whisper The vessel widens or narrows, the water within untouched
+ */
+grd_result grd_realloc(uint8_t **buffer, uint32_t old_size, uint32_t new_size, grd_memory *memory);
+
+/** @brief Allocate a buffer and copy @p size bytes into it.
+ *
+ *  grd_alloc() followed by memcpy; the copy is exactly @p size bytes even though
+ *  an arena reserves ALIGN8(size).
+ *
+ *  @param[out]    dst_buffer Receives the copy; must not be NULL. Untouched on failure.
+ *  @param[in]     src        Source to read from; must not be NULL and must hold @p size bytes.
+ *  @param[in]     size       Bytes to copy; must be > 0.
+ *  @param[in,out] memory     Allocator to draw from, or NULL for malloc.
+ *  @return grd_result indicating success or failure type.
+ *  @retval GRD_SUCCESS             Copy allocated and filled.
+ *  @retval GRD_ERROR_NULL_POINTER  @p dst_buffer or @p src is NULL.
+ *  @retval GRD_ERROR_INVALID_PARAM @p size is 0.
+ *  @retval Anything grd_alloc() can return.
+ *  @whisper Water poured into a vessel newly shaped
+ */
+grd_result grd_clone(uint8_t **dst_buffer, const uint8_t *src, uint32_t size, grd_memory *memory);
+
+/** @brief Free a buffer.
+ *
+ *  With @p memory NULL or in default mode this is free(), and @p size is ignored.
+ *  In arena mode the bump index moves back only when @p buffer is the most recent
+ *  allocation; otherwise the bytes stay reserved until grd_memory_reset() and the
+ *  call reports @ref GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED.
+ *
+ *  @param[in] buffer Buffer to release; may be NULL. Nothing happens then, though an
+ *                    arena still answers with the warning, since NULL is never its tail.
+ *  @param[in] size   Size the buffer was allocated with. Ignored outside arena mode.
+ *  @param[in,out] memory Allocator the buffer came from, or NULL for free().
+ *  @return grd_result indicating success or failure type.
+ *  @retval GRD_SUCCESS                   Buffer freed, or the arena reclaimed its bytes.
+ *  @retval GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED @p buffer was not the arena's last
+ *                                        allocation, so nothing came back. Not a failure,
+ *                                        but the block is still there — do not treat it as
+ * released.
+ *  @retval GRD_ERROR_ARITHMETIC_OVERFLOW Rounding @p size up to 8 would wrap uint32_t.
+ *  @warning A @p size that does not match the allocation moves the arena index by the
+ *           wrong amount and hands the same bytes out twice.
  *  @whisper Form dissolves, substance returning to source
  */
-grd_result grd_memory_buffer_free(uint8_t *buffer, grd_memory *memory);
-
-/** @brief Allocate a memory block with size tracking.
- *
- *  Wrapper around grdu_memory_alloc() that stores size in a block descriptor.
- *  In arena modes, performs bump-pointer allocation; in default mode,
- *  calls malloc individually.
- *
- *  @p memory_block is overwritten regardless of prior contents. Caller must
- *  ensure any previous block data is freed (in default mode) or no longer
- *  needed (arena modes) before calling again.
- *
- *  @param[out]    memory_block Block descriptor to fill; must not be NULL.
- *  @param[in,out] memory       Allocator to use; must not be NULL.
- *  @param[in]     size         Bytes to allocate; must be > 0.
- *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS              Block allocated successfully.
- *  @retval GRD_ERROR_NULL_POINTER   @p memory_block or @p memory is NULL.
- *  @retval GRD_ERROR_INVALID_PARAM  @p size is 0.
- *  @retval GRD_ERROR_NOT_INITIALIZED Allocator not initialized (arena modes without buffer).
- *  @retval GRD_ERROR_OUT_OF_MEMORY  Arena exhausted or malloc failed.
- *  @note In arena modes, individual blocks cannot be freed separately.
- *  @whisper A vessel carved from the flowing stream
- */
-grd_result grd_memory_block_alloc(grd_memory_block *memory_block, grd_memory *memory, size_t size);
-
-grd_result grd_memory_block_copy(
-    grd_memory_block *dst, const grd_memory_block *src, grd_memory *memory
-);
-
-/** @brief Free a memory block with size tracking.
- *
- *  Wrapper around grdu_memory_free_buffer() that also nullifies the
- *  block descriptor. In default mode, frees the underlying buffer.
- *  In arena modes, only clears the descriptor without freeing memory,
- *  as arena deallocation occurs via grd_memory_reset() or
- *  grd_memory_free().
- *
- *  @param[in,out] memory_block Block to release; must not be NULL.
- *  @param[in]     memory       Allocator used for allocation; must not be NULL.
- *  @return grd_result indicating success or failure type.
- *  @retval GRD_SUCCESS             Block descriptor cleared.
- *  @retval GRD_ERROR_NULL_POINTER @p memory_block or @p memory is NULL.
- *  @note In arena modes, this does not reclaim space; reset the arena instead.
- *  @whisper The vessel returns to water, form dissolving
- */
-grd_result grd_memory_block_free(grd_memory_block *memory_block, grd_memory *memory);
-
-/*
- * if memory_block was the last allocated block, we can release what we don't need at the end
- * work only with area memory, will do nothing on other memory types
- * will call grd_memory_block_free if size_to_release == memory_block->size
- */
-grd_result grd_memory_block_free_part(
-    grd_memory_block *memory_block, grd_memory *memory, size_t size_to_release
-);
+grd_result grd_free(uint8_t *buffer, uint32_t size, grd_memory *memory);
 
 /** @} */
 

@@ -17,9 +17,9 @@ grd_result grdw_confirmed_transaction_reserve_account_balances(
 ) {
   if (!tx || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!account_balances_count) { return GRD_ERROR_INVALID_PARAM; }
-  grd_result result = grd_memory_buffer_alloc(
-      (uint8_t **)&tx->account_balances, allocator,
-      sizeof(grdw_account_balance) * account_balances_count
+  grd_result result = grd_alloc(
+      (uint8_t **)&tx->account_balances, sizeof(grdw_account_balance) * account_balances_count,
+      allocator
   );
   if (GRD_SUCCESS != result) { return result; }
 
@@ -37,17 +37,16 @@ grd_result grdw_confirmed_transaction_copy_account_balance(
 }
 
 grd_result grdw_confirmed_transaction_decode(
-    grdw_confirmed_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
+    grdw_confirmed_transaction *tx, const grdu_memory_block *binary_src, grd_memory *allocator
 ) {
   if (!tx || !binary_src || !binary_src->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!binary_src->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: calculate needed memory beforhand
-  grd_memory_block pbBuffer;
+  grdu_memory_block pbBuffer;
   // take whole static area from allocator for pbtools
-  grd_result result = grd_memory_block_alloc(
-      &pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
-  );
+  grd_result result =
+      grdu_memory_block_alloc(&pbBuffer, allocator->capacity - allocator->last_index, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;
@@ -57,18 +56,20 @@ grd_result grdw_confirmed_transaction_decode(
       proto_gradido_confirmed_transaction_decode(proto_tx, binary_src->data, binary_src->size);
 
   // release not from pbtools used part from allocator
-  grd_memory_block_free_part(&pbBuffer, allocator, pbBuffer.size - proto_tx->base.heap_p->pos);
+  grdu_memory_block_realloc(&pbBuffer, (uint32_t)proto_tx->base.heap_p->pos, allocator);
 
   if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
-  if (resultSize != binary_src->size) { return GRD_ERROR_ENCODE_FAILED; }
+  if (resultSize < 0 || (uint32_t)resultSize != binary_src->size) {
+    return GRD_ERROR_ENCODE_FAILED;
+  }
 
   result = grdm_confirmed_transaction_from_pb(tx, proto_tx, allocator);
-  grd_memory_block_free(&pbBuffer, allocator);
+  grdu_memory_block_free(&pbBuffer, allocator);
   return result;
 }
 
 grd_result grdw_confirmed_transaction_encode(
-    grd_memory_block *binary_dst,
+    grdu_memory_block *binary_dst,
     size_t *final_size,
     const grdw_confirmed_transaction *tx,
     grd_memory *allocator
@@ -77,11 +78,10 @@ grd_result grdw_confirmed_transaction_encode(
   if (!binary_dst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy
-  grd_memory_block pbBuffer;
+  grdu_memory_block pbBuffer;
   // take whole static area from allocator for pbtools
-  grd_result result = grd_memory_block_alloc(
-      &pbBuffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
-  );
+  grd_result result =
+      grdu_memory_block_alloc(&pbBuffer, allocator->capacity - allocator->last_index, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_confirmed_transaction_t *proto_tx;
@@ -94,7 +94,7 @@ grd_result grdw_confirmed_transaction_encode(
   int resultSize =
       proto_gradido_confirmed_transaction_encode(proto_tx, binary_dst->data, binary_dst->size);
 
-  grd_memory_block_free(&pbBuffer, allocator);
+  grdu_memory_block_free(&pbBuffer, allocator);
 
   if (PBTOOLS_ENCODE_BUFFER_FULL == -resultSize) { return GRD_ERROR_DESTINATION_BUFFER_TO_SMALL; }
   if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
@@ -104,9 +104,12 @@ grd_result grdw_confirmed_transaction_encode(
 }
 
 void grdw_confirmed_transaction_free(grdw_confirmed_transaction *tx, grd_memory *allocator) {
-  if (tx->account_balances_count) {
-    grd_memory_buffer_free((uint8_t *)tx->account_balances, allocator);
-  }
+  if (!tx) { return; }
+  // inner transaction first: it is allocated after account_balances, so an arena unwinds in order
   grdw_gradido_transaction_free(&tx->transaction, allocator);
+  grd_free(
+      (uint8_t *)tx->account_balances, sizeof(grdw_account_balance) * tx->account_balances_count,
+      allocator
+  );
   grdw_confirmed_transaction_init(tx);
 }

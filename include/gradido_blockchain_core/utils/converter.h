@@ -3,6 +3,7 @@
 
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -10,9 +11,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct grd_memory_block grd_memory_block;
-typedef struct grd_memory grd_memory;
 
 /** @defgroup utils Utilities */
 
@@ -99,7 +97,7 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string);
 /**
  * @param result_buffer expected to be data->size * 2 + 1
  */
-grd_result grdu_binary_to_hex(char *result_buffer, const grd_memory_block *data);
+grd_result grdu_binary_to_hex(char *result_buffer, const grdu_memory_block *data);
 
 /**
  * @param result_buffer[out] expected to be strlen(hex) / 2
@@ -117,14 +115,14 @@ size_t grdu_binary_to_base64_length(size_t binSize);
  * will write string with terminator \0 into result_block->data
  */
 grd_result grdu_binary_to_base64_with_known_size(
-    grd_memory_block *result_block, const grd_memory_block *data
+    grdu_memory_block *result_block, const grdu_memory_block *data
 );
 
 /**
  * will reserve memory through allocator
  */
 grd_result grdu_binary_to_base64(
-    grd_memory_block *result_block, const grd_memory_block *data, grd_memory *allocator
+    grdu_memory_block *result_block, const grdu_memory_block *data, grd_memory *allocator
 );
 
 /**
@@ -132,7 +130,7 @@ grd_result grdu_binary_to_base64(
  * @param base64_str[in] expected to be null terminated string
  * @return actual binary size or 0 on error
  */
-size_t grdu_binary_from_base64(grd_memory_block *result_block, const char *base64_str);
+size_t grdu_binary_from_base64(grdu_memory_block *result_block, const char *base64_str);
 
 #endif // USE_SODIUM
 /**

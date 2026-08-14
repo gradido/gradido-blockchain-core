@@ -27,7 +27,7 @@ int grd_error_details_is_initalized_and_empty(grd_error_details *error_details) 
 static int alloc_and_fill_field(char **field, const char *input, grd_memory *alloc, int flag) {
   size_t size = strlen(input) + 1;
   int result_alloc_flag = 0;
-  if (grd_memory_buffer_alloc((uint8_t **)field, alloc, size) != GRD_SUCCESS) {
+  if (grd_alloc((uint8_t **)field, (uint32_t)size, alloc) != GRD_SUCCESS) {
     *field = (char *)malloc(size);
     result_alloc_flag = flag;
   }
@@ -79,7 +79,8 @@ static void release_field(char *field, grd_error_details *error_details, int fie
   if (field_flag == (field_flag & error_details->used_default_malloc_flag)) {
     free(field);
   } else {
-    grd_memory_buffer_free((uint8_t *)field, error_details->allocator);
+    // the field is a NUL terminated copy, so its allocated size is recoverable
+    grd_free((uint8_t *)field, (uint32_t)strlen(field) + 1, error_details->allocator);
   }
 }
 

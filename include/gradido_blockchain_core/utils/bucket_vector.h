@@ -34,7 +34,34 @@ extern "C" {
  * memory and is the fastest way to traverse the whole sequence.
  *
  * Complexity: `_push` / `_emplace` / `_pop` amortized O(1) (single compare on the fast path),
- * `_at` / `_get` O(1), `_clear` O(1), `_free` O(bucket count).
+ * `_at` / `_get` O(1), `_clear` O(1), `_shrink` / `_free` O(bucket count).
+ *
+ * ### Memory that comes back
+ *
+ * Growth is one-directional on its own: `_pop` leaves the vacated bucket in place and `_clear`
+ * keeps every bucket, both so the next push finds its storage ready. A vector therefore sits at
+ * its high water mark until told otherwise. `_shrink` is that instruction — it releases the
+ * buckets past the last element and tightens the index array onto what remains, without moving
+ * a single live element. After `_clear` it hands back everything and leaves the same empty,
+ * immediately reusable descriptor `_free` does.
+ *
+ * Call it where a peak is behind you, not between pushes: shrinking to the current fill and
+ * then appending again buys back the very buckets just released.
+ *
+ * @note Under an arena allocator `_shrink` gives back what the arena will take: it unwinds
+ * from the last bucket and stops at the first one that is not the arena's most recent
+ * allocation, since only that one can move the bump index. A vector that grew its index array
+ * part way through therefore keeps the buckets sitting before it — those come back on the
+ * arena's own reset or teardown. It reports GRD_SUCCESS either way; a partial reclaim strands
+ * nothing that was not already stranded.
+ *
+ * ### Empty states
+ *
+ * A vector is empty after `_init`, after `_clear`, after `_free` — and when zero-initialized:
+ * `name v = {0};` is a valid, usable empty vector with the malloc/free allocator. Every read
+ * path answers for it (`_size` 0, `_at` / `_front` / `_back` NULL, `_bucket_count` 0, `_pop`
+ * out of bounds) and the first `_push` opens the first bucket. Prefer `_init` when an allocator
+ * is involved: it is the only way to attach one.
  *
  * ### Ownership of the payload
  *
@@ -42,12 +69,12 @@ extern "C" {
  *
  * @code
  * // removing one element: hand back what it owns, then drop the slot
- * grd_memory_block_free(&tx_vec_back(&v)->signature);
+ * grdu_memory_block_free(&tx_vec_back(&v)->signature);
  * tx_vec_pop(&v);
  *
  * // removing all of them: the same duty, once per element
  * grdw_gradido_transaction *tx;
- * GRDU_BVEC_FOREACH(tx_vec, &v, tx, i) { grd_memory_block_free(&tx->signature); }
+ * GRDU_BVEC_FOREACH(tx_vec, &v, tx, i) { grdu_memory_block_free(&tx->signature); }
  * tx_vec_free(&v);
  * @endcode
  *
@@ -119,32 +146,54 @@ extern "C" {
 void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator);
 
 /**
+ * @brief Report whether releasing a block to @p allocator actually returns memory.
+ *
+ * True for NULL (malloc/free) and for @ref GRD_MEMORY_ALLOC_TYPE_DEFAULT. False for the arena
+ * modes, where a free is a no-op and the memory only comes back on reset or teardown of the
+ * arena. `_shrink` uses this to stay out of the way of an arena.
+ *
+ * @param[in] allocator Allocator to inspect, or NULL for malloc/free.
+ * @return 1 if a free reclaims the block, 0 if the allocator releases collectively.
+ */
+int grdu_bvec_allocator_reclaims(const grd_memory *allocator);
+
+/**
  * @brief Release a block obtained from grdu_bvec_raw_alloc().
  *
  * With @p allocator NULL the block returns to the C heap. In arena modes nothing is reclaimed;
  * the arena releases collectively on reset or free. Safe to call with @p ptr NULL.
  *
  * @param[in]     ptr       Block to release; may be NULL.
+ * @param[in]     size      Bytes @p ptr was allocated with. An arena needs it to tell whether
+ *                          this block is its tail; ignored for malloc/free.
  * @param[in,out] allocator Allocator the block came from, or NULL for free().
+ * @return true when the block really came back, false when an arena kept it.
  */
-void grdu_bvec_raw_free(void *ptr, grd_memory *allocator);
+bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator);
 
 /**
- * @brief Grow the index array of bucket pointers.
+ * @brief Resize the index array of bucket pointers.
  *
  * Moves @p used pointers into a block of @p new_capacity slots. With @p allocator NULL this is
  * a realloc and usually stays in place; with an allocator a fresh block is taken and the old
  * one released (a no-op in arena modes, so the old array is lost to the arena).
  *
- * @param[in]     old_index    Current index array, or NULL on first growth.
- * @param[in]     used         Number of live pointers in @p old_index.
- * @param[in]     new_capacity Requested slot count; must be > @p used. Counts whose byte size
- *                             would overflow size_t are rejected before any allocation.
+ * Growth passes a capacity above @p used; `_shrink` passes exactly @p used to tighten the
+ * array onto the pointers that are still live. Both directions carry the same @p used
+ * pointers over, so the call never drops a bucket the caller still owns.
+ *
+ * @param[in,out] index        Address of the index array; @c *index may be NULL on first growth
+ *                             and is replaced when the block moves.
+ * @param[in]     old_capacity Slots @c *index was allocated with — the allocated count, not the
+ *                             used one. An arena resizes by size, so a wrong value moves its
+ *                             bump index by the wrong amount.
+ * @param[in]     new_capacity Requested slot count; must be > 0. Counts whose byte size would
+ *                             overflow size_t are rejected before allocating.
  * @param[in,out] allocator    Allocator to draw from, or NULL for realloc.
- * @return New index array, or NULL on overflow or exhaustion — @p old_index stays valid then.
+ * @return true on success, false on overflow or exhaustion — @c *index stays valid then.
  */
-void **grdu_bvec_index_grow(
-    void **old_index, size_t used, size_t new_capacity, grd_memory *allocator
+bool grdu_bvec_index_grow(
+    void ***index, size_t old_capacity, size_t new_capacity, grd_memory *allocator
 );
 
 /**
@@ -177,6 +226,7 @@ void **grdu_bvec_index_grow(
                                                                                                    \
   scope grd_result name##_init(name *v, grd_memory *allocator);                                    \
   scope grd_result name##_reserve(name *v, size_t element_count);                                  \
+  scope grd_result name##_shrink(name *v);                                                         \
   scope void name##_clear(name *v);                                                                \
   scope void name##_free(name *v);                                                                 \
   scope grd_result name##_grow(name *v, type **out_slot);                                          \
@@ -233,10 +283,11 @@ void **grdu_bvec_index_grow(
     needed = (element_count + (size_t)name##_BUCKET_MASK) >> (size_t)name##_BUCKET_SHIFT;          \
     if (needed <= v->bucket_count) return GRD_SUCCESS;                                             \
     if (needed > v->bucket_capacity) {                                                             \
-      void **grown =                                                                               \
-          grdu_bvec_index_grow((void **)v->buckets, v->bucket_count, needed, v->allocator);        \
-      if (!grown) return GRD_ERROR_OUT_OF_MEMORY;                                                  \
-      v->buckets = (type **)grown;                                                                 \
+      if (!grdu_bvec_index_grow(                                                                   \
+              (void ***)&v->buckets, v->bucket_capacity, needed, v->allocator                      \
+          )) {                                                                                     \
+        return GRD_ERROR_OUT_OF_MEMORY;                                                            \
+      }                                                                                            \
       v->bucket_capacity = needed;                                                                 \
     }                                                                                              \
     while (v->bucket_count < needed) {                                                             \
@@ -245,6 +296,34 @@ void **grdu_bvec_index_grow(
       );                                                                                           \
       if (!bucket) return GRD_ERROR_OUT_OF_MEMORY;                                                 \
       v->buckets[v->bucket_count++] = bucket;                                                      \
+    }                                                                                              \
+    return GRD_SUCCESS;                                                                            \
+  }                                                                                                \
+                                                                                                   \
+  /** Release every bucket that holds no element and tighten the index array onto the rest. */     \
+  scope grd_result name##_shrink(name *v) {                                                        \
+    size_t used, i, bucket_size;                                                                   \
+    if (!v) return GRD_ERROR_NULL_POINTER;                                                         \
+                                                                                                   \
+    used = v->tail ? v->tail_index + 1 : 0;                                                        \
+    bucket_size = sizeof(type) * (size_t)name##_BUCKET_CAPACITY;                                   \
+    /* top down, so an arena unwinds in allocation order; it stops at the first bucket it   */     \
+    /* refuses to reclaim, and nothing is lost when it does — that block is simply kept.    */     \
+    for (i = v->bucket_count; i > used; --i) {                                                     \
+      if (!grdu_bvec_raw_free(v->buckets[i - 1], bucket_size, v->allocator)) break;                \
+      v->buckets[i - 1] = NULL;                                                                    \
+    }                                                                                              \
+    v->bucket_count = i;                                                                           \
+    if (!i) {                                                                                      \
+      grdu_bvec_raw_free(v->buckets, v->bucket_capacity * sizeof(type *), v->allocator);           \
+      v->buckets = NULL;                                                                           \
+      v->bucket_capacity = 0;                                                                      \
+      return GRD_SUCCESS;                                                                          \
+    }                                                                                              \
+    if (i == v->bucket_capacity) return GRD_SUCCESS;                                               \
+    /* a refused tightening costs only unused pointer slots, so it is not an error */              \
+    if (grdu_bvec_index_grow((void ***)&v->buckets, v->bucket_capacity, i, v->allocator)) {        \
+      v->bucket_capacity = i;                                                                      \
     }                                                                                              \
     return GRD_SUCCESS;                                                                            \
   }                                                                                                \
@@ -261,8 +340,13 @@ void **grdu_bvec_index_grow(
   scope void name##_free(name *v) {                                                                \
     size_t i;                                                                                      \
     if (!v) return;                                                                                \
-    for (i = 0; i < v->bucket_count; ++i) { grdu_bvec_raw_free(v->buckets[i], v->allocator); }     \
-    grdu_bvec_raw_free(v->buckets, v->allocator);                                                  \
+    /* buckets backwards then the index array, the reverse of how they were taken */               \
+    for (i = v->bucket_count; i > 0; --i) {                                                        \
+      grdu_bvec_raw_free(                                                                          \
+          v->buckets[i - 1], sizeof(type) * (size_t)name##_BUCKET_CAPACITY, v->allocator           \
+      );                                                                                           \
+    }                                                                                              \
+    grdu_bvec_raw_free(v->buckets, v->bucket_capacity * sizeof(type *), v->allocator);             \
     v->buckets = NULL;                                                                             \
     v->bucket_count = 0;                                                                           \
     v->bucket_capacity = 0;                                                                        \
@@ -274,17 +358,18 @@ void **grdu_bvec_index_grow(
                                                                                                    \
   /** Cold path of @c _emplace: open the next bucket, reusing an already allocated one. */         \
   scope grd_result name##_grow(name *v, type **out_slot) {                                         \
+    if (!v || !out_slot) return GRD_ERROR_NULL_POINTER;                                            \
     size_t next = v->tail ? v->tail_index + 1 : 0;                                                 \
     if (next >= v->bucket_count) {                                                                 \
       type *bucket;                                                                                \
       if (v->bucket_count == v->bucket_capacity) {                                                 \
         size_t new_capacity = v->bucket_capacity ? v->bucket_capacity * 2                          \
                                                  : (size_t)GRDU_BVEC_INDEX_INITIAL_CAPACITY;       \
-        void **grown = grdu_bvec_index_grow(                                                       \
-            (void **)v->buckets, v->bucket_count, new_capacity, v->allocator                       \
-        );                                                                                         \
-        if (!grown) return GRD_ERROR_OUT_OF_MEMORY;                                                \
-        v->buckets = (type **)grown;                                                               \
+        if (!grdu_bvec_index_grow(                                                                 \
+                (void ***)&v->buckets, v->bucket_capacity, new_capacity, v->allocator              \
+            )) {                                                                                   \
+          return GRD_ERROR_OUT_OF_MEMORY;                                                          \
+        }                                                                                          \
         v->bucket_capacity = new_capacity;                                                         \
       }                                                                                            \
       bucket = (type *)grdu_bvec_raw_alloc(                                                        \
@@ -303,7 +388,7 @@ void **grdu_bvec_index_grow(
                                                                                                    \
   /** Claim the next slot without writing it — construct large payloads in place. */               \
   scope grd_result name##_emplace(name *v, type **out_slot) {                                      \
-    if (v->tail_used < (size_t)name##_BUCKET_CAPACITY) {                                           \
+    if (v->tail && v->tail_used < (size_t)name##_BUCKET_CAPACITY) {                                \
       *out_slot = v->tail + v->tail_used++;                                                        \
       v->size++;                                                                                   \
       return GRD_SUCCESS;                                                                          \

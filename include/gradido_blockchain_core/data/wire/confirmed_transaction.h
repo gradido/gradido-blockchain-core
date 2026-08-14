@@ -3,9 +3,9 @@
 
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 #include "gradido_transaction.h"
 #include "ledger_anchor.h"
 
@@ -109,7 +109,7 @@ grd_result grdw_confirmed_transaction_copy_account_balance(
  * @whisper             Settlement takes shape
  */
 grd_result grdw_confirmed_transaction_decode(
-    grdw_confirmed_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
+    grdw_confirmed_transaction *tx, const grdu_memory_block *binary_src, grd_memory *allocator
 );
 
 /**
@@ -130,7 +130,7 @@ grd_result grdw_confirmed_transaction_decode(
  * @whisper                Settlement becomes message
  */
 grd_result grdw_confirmed_transaction_encode(
-    grd_memory_block *binary_dst,
+    grdu_memory_block *binary_dst,
     size_t *final_size,
     const grdw_confirmed_transaction *tx,
     grd_memory *allocator

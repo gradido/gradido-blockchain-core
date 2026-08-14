@@ -11,6 +11,7 @@
 #include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 
 #include <stdint.h>
 
@@ -91,7 +92,7 @@ typedef struct grdr_complete_transaction {
   grdw_ledger_anchor *pairing_ledger_anchor; // null on local txs
 
   // transaction body as protobuf serialization, payload for signature
-  grd_memory_block body_bytes;
+  grdu_memory_block body_bytes;
 
   // contains memory used for all pointer in this obj
   grd_memory memory_area;

@@ -51,11 +51,11 @@ static grd_result community_uuid_from_pbtools(
 }
 
 static grd_result memory_block_from_pbtools(
-    grd_memory_block *dst, const struct pbtools_bytes_t *bytes, grd_memory *allocator
+    grdu_memory_block *dst, const struct pbtools_bytes_t *bytes, grd_memory *allocator
 ) {
   if (!dst || !bytes || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!bytes->size) { return GRD_ERROR_INVALID_PARAM; }
-  grd_result result = grd_memory_block_alloc(dst, allocator, bytes->size);
+  grd_result result = grdu_memory_block_alloc(dst, bytes->size, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   memcpy(dst->data, bytes->buf_p, bytes->size);
@@ -343,7 +343,8 @@ grd_result grdm_transaction_body_from_pbtools(
     }
   }
   if (pb_transaction_body->other_community_uuid.size) {
-    grd_memory_buffer_alloc(&transaction_body->other_community_uuid, allocator, UUID_BINARY_SIZE);
+    result = grd_alloc(&transaction_body->other_community_uuid, UUID_BINARY_SIZE, allocator);
+    if (GRD_SUCCESS != result) { return result; }
     result = community_uuid_from_pbtools(
         transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
     );

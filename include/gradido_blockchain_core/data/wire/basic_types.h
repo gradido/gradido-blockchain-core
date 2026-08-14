@@ -2,8 +2,8 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 
 #include "gradido_blockchain_core/const.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/memo_key.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 
 #include <stdint.h>
 
@@ -66,7 +66,7 @@ const uint8_t *grdw_account_balance_get_community_uuid(const grdw_account_balanc
  */
 typedef struct grdw_encrypted_memo {
   grdt_memo_key type;
-  grd_memory_block memo;
+  grdu_memory_block memo;
 } grdw_encrypted_memo;
 
 /**

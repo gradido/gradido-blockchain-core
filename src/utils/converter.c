@@ -226,7 +226,7 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   return GRD_SUCCESS;
 }
 
-grd_result grdu_binary_to_hex(char *result_buffer, const grd_memory_block *data) {
+grd_result grdu_binary_to_hex(char *result_buffer, const grdu_memory_block *data) {
   if (!result_buffer || !data || !data->size) { return GRD_ERROR_NULL_POINTER; }
   size_t hex_size = data->size * 2 + 1;
 
@@ -255,7 +255,7 @@ size_t grdu_binary_to_base64_length(size_t binSize) {
 }
 
 grd_result grdu_binary_to_base64_with_known_size(
-    grd_memory_block *result_block, const grd_memory_block *data
+    grdu_memory_block *result_block, const grdu_memory_block *data
 ) {
   if (!result_block || !data) { return GRD_ERROR_NULL_POINTER; }
   if (NULL ==
@@ -268,17 +268,17 @@ grd_result grdu_binary_to_base64_with_known_size(
 }
 
 grd_result grdu_binary_to_base64(
-    grd_memory_block *result_block, const grd_memory_block *data, grd_memory *allocator
+    grdu_memory_block *result_block, const grdu_memory_block *data, grd_memory *allocator
 ) {
   if (!result_block || !data || !allocator) { return GRD_ERROR_NULL_POINTER; }
   size_t strSize = sodium_base64_encoded_len(data->size, BASE64_VARIANT);
-  grd_result result = grd_memory_block_alloc(result_block, allocator, strSize);
+  grd_result result = grdu_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
   if (result != GRD_SUCCESS) { return result; }
 
   return grdu_binary_to_base64_with_known_size(result_block, data);
 }
 
-size_t grdu_binary_from_base64(grd_memory_block *result_block, const char *base64_str) {
+size_t grdu_binary_from_base64(grdu_memory_block *result_block, const char *base64_str) {
   if (!result_block || !base64_str) { return 0; }
   size_t result_bin_size = 0;
   if (sodium_base642bin(

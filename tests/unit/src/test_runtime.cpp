@@ -32,10 +32,10 @@ constexpr auto confirmedCommunityRootTransactionBase64 =
 static const uint8_t community_uuid[16] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03, 0x75, 0xc0,
                                            0x94, 0x1e, 0xf3, 0x5c, 0x59, 0xe4, 0xf9, 0x78};
 
-static grd_memory_block fromBase64(
+static grdu_memory_block fromBase64(
     const char *base64String, size_t size, int variant = sodium_base64_VARIANT_ORIGINAL
 ) {
-  grd_memory_block result{};
+  grdu_memory_block result{};
   size_t binSize = (size / 4) * 3;
 
   uint8_t *buffer = (uint8_t *)malloc(binSize);
@@ -61,7 +61,7 @@ static grd_memory_block fromBase64(
 }
 
 TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
-  grd_memory mem;
+  grd_memory mem{};
   ASSERT_EQ(grd_memory_init_arena(&mem, 2048), GRD_SUCCESS);
 
   grdw_confirmed_transaction confirmed_tx;
