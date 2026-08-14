@@ -20,74 +20,69 @@ extern "C" {
  * @brief Growing sequence of fixed-size buckets — a deque without push_front.
  *
  * Elements settle into buckets of `1 << log2_bucket` slots. A bucket, once allocated, never
- * moves again: growth appends a new bucket and only the small index array of bucket pointers
- * is reallocated. Two properties follow from that stillness:
+ * moves: growth appends a new one and only the small index array of bucket pointers is
+ * reallocated. Two properties follow from that stillness:
  *
- * - **Pointer stability**: every pointer returned by `_at`, `_get`, `_back`, `_emplace` stays
- *   valid until the element is popped or the vector is freed or cleared. A `grdu_vector`-style
- *   contiguous array cannot promise this.
- * - **No copy on growth**: appending never moves existing payload, so worst-case latency of
- *   `_push` stays flat instead of spiking with the element count.
+ * - **Pointer stability**: pointers from `_at`, `_get`, `_back`, `_emplace` stay valid until
+ *   the element is popped or the vector is freed or cleared. A contiguous array cannot
+ *   promise this.
+ * - **No copy on growth**: appending never moves existing payload, so `_push` latency stays
+ *   flat instead of spiking with the element count.
  *
- * Random access costs one shift, one mask and one extra load compared to a flat array:
- * `buckets[index >> shift][index & mask]`. Iteration bucket by bucket runs over contiguous
- * memory and is the fastest way to traverse the whole sequence.
+ * Random access costs a shift, a mask and one extra load: `buckets[i >> shift][i & mask]`.
+ * Iterating bucket by bucket runs over contiguous memory and is the fastest traversal.
  *
- * Complexity: `_push` / `_emplace` / `_pop` amortized O(1) (single compare on the fast path),
+ * Complexity: `_push` / `_emplace` / `_pop` amortized O(1) (one compare on the fast path),
  * `_at` / `_get` O(1), `_clear` O(1), `_shrink` / `_free` O(bucket count).
  *
  * ### Memory that comes back
  *
- * Growth is one-directional on its own: `_pop` leaves the vacated bucket in place and `_clear`
- * keeps every bucket, both so the next push finds its storage ready. A vector therefore sits at
- * its high water mark until told otherwise. `_shrink` is that instruction — it releases the
- * buckets past the last element and tightens the index array onto what remains, without moving
- * a single live element. After `_clear` it hands back everything and leaves the same empty,
- * immediately reusable descriptor `_free` does.
+ * Growth is one-directional on its own: `_pop` leaves the vacated bucket in place and
+ * `_clear` keeps all of them, so the next push finds its storage ready. A vector sits at its
+ * high water mark until `_shrink` says otherwise — it releases the buckets past the last
+ * element and tightens the index array onto the rest, without moving a live element. Call it
+ * where a peak is behind you, not between pushes.
  *
- * Call it where a peak is behind you, not between pushes: shrinking to the current fill and
- * then appending again buys back the very buckets just released.
- *
- * @note Under an arena allocator `_shrink` gives back what the arena will take: it unwinds
- * from the last bucket and stops at the first one that is not the arena's most recent
- * allocation, since only that one can move the bump index. A vector that grew its index array
- * part way through therefore keeps the buckets sitting before it — those come back on the
- * arena's own reset or teardown. It reports GRD_SUCCESS either way; a partial reclaim strands
- * nothing that was not already stranded.
+ * @note Under an arena `_shrink` gives back what the arena will take: it unwinds from the
+ * last bucket and stops at the first that is not the arena's most recent allocation, since
+ * only that one can move the bump index. Buckets sitting before a superseded index array
+ * therefore stay until the arena's own reset. GRD_SUCCESS either way — a partial reclaim
+ * strands nothing that was not already stranded.
  *
  * ### Empty states
  *
- * A vector is empty after `_init`, after `_clear`, after `_free` — and when zero-initialized:
- * `name v = {0};` is a valid, usable empty vector with the malloc/free allocator. Every read
- * path answers for it (`_size` 0, `_at` / `_front` / `_back` NULL, `_bucket_count` 0, `_pop`
- * out of bounds) and the first `_push` opens the first bucket. Prefer `_init` when an allocator
- * is involved: it is the only way to attach one.
+ * A vector is empty after `_init`, `_clear`, `_free` — and when zero-initialized: `name v =
+ * {0};` is valid and usable, with the malloc/free allocator. Every read path answers for it
+ * (`_size` 0, `_at` / `_front` / `_back` NULL, `_bucket_count` 0, `_pop` out of bounds) and
+ * the first `_push` opens the first bucket. Prefer `_init` when an allocator is involved: it
+ * is the only way to attach one.
  *
  * ### Ownership of the payload
  *
- * The container owns its buckets, never what they hold. Pointer in Payload are managed by caller.
+ * The container owns its buckets, never what they hold. Pointers in the payload are the
+ * caller's to manage.
  *
  * @code
  * // removing one element: hand back what it owns, then drop the slot
- * grdu_memory_block_free(&tx_vec_back(&v)->signature);
+ * grdu_memory_block_free(&tx_vec_back(&v)->signature, alloc);
  * tx_vec_pop(&v);
  *
  * // removing all of them: the same duty, once per element
  * grdw_gradido_transaction *tx;
- * GRDU_BVEC_FOREACH(tx_vec, &v, tx, i) { grdu_memory_block_free(&tx->signature); }
+ * GRDU_BVEC_FOREACH(tx_vec, &v, tx, i) { grdu_memory_block_free(&tx->signature, alloc); }
  * tx_vec_free(&v);
  * @endcode
  *
  * Payloads of plain data — integers, hashes, fixed-size structs, or pointers into an arena
  * that outlives the vector — need none of this and are what the container is built for.
  *
- * @warning `_clear` and `_free` discard every element at once and `_pop` discards the last
- * one. Release whatever the payloads own first; afterwards the slots are unreachable and the
- * ownership is lost with them.
+ * @warning `_clear` and `_free` discard every element at once, `_pop` the last one. Release
+ * what the payloads own first; afterwards the slots are unreachable and the ownership with
+ * them.
  *
  * ### Instantiation
  *
- * The container is generated by macro, once per payload type:
+ * Generated by macro, once per payload type:
  *
  * @code
  * // header-only, all functions static inline
@@ -100,30 +95,23 @@ extern "C" {
  *   // fill *slot in place, no copy
  * }
  * tx_vec_free(&v);
+ *
+ * // shared across translation units, split the generation:
+ * GRDU_BVEC_DECLARE(tx_vec, grdw_gradido_transaction, 7, extern)  // header
+ * GRDU_BVEC_DEFINE(tx_vec, grdw_gradido_transaction, 7,)          // exactly one .c file
  * @endcode
  *
- * For a container shared across translation units, split the generation:
+ * @note Choose `log2_bucket` so one bucket spans a few cache lines up to a page:
+ * `sizeof(type) << log2_bucket` between 512 B and 64 KiB is a sound default. Small buckets
+ * pay more index lookups, large ones waste tail space.
  *
- * @code
- * // header
- * GRDU_BVEC_DECLARE(tx_vec, grdw_gradido_transaction, 7, extern)
- * // exactly one .c file
- * GRDU_BVEC_DEFINE(tx_vec, grdw_gradido_transaction, 7,)
- * @endcode
+ * @note Arena memory is 8-byte aligned; payloads needing stricter alignment want NULL
+ * (malloc/free) or an externally aligned arena. An arena cannot reclaim a superseded index
+ * array, so `_reserve` up front is worth it there.
  *
- * @note Choose `log2_bucket` so that one bucket spans roughly a few cache lines up to a page:
- * `sizeof(type) << log2_bucket` in the range of 512 B … 64 KiB is a sound default. Small
- * buckets pay more index lookups, large buckets waste tail space.
- *
- * @note Allocation flows through an optional @ref grd_memory. With an arena allocator the
- * per-bucket allocations are bump-pointer fast and `_free` becomes a no-op; the arena, however,
- * cannot reclaim a superseded index array, so call `_reserve` up front when using one.
- * Arena memory is 8-byte aligned — payloads requiring stricter alignment need `NULL`
- * (malloc/free) or an externally aligned arena.
- *
- * @note The hot-path functions (`_push`, `_emplace`, `_pop`, `_get`, `_at`, `_back`, `_front`,
- * `_size`) do not validate their vector pointer. Passing NULL is a programming error, not a
- * runtime condition.
+ * @note The hot-path functions (`_push`, `_emplace`, `_pop`, `_get`, `_at`, `_back`,
+ * `_front`, `_size`) do not validate their vector pointer. Passing NULL is a programming
+ * error, not a runtime condition.
  *
  * @whisper Each bucket fills, then rests — the sequence grows without disturbing what settled
  *
@@ -136,36 +124,34 @@ extern "C" {
 /**
  * @brief Allocate a raw block through an optional allocator.
  *
- * Internal primitive of the generated containers. With @p allocator NULL the block comes from
- * malloc, otherwise from the given @ref grd_memory (arena or default mode).
+ * Internal primitive of the generated containers.
  *
- * @param[in]     size      Bytes to allocate; must be > 0.
+ * @param[in]     size      Bytes to allocate; must be > 0 and fit uint32_t.
  * @param[in,out] allocator Allocator to draw from, or NULL for malloc.
  * @return Pointer to the block, or NULL if the request could not be served.
  */
 void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator);
 
 /**
- * @brief Report whether releasing a block to @p allocator actually returns memory.
+ * @brief Report whether this allocator frees blocks individually.
  *
- * True for NULL (malloc/free) and for @ref GRD_MEMORY_ALLOC_TYPE_DEFAULT. False for the arena
- * modes, where a free is a no-op and the memory only comes back on reset or teardown of the
- * arena. `_shrink` uses this to stay out of the way of an arena.
+ * True for NULL (malloc/free) and @ref GRD_MEMORY_ALLOC_TYPE_DEFAULT, false for the arena
+ * modes, which can only give back their most recent allocation.
  *
  * @param[in] allocator Allocator to inspect, or NULL for malloc/free.
- * @return 1 if a free reclaims the block, 0 if the allocator releases collectively.
+ * @return 1 if every free reclaims, 0 if the allocator releases collectively.
  */
 int grdu_bvec_allocator_reclaims(const grd_memory *allocator);
 
 /**
  * @brief Release a block obtained from grdu_bvec_raw_alloc().
  *
- * With @p allocator NULL the block returns to the C heap. In arena modes nothing is reclaimed;
- * the arena releases collectively on reset or free. Safe to call with @p ptr NULL.
+ * An arena only takes back its most recent allocation; anything before it stays until reset.
+ * The return value says which happened, which is what `_shrink` stops on.
  *
  * @param[in]     ptr       Block to release; may be NULL.
- * @param[in]     size      Bytes @p ptr was allocated with. An arena needs it to tell whether
- *                          this block is its tail; ignored for malloc/free.
+ * @param[in]     size      Bytes @p ptr was allocated with. An arena needs it to recognize
+ *                          its tail; ignored for malloc/free.
  * @param[in,out] allocator Allocator the block came from, or NULL for free().
  * @return true when the block really came back, false when an arena kept it.
  */
@@ -174,21 +160,17 @@ bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator);
 /**
  * @brief Resize the index array of bucket pointers.
  *
- * Moves @p used pointers into a block of @p new_capacity slots. With @p allocator NULL this is
- * a realloc and usually stays in place; with an allocator a fresh block is taken and the old
- * one released (a no-op in arena modes, so the old array is lost to the arena).
+ * With @p allocator NULL this is a realloc and usually stays in place. Growth passes a
+ * capacity above the used count, `_shrink` passes exactly the live count to tighten the
+ * array; either way the live pointers carry over, so no bucket is ever dropped.
  *
- * Growth passes a capacity above @p used; `_shrink` passes exactly @p used to tighten the
- * array onto the pointers that are still live. Both directions carry the same @p used
- * pointers over, so the call never drops a bucket the caller still owns.
- *
- * @param[in,out] index        Address of the index array; @c *index may be NULL on first growth
- *                             and is replaced when the block moves.
- * @param[in]     old_capacity Slots @c *index was allocated with — the allocated count, not the
- *                             used one. An arena resizes by size, so a wrong value moves its
- *                             bump index by the wrong amount.
- * @param[in]     new_capacity Requested slot count; must be > 0. Counts whose byte size would
- *                             overflow size_t are rejected before allocating.
+ * @param[in,out] index        Address of the index array; @c *index may be NULL on first
+ *                             growth and is replaced when the block moves.
+ * @param[in]     old_capacity Slots @c *index was allocated with — the allocated count, not
+ *                             the used one. An arena resizes by size, so a wrong value moves
+ *                             its bump index by the wrong amount.
+ * @param[in]     new_capacity Requested slot count; must be > 0. Counts whose byte size
+ *                             would overflow are rejected before allocating.
  * @param[in,out] allocator    Allocator to draw from, or NULL for realloc.
  * @return true on success, false on overflow or exhaustion — @c *index stays valid then.
  */

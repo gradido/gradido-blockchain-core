@@ -6,17 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * The generated containers keep only their type-dependent logic inline; the three primitives
- * below carry the type-independent weight of allocation and therefore exist exactly once,
- * regardless of how many payload types a program instantiates.
+/*
+ * The generated containers keep only their type-dependent logic inline; the primitives below
+ * carry the type-independent weight of allocation and exist exactly once, however many
+ * payload types a program instantiates.
  */
 
 void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator) {
   uint8_t *buffer = NULL;
   if (!size) return NULL;
-  // grd_alloc counts in uint32_t; a request beyond that could never be served anyway
-  if (size > UINT32_MAX) return NULL;
+  if (size > UINT32_MAX) return NULL; // grd_alloc counts in uint32_t
   if (grd_alloc(&buffer, (uint32_t)size, allocator) != GRD_SUCCESS) return NULL;
   return buffer;
 }
@@ -41,7 +40,7 @@ bool grdu_bvec_index_grow(
   size_t new_bytes = new_capacity * sizeof(void *);
   size_t old_bytes = old_capacity * sizeof(void *);
   if (new_bytes > UINT32_MAX || old_bytes > UINT32_MAX) return false;
-  // an arena that had to move the block still resized it
+  // the warning counts as done here: an arena that had to move the block still resized it
   grd_result result =
       grd_realloc((uint8_t **)index, (uint32_t)old_bytes, (uint32_t)new_bytes, allocator);
   return GRD_SUCCESS == result || GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED == result;
