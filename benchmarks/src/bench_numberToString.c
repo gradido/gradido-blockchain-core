@@ -1,3 +1,4 @@
+#include "bench_report.h"
 #include "gradido_blockchain_core/utils/converter.h"
 #include "gradido_blockchain_core/utils/duration.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
@@ -170,46 +171,42 @@ static void prepare_test_data()
   }
 }
 
-static void bench_step(void (*func_ptr)(int), int stepCount, const char* name)
-{
-  char buffer[STRING_BUFFER_SIZE*2];
-  grdu_mono_timer timeUsed;
-  grdu_mono_timer_reset(&timeUsed);
-  func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, timeUsed);
-  printf("%s: %s\n", name, buffer);
-}
-
 int main(void)
 {
-  char buffer[STRING_BUFFER_SIZE];
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
 
   grdu_mono_timer_reset(&timeUsed);
   prepare_test_data();
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("time for prepare test data: %s\n", buffer);
+  bench_prepared(timeUsed);
 
   const int stepCount = TEST_VALUES_COUNT * 1000;
 
-  bench_step(test_snprintf_integer, stepCount, "snprintf integer");
-  bench_step(test_lr_algo_integer, stepCount, "lr algo integer");
-  bench_step(test_r128_integer, stepCount, "r128 integer to string");
-  bench_step(test_unit_fixed, stepCount, "grdd unit to string");
-  bench_step(test_duration_to_string, stepCount, "duration to string r128");
-  bench_step(test_unit_round, stepCount, "unit round");
-  bench_step(test_r128_round, stepCount, "r128 round");
-  bench_step(test_calculate_decay, stepCount, "calculate decay");
-  bench_step(test_hiero_transaction_id_to_string_snprintf, stepCount, "hiero::TransactionId toString snprintf");
-  bench_step(test_hiero_transaction_id_to_string, stepCount, "hiero::TransactionId toString manuell");
+  bench_section("integer to string");
+  bench_step(test_snprintf_integer, stepCount, "  snprintf", "conversion");
+  bench_step(test_lr_algo_integer, stepCount, "  lr algo", "conversion");
+  bench_step(test_r128_integer, stepCount, "  r128", "conversion");
+
+  bench_section("fixed point to string");
+  bench_step(test_unit_fixed, stepCount, "  grdd unit", "conversion");
+  bench_step(test_duration_to_string, stepCount, "  duration, r128 backed", "conversion");
+
+  bench_section("rounding");
+  bench_step(test_unit_round, stepCount, "  grdd unit", "operation");
+  bench_step(test_r128_round, stepCount, "  r128", "operation");
+  bench_step(test_calculate_decay, stepCount, "  decay over a random timespan", "operation");
+
+  bench_section("hiero transaction id to string");
+  bench_step(test_hiero_transaction_id_to_string_snprintf, stepCount, "  snprintf", "conversion");
+  bench_step(test_hiero_transaction_id_to_string, stepCount, "  hand written", "conversion");
+
 #ifdef USE_SODIUM
-  bench_step(test_uuid_from_string, stepCount, "uuid from string");
-  bench_step(test_uuid_to_string, stepCount, "uuid to string");
+  bench_section("uuid");
+  bench_step(test_uuid_from_string, stepCount, "  from string", "conversion");
+  bench_step(test_uuid_to_string, stepCount, "  to string", "conversion");
 #endif // USE_SODIUM
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
+  bench_total(timeUsed, stepCount, "value");
 
   return 0;
 }

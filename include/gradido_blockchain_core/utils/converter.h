@@ -41,8 +41,8 @@ extern "C" {
  *
  * @whisper Number becomes word, digit by digit
  */
-size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value);
-size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value);
+uint8_t grdu_uint64_to_string(char *buffer, uint8_t bufferSize, uint64_t value);
+uint8_t grdu_int64_to_string(char *buffer, uint8_t bufferSize, int64_t value);
 
 /**
  * @brief Convert a uint64_t to string, when its length is already known.
@@ -61,8 +61,8 @@ size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value);
  *
  * @whisper When size is known, conversion becomes a smooth stride
  */
-size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize);
-size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_t stringSize);
+uint8_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, uint8_t stringSize);
+uint8_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, uint8_t stringSize);
 
 /**
  * @brief Measure the length of a uint64_t's string representation.
@@ -78,8 +78,8 @@ size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_
  *
  * @whisper Know the shape before filling the space
  */
-size_t grdu_uint64_to_string_size(uint64_t value);
-size_t grdu_int64_to_string_size(int64_t value);
+uint8_t grdu_uint64_to_string_size(uint64_t value);
+uint8_t grdu_int64_to_string_size(int64_t value);
 
 #ifdef USE_SODIUM
 

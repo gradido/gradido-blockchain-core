@@ -1,3 +1,4 @@
+#include "bench_report.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/utils/bucket_vector.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
@@ -15,7 +16,6 @@
  * append throughput, traversal, random access, and the cost of the bucket size itself.
  */
 
-#define STRING_BUFFER_SIZE 32
 #define ELEMENT_COUNT 4000000
 
 /** 64 byte payload — the size range where copying on growth really starts to hurt. */
@@ -222,57 +222,42 @@ static void release_test_data(void) {
   free(g_flat);
 }
 
-static void bench_step(void (*func_ptr)(int), int stepCount, const char *name) {
-  char buffer[STRING_BUFFER_SIZE];
-  grdu_mono_timer timeUsed;
-  grdu_mono_timer_reset(&timeUsed);
-  func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf(
-      "%-40s %12s  %6.1f ns/element\n", name, buffer,
-      (double)grdu_mono_timer_nanos(timeUsed) / (double)stepCount
-  );
-}
-
 int main(void) {
-  char buffer[STRING_BUFFER_SIZE];
   grdu_mono_timer timeUsed;
   const int stepCount = ELEMENT_COUNT;
 
   grdu_mono_timer_init();
   grdu_mono_timer_reset(&timeUsed);
   prepare_test_data();
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("time for prepare test data: %s\n\n", buffer);
+  bench_prepared(timeUsed);
 
-  printf("append\n");
-  bench_step(test_bvec_push, stepCount, "  bucket vector push");
-  bench_step(test_bvec_push_reserved, stepCount, "  bucket vector push, reserved");
-  bench_step(test_bvec_push_arena, stepCount, "  bucket vector push, arena");
-  bench_step(test_bvec_refill_after_clear, stepCount, "  bucket vector refill after clear");
-  bench_step(test_flat_push, stepCount, "  flat array push, doubling realloc");
-  bench_step(test_bvec_push_pop_cycle, stepCount, "  bucket vector push + pop cycle");
+  bench_section("append");
+  bench_step(test_bvec_push, stepCount, "  bucket vector push", "element");
+  bench_step(test_bvec_push_reserved, stepCount, "  bucket vector push, reserved", "element");
+  bench_step(test_bvec_push_arena, stepCount, "  bucket vector push, arena", "element");
+  bench_step(test_bvec_refill_after_clear, stepCount, "  bucket vector refill after clear", "element");
+  bench_step(test_flat_push, stepCount, "  flat array push, doubling realloc", "element");
+  bench_step(test_bvec_push_pop_cycle, stepCount, "  bucket vector push + pop cycle", "element");
 
-  printf("\nbucket size (same 4 M appends)\n");
-  bench_step(test_bvec_push_256b_buckets, stepCount, "  256 B buckets");
-  bench_step(test_bvec_push, stepCount, "  4 KiB buckets");
-  bench_step(test_bvec_push_64kb_buckets, stepCount, "  64 KiB buckets");
+  bench_section("bucket size (same 4 M appends)");
+  bench_step(test_bvec_push_256b_buckets, stepCount, "  256 B buckets", "element");
+  bench_step(test_bvec_push, stepCount, "  4 KiB buckets", "element");
+  bench_step(test_bvec_push_64kb_buckets, stepCount, "  64 KiB buckets", "element");
 
-  printf("\n64 byte payload\n");
-  bench_step(test_payload_push_by_value, stepCount, "  push by value");
-  bench_step(test_payload_emplace, stepCount, "  emplace in place");
+  bench_section("64 byte payload");
+  bench_step(test_payload_push_by_value, stepCount, "  push by value", "element");
+  bench_step(test_payload_emplace, stepCount, "  emplace in place", "element");
 
-  printf("\ntraversal\n");
-  bench_step(test_bvec_iterate_buckets, stepCount, "  bucket vector, bucket wise");
-  bench_step(test_bvec_iterate_foreach, stepCount, "  bucket vector, foreach");
-  bench_step(test_flat_iterate, stepCount, "  flat array");
+  bench_section("traversal");
+  bench_step(test_bvec_iterate_buckets, stepCount, "  bucket vector, bucket wise", "element");
+  bench_step(test_bvec_iterate_foreach, stepCount, "  bucket vector, foreach", "element");
+  bench_step(test_flat_iterate, stepCount, "  flat array", "element");
 
-  printf("\nrandom access\n");
-  bench_step(test_bvec_random_access, stepCount, "  bucket vector");
-  bench_step(test_flat_random_access, stepCount, "  flat array");
+  bench_section("random access");
+  bench_step(test_bvec_random_access, stepCount, "  bucket vector", "element");
+  bench_step(test_flat_random_access, stepCount, "  flat array", "element");
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("\nall benchmarks: %s, elements per step: %d\n", buffer, stepCount);
+  bench_total(timeUsed, stepCount, "element");
 
   release_test_data();
   return 0;

@@ -35,7 +35,7 @@
  * - Any modification should preserve the exact boundary conditions (powers of 10),
  *   otherwise subtle off-by-one errors may occur.
  */
-size_t grdu_uint64_to_string_size(uint64_t v) {
+uint8_t grdu_uint64_to_string_size(uint64_t v) {
   if (v < 100000000ULL) {
     if (v < 10000ULL) {
       if (v < 100ULL) return v < 10 ? 1 : 2;
@@ -58,15 +58,25 @@ size_t grdu_uint64_to_string_size(uint64_t v) {
   return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
 }
 
-size_t grdu_int64_to_string_size(int64_t v) {
-  if (v >= 0) {
-    return grdu_uint64_to_string_size((uint64_t)v);
-  } else {
-    return grdu_uint64_to_string_size((uint64_t)(v * -1)) + 1;
-  }
+/*
+ * |v| as an unsigned value. `v * -1` is undefined for INT64_MIN, because +2^63 has no int64_t
+ * to live in — the two's complement range is asymmetric. Negating after the conversion works
+ * for every input: the conversion of a negative value to uint64_t is defined as v + 2^64, and
+ * unsigned subtraction wraps by definition, so the result is exactly |v|.
+ */
+static inline uint64_t int64_to_abs_u64(int64_t v) {
+  return v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
 }
 
-size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, size_t stringSize) {
+uint8_t grdu_int64_to_string_size(int64_t v) {
+  uint8_t str_size = grdu_uint64_to_string_size(int64_to_abs_u64(v));
+  if (v < 0) {
+    str_size++; // add one place for minus in front of number string
+  }
+  return str_size;
+}
+
+uint8_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, uint8_t stringSize) {
   if (value == 0) {
     if (stringSize < 1) {
       return 1; // return required size without null terminator
@@ -119,21 +129,21 @@ size_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, siz
   return len; // return number of characters written, not counting null terminator
 }
 
-size_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, size_t stringSize) {
+uint8_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, uint8_t stringSize) {
   if (value >= 0) {
     return grdu_uint64_to_string_known_string_size(buffer, (uint64_t)value, stringSize);
   } else {
     buffer[0] = '-';
     return grdu_uint64_to_string_known_string_size(
-               &buffer[1], (uint64_t)(value * -1), stringSize - 1
+               &buffer[1], int64_to_abs_u64(value), stringSize - 1
            ) +
            1;
   }
 }
 // for easy use, one call
 
-size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
-  size_t requiredSize = grdu_uint64_to_string_size(value);
+uint8_t grdu_uint64_to_string(char *buffer, uint8_t bufferSize, uint64_t value) {
+  uint8_t requiredSize = grdu_uint64_to_string_size(value);
   if (bufferSize < requiredSize + 1) {
     // better safe then sorry
     if (bufferSize) { buffer[0] = '\0'; }
@@ -142,7 +152,7 @@ size_t grdu_uint64_to_string(char *buffer, size_t bufferSize, uint64_t value) {
   return grdu_uint64_to_string_known_string_size(buffer, value, requiredSize);
 }
 
-size_t grdu_int64_to_string(char *buffer, size_t bufferSize, int64_t value) {
+uint8_t grdu_int64_to_string(char *buffer, uint8_t bufferSize, int64_t value) {
   size_t requiredSize = grdu_int64_to_string_size(value);
   if (bufferSize < requiredSize + 1) {
     // better safe then sorry

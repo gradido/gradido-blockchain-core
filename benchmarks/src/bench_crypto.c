@@ -1,3 +1,4 @@
+#include "bench_report.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/crypto/sign.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
@@ -93,34 +94,25 @@ static void prepare_test_data()
   }
 }
 
-static void bench_step(void (*func_ptr)(int), int stepCount, const char* name)
-{
-  char buffer[STRING_BUFFER_SIZE*2];
-  grdu_mono_timer timeUsed;
-  grdu_mono_timer_reset(&timeUsed);
-  func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, timeUsed);
-  printf("%s: %s\n", name, buffer);
-}
-
 int main(void)
 {
-  char buffer[STRING_BUFFER_SIZE];
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
   prepare_test_data();
   grdu_mono_timer_reset(&timeUsed);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("time for prepare test data: %s\n", buffer);
+  bench_prepared(timeUsed);
 
   const int stepCount = 1000;
 
-  bench_step(test_full_key_derivation, stepCount, "loop: seed -> community root key -> user public key (4 steps) -> account public key (1)");
-  bench_step(test_user_key_derivation, stepCount, "seed -> community root key, loop: community root key -> user public key (4 steps)");
-  bench_step(test_account_key_derivation, stepCount, "seed -> community root key, loop: community root key -> user public key (4 steps) -> account public key (1)");
+  /* "root" is the community root key; where it is cached, deriving it is outside the loop. */
+  bench_section("key derivation");
+  bench_step(test_full_key_derivation, stepCount, "  seed -> root -> user -> account", "chain");
+  bench_step(test_user_key_derivation, stepCount, "  root -> user, root cached", "chain");
+  bench_step(
+      test_account_key_derivation, stepCount, "  root -> user -> account, root cached", "chain"
+  );
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
+  bench_total(timeUsed, stepCount, "chain");
 
   return 0;
 }
