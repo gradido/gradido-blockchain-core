@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/utils/duration.h"
+#include "memory_limit.h"
 #include <gtest/gtest.h>
 
 TEST(Duration, Ns) {

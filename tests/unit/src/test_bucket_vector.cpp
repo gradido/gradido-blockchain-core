@@ -2,6 +2,7 @@
 #include "gradido_blockchain_core/utils/mono_timer.h"
 #include <gtest/gtest.h>
 
+#include "memory_limit.h"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -795,17 +796,21 @@ TEST(BucketVectorLimits, ReserveRejectsCountOverflow) {
   ASSERT_EQ(u32_vec_push(&v, 42u), GRD_SUCCESS);
 
   // rounding up to whole buckets would overflow before the shift
-  EXPECT_EQ(u32_vec_reserve(&v, SIZE_MAX), GRD_ERROR_ARITHMETIC_OVERFLOW);
-  EXPECT_EQ(u32_vec_reserve(&v, SIZE_MAX - 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
-  EXPECT_EQ(u32_vec_reserve(&v, SIZE_MAX - u32_vec_BUCKET_MASK + 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
-  // and the payload of that many elements could never be addressed either
-  EXPECT_EQ(u32_vec_reserve(&v, SIZE_MAX / 2), GRD_ERROR_ARITHMETIC_OVERFLOW);
-  EXPECT_EQ(u32_vec_reserve(&v, SIZE_MAX / sizeof(uint32_t) + 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX - 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(
+      u32_vec_reserve(&v, UINT32_MAX - u32_vec_BUCKET_MASK + 1), GRD_ERROR_ARITHMETIC_OVERFLOW
+  );
+  // and the payload of that many elements could never be addressed either. This bound is the
+  // tighter one — without it a reserve just under UINT32_MAX would be accepted and would try
+  // to allocate hundreds of millions of buckets one at a time.
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX / 2), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX / sizeof(uint32_t) + 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
 
   // the bound follows the payload size: the larger the element, the earlier it bites
   pay_vec big;
   ASSERT_EQ(pay_vec_init(&big, nullptr), GRD_SUCCESS);
-  EXPECT_EQ(pay_vec_reserve(&big, SIZE_MAX / sizeof(payload) + 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(pay_vec_reserve(&big, UINT32_MAX / sizeof(payload) + 1), GRD_ERROR_ARITHMETIC_OVERFLOW);
   EXPECT_EQ(pay_vec_reserve(&big, 64), GRD_SUCCESS); // a sane count still goes through
   pay_vec_free(&big);
 
@@ -819,14 +824,25 @@ TEST(BucketVectorLimits, ReserveRejectsCountOverflow) {
 }
 
 TEST(BucketVectorLimits, ReserveHugeFailsWithoutDamage) {
+  // Backed by a small arena on purpose: a request the guard lets through must still fail on
+  // the allocator rather than run away. Against malloc this test would spend the machine's
+  // RAM before returning.
+  alignas(8) uint8_t storage[4096];
+  grd_memory arena{};
+  ASSERT_EQ(grd_memory_init_arena_static(&arena, storage, sizeof(storage)), GRD_SUCCESS);
+
   u32_vec v;
-  ASSERT_EQ(u32_vec_init(&v, nullptr), GRD_SUCCESS);
+  ASSERT_EQ(u32_vec_init(&v, &arena), GRD_SUCCESS);
   for (uint32_t i = 0; i < 100; ++i) ASSERT_EQ(u32_vec_push(&v, i), GRD_SUCCESS);
-  const size_t buckets_before = v.bucket_count;
+  const uint32_t buckets_before = v.bucket_count;
 
   // rejected by the guard, so the allocator is never asked for the impossible
-  EXPECT_NE(u32_vec_reserve(&v, SIZE_MAX - u32_vec_BUCKET_MASK), GRD_SUCCESS);
-  EXPECT_NE(u32_vec_reserve(&v, SIZE_MAX / 3), GRD_SUCCESS);
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX - u32_vec_BUCKET_MASK), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX / 3), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  // Counts the guard *does* allow are only ever exercised here, against a bounded arena:
+  // asking malloc for them would spend the machine's RAM before returning.
+  EXPECT_EQ(u32_vec_reserve(&v, UINT32_MAX / sizeof(uint32_t)), GRD_ERROR_OUT_OF_MEMORY);
+  EXPECT_EQ(u32_vec_reserve(&v, 1u << 20), GRD_ERROR_OUT_OF_MEMORY);
 
   EXPECT_EQ(v.bucket_count, buckets_before);
   EXPECT_EQ(u32_vec_size(&v), 100u);
@@ -834,6 +850,7 @@ TEST(BucketVectorLimits, ReserveHugeFailsWithoutDamage) {
   ASSERT_EQ(u32_vec_push(&v, 100u), GRD_SUCCESS);
   ASSERT_NO_FATAL_FAILURE(CheckInvariants(v, u32_vec_BUCKET_CAPACITY));
   u32_vec_free(&v);
+  grd_memory_free(&arena);
 }
 
 TEST(BucketVectorLimits, RepeatedClearAndReserve) {

@@ -1,6 +1,7 @@
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/utils/memory_block.h"
+#include "memory_limit.h"
 #include <cstdlib>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -964,3 +965,28 @@ TEST(MemoryBlockTest, ReleasesUnusedScratchTail) {
 
   grd_memory_free(&mem);
 }
+
+// ---------------------------------------------------------------------------
+// the guard around the guards
+// ---------------------------------------------------------------------------
+
+#if defined(__linux__) && !defined(GRD_TEST_SKIP_MEMORY_LIMIT)
+#include <sys/resource.h>
+
+TEST(TestMemoryLimit, IsInEffectForThisBinary) {
+  // memory_limit.h caps this process so a runaway allocation dies here instead of taking the
+  // machine down. If that ever stops working, everything else still passes and nobody notices
+  // until the next 64 GB afternoon — so check it directly.
+  const char *env = std::getenv("GRD_TEST_MEMORY_LIMIT_MB");
+  if (env && std::string(env) == "0") { GTEST_SKIP() << "cap disabled via environment"; }
+
+  rlimit limit{};
+  ASSERT_EQ(getrlimit(RLIMIT_AS, &limit), 0);
+  ASSERT_NE(limit.rlim_cur, RLIM_INFINITY) << "address space is uncapped";
+
+  // and it actually bites: far more than any test legitimately needs
+  void *huge = malloc(static_cast<size_t>(64) * 1024 * 1024 * 1024);
+  EXPECT_EQ(huge, nullptr) << "a 64 GB request went through";
+  free(huge);
+}
+#endif

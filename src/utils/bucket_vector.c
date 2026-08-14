@@ -34,11 +34,12 @@ bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator) {
 }
 
 bool grdu_bvec_index_grow(
-    void ***index, size_t old_capacity, size_t new_capacity, grd_memory *allocator
+    void ***index, uint32_t old_capacity, uint32_t new_capacity, grd_memory *allocator
 ) {
-  if (!index || !new_capacity || new_capacity > SIZE_MAX / sizeof(void *)) return false;
-  size_t new_bytes = new_capacity * sizeof(void *);
-  size_t old_bytes = old_capacity * sizeof(void *);
+  if (!index || !new_capacity) return false;
+  // slot counts are uint32_t, their byte sizes need not fit one
+  size_t new_bytes = (size_t)new_capacity * sizeof(void *);
+  size_t old_bytes = (size_t)old_capacity * sizeof(void *);
   if (new_bytes > UINT32_MAX || old_bytes > UINT32_MAX) return false;
   // the warning counts as done here: an arena that had to move the block still resized it
   grd_result result =

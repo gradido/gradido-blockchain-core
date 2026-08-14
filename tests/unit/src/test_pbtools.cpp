@@ -12,6 +12,7 @@
 #include "gradido_blockchain_core/utils/version.h"
 #include "key_pairs.h"
 
+#include "memory_limit.h"
 #include "sodium.h"
 #include <assert.h>
 #include <gtest/gtest.h>

@@ -2,6 +2,7 @@
 #include "gradido_blockchain_core/utils/mono_timer.h"
 #include <gtest/gtest.h>
 
+#include "memory_limit.h"
 #include <random>
 
 TEST(Converter, grdu_uint64_to_string) {
