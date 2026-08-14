@@ -111,6 +111,8 @@ void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 // call grdr_complete_transaction_release and will free memory where tx is pointing
 void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 
+// buffer is used as scratch arena for decoding, so it must be 8 byte aligned and
+// buffer_size a multiple of 8 — otherwise GRD_ERROR_INVALID_PARAM comes back
 grd_result grdr_complete_transaction_init_from_protobuf(
     grdr_complete_transaction *tx,
     const uint8_t *serialized_data,

@@ -51,9 +51,11 @@ typedef enum grd_memory_alloc_type {
 
 /** @brief Memory allocator state container.
  *
- *  @warning Zero initialize before the first init call — @c grd_memory mem = {0}; or
- *  grd_memory_create(). Init inspects the previous state to release an arena it already
- *  owns, so stack garbage would be read as a live allocation.
+ *  The two init functions write every field and read none, so they accept uninitialized
+ *  storage — @c grd_memory mem; followed by an init is correct. Everything else needs an
+ *  allocator that is either initialized or zeroed; @c grd_memory mem = {0}; is the valid
+ *  empty state and means default mode (malloc/free).
+ *
  *  @note Do not write these fields; @p last_index and @p capacity are kept multiples of 8.
  */
 typedef struct grd_memory {
@@ -76,15 +78,16 @@ grd_memory *grd_memory_create();
 
 /** @brief Initialize arena mode with an owned heap buffer.
  *
- *  Re-initializing an allocator that already owns an arena releases the old buffer
- *  first, so resizing an arena is a single call.
+ *  Writes every field and reads none, so uninitialized storage is a valid input.
  *
- *  @param[in,out] memory   Zero initialized on first use (see @ref grd_memory); not NULL.
+ *  @param[in,out] memory   Allocator to initialize; not NULL. Need not be zeroed.
  *  @param[in]     capacity Bytes to reserve, rounded up to 8; must be > 0.
  *  @retval GRD_SUCCESS             Arena ready, bump index at 0.
  *  @retval GRD_ERROR_NULL_POINTER  @p memory is NULL.
  *  @retval GRD_ERROR_INVALID_PARAM @p capacity is 0.
- *  @retval GRD_ERROR_OUT_OF_MEMORY malloc failed; a previously owned arena is already gone.
+ *  @retval GRD_ERROR_OUT_OF_MEMORY malloc failed; @p memory is left untouched.
+ *  @warning Calling this on an allocator that already owns an arena leaks that buffer.
+ *           Use grd_memory_reinit_arena() to replace one.
  *  @whisper The basin is dug, and waits for water
  */
 grd_result grd_memory_init_arena(grd_memory *memory, uint32_t capacity);
@@ -92,16 +95,25 @@ grd_result grd_memory_init_arena(grd_memory *memory, uint32_t capacity);
 /** @brief Initialize arena mode with a caller owned buffer.
  *
  *  Borrows @p data; grd_memory_free() will not release it. Suited to stack or static
- *  storage that outlives the allocator.
+ *  storage that outlives the allocator. Like grd_memory_init_arena() it writes every field
+ *  and reads none.
  *
- *  @param[in,out] memory   Zero initialized on first use; not NULL.
+ *  Both @p data and @p capacity must be multiples of 8 and are rejected otherwise, rather
+ *  than rounded. Rounding a capacity up would let the arena bump past the end of a buffer
+ *  the caller sized exactly — seven bytes of silent corruption is not worth the convenience.
+ *
+ *  Re-initializing over another external arena needs nothing else: there is no buffer to
+ *  give back, so just call this again. Only an allocator that currently owns a *heap* arena
+ *  has something to release first — grd_memory_free() it before switching to an external
+ *  buffer, or it leaks.
+ *
+ *  @param[in,out] memory   Allocator to initialize; not NULL. Need not be zeroed.
  *  @param[in]     data     Buffer to bump through; not NULL, 8 byte aligned (@c alignas(8)).
- *  @param[in]     capacity Usable bytes in @p data; must be > 0.
+ *  @param[in]     capacity Usable bytes in @p data; must be > 0 and a multiple of 8.
  *  @retval GRD_SUCCESS             Arena ready, bump index at 0.
  *  @retval GRD_ERROR_NULL_POINTER  @p memory or @p data is NULL.
- *  @retval GRD_ERROR_INVALID_PARAM @p capacity is 0, or @p data is not 8 byte aligned.
- *  @warning @p capacity rounds up, so a buffer that is not a multiple of 8 can be
- *           overrun by up to 7 bytes. Size it accordingly.
+ *  @retval GRD_ERROR_INVALID_PARAM @p capacity is 0 or not a multiple of 8, or @p data is
+ *                                  not 8 byte aligned.
  *  @whisper Borrowed ground, returned unbroken
  */
 grd_result grd_memory_init_arena_static(grd_memory *memory, uint8_t *data, uint32_t capacity);
@@ -132,6 +144,26 @@ static inline void grd_memory_reset(grd_memory *memory) {
  *  @whisper Waters recede; the basin returns to silence
  */
 void grd_memory_free(grd_memory *memory);
+
+/** @brief Replace the arena of an allocator that already has one.
+ *
+ *  grd_memory_free() followed by grd_memory_init_arena(): releases what is held, then
+ *  reserves @p capacity fresh bytes. This is the call that resizes an arena.
+ *
+ *  Unlike the init functions this one reads @p memory, so it needs an allocator that was
+ *  initialized before, or a zeroed one (where the free half simply does nothing).
+ *
+ *  @param[in,out] memory   Initialized or zeroed allocator; not NULL.
+ *  @param[in]     capacity Bytes for the new arena, rounded up to 8; must be > 0.
+ *  @return Whatever grd_memory_init_arena() returns. On failure the old arena is already
+ *          gone and @p memory is left empty in its previous mode.
+ *  @warning Every pointer the old arena handed out dangles afterwards.
+ *  @whisper The basin emptied, then dug anew
+ */
+static inline grd_result grd_memory_reinit_arena(grd_memory *memory, uint32_t capacity) {
+  grd_memory_free(memory);
+  return grd_memory_init_arena(memory, capacity);
+}
 
 /** @brief grd_memory_free(), then release the grd_memory itself.
  *

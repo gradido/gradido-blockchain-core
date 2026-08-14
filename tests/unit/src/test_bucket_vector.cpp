@@ -288,7 +288,7 @@ TEST(BucketVector, ArenaAllocator) {
 }
 
 TEST(BucketVector, ExhaustedArenaReportsOutOfMemory) {
-  uint8_t buffer[256];
+  alignas(8) uint8_t buffer[256];
   grd_memory small{};
   ASSERT_EQ(grd_memory_init_arena_static(&small, buffer, sizeof(buffer)), GRD_SUCCESS);
 

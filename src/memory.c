@@ -75,30 +75,35 @@ grd_memory *grd_memory_create() {
 grd_result grd_memory_init_arena(grd_memory *memory, uint32_t capacity) {
   if (!memory) { return GRD_ERROR_NULL_POINTER; }
   if (!capacity) { return GRD_ERROR_INVALID_PARAM; }
-  grd_memory_reset(memory);
   uint32_t aligned_capacity;
   if (!align8_u32(capacity, &aligned_capacity)) { return GRD_ERROR_ARITHMETIC_OVERFLOW; }
-  // do we have an already existing arena?
-  if (GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED == memory->allocation_type && memory->capacity &&
-      memory->data) {
-    grd_free(memory->data, memory->capacity, NULL);
-    // drop the freed pointer before anything can fail and leave it behind
-    memory->data = NULL;
-    memory->capacity = 0;
-  }
-  grd_result result = grd_alloc(&memory->data, aligned_capacity, NULL);
+
+  // allocate before touching *memory, so a failure leaves it exactly as it was
+  uint8_t *data = NULL;
+  grd_result result = grd_alloc(&data, aligned_capacity, NULL);
   if (GRD_SUCCESS != result) { return result; }
+
+  // every field is written, none is read: uninitialized storage is a valid input
+  memory->data = data;
+  memory->last_index = 0;
   memory->capacity = aligned_capacity;
+  memory->out_of_memory_capacity = 0;
   memory->allocation_type = GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED;
   return GRD_SUCCESS;
 }
 
 grd_result grd_memory_init_arena_static(grd_memory *memory, uint8_t *data, uint32_t capacity) {
   if (!memory || !data) { return GRD_ERROR_NULL_POINTER; }
-  // an unaligned base would break the "every pointer is 8 byte aligned" invariant
-  if (!capacity || ALIGN8((uintptr_t)data) != (uintptr_t)data) { return GRD_ERROR_INVALID_PARAM; }
   uint32_t aligned_capacity;
   if (!align8_u32(capacity, &aligned_capacity)) { return GRD_ERROR_ARITHMETIC_OVERFLOW; }
+  // Rejected, not rounded: an unaligned base would break the "every pointer is 8 byte
+  // aligned" invariant, and a rounded up capacity would let the arena bump past the end of
+  // a buffer the caller sized exactly.
+  if (!capacity || aligned_capacity != capacity || ALIGN8((uintptr_t)data) != (uintptr_t)data) {
+    return GRD_ERROR_INVALID_PARAM;
+  }
+
+  // like grd_memory_init_arena: writes every field, reads none
   grd_memory_reset(memory);
   memory->data = data;
   memory->capacity = aligned_capacity;

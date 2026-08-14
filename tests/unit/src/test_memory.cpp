@@ -42,7 +42,7 @@ TEST(MemoryTest, InitArenaRejectsBadArguments) {
   EXPECT_EQ(grd_memory_init_arena(&mem, UINT32_MAX), GRD_ERROR_ARITHMETIC_OVERFLOW);
 }
 
-TEST(MemoryTest, InitArenaStaticRequiresAlignedBuffer) {
+TEST(MemoryTest, InitArenaStaticRejectsWhatItCannotHonour) {
   alignas(8) uint8_t storage[64];
   grd_memory mem{};
 
@@ -50,9 +50,23 @@ TEST(MemoryTest, InitArenaStaticRequiresAlignedBuffer) {
   EXPECT_EQ(grd_memory_init_arena_static(&mem, storage, 0), GRD_ERROR_INVALID_PARAM);
   // an unaligned base would break the "every pointer is 8 byte aligned" invariant
   EXPECT_EQ(grd_memory_init_arena_static(&mem, storage + 1, 32), GRD_ERROR_INVALID_PARAM);
+  // and a capacity that is not a multiple of 8 is refused rather than rounded up: rounding
+  // would let the arena hand out bytes past the end of a buffer the caller sized exactly
+  for (uint32_t bad : {1u, 7u, 33u, 63u}) {
+    EXPECT_EQ(grd_memory_init_arena_static(&mem, storage, bad), GRD_ERROR_INVALID_PARAM)
+        << "capacity " << bad;
+  }
 
   ASSERT_EQ(grd_memory_init_arena_static(&mem, storage, 64), GRD_SUCCESS);
   EXPECT_EQ(mem.allocation_type, GRD_MEMORY_ALLOC_TYPE_ARENA_EXTERNAL);
+  EXPECT_EQ(mem.capacity, 64u);
+
+  // the arena stays inside what it was given, right up to the last byte
+  uint8_t *buffer = nullptr;
+  ASSERT_EQ(grd_alloc(&buffer, 64, &mem), GRD_SUCCESS);
+  EXPECT_EQ(buffer, storage);
+  EXPECT_EQ(mem.last_index, mem.capacity);
+  EXPECT_EQ(grd_alloc(&buffer, 1, &mem), GRD_ERROR_OUT_OF_MEMORY);
 
   // an external buffer belongs to the caller and survives the allocator
   grd_memory_free(&mem);
@@ -60,7 +74,63 @@ TEST(MemoryTest, InitArenaStaticRequiresAlignedBuffer) {
   EXPECT_EQ(storage[0], 0x42);
 }
 
-TEST(MemoryTest, InitArenaTwiceReplacesTheOwnedBuffer) {
+TEST(MemoryTest, InitArenaStaticCanBeRepeatedWithoutFreeing) {
+  // nothing is owned, so switching external buffers is just another init
+  alignas(8) uint8_t first[64];
+  alignas(8) uint8_t second[128];
+  grd_memory mem{};
+
+  ASSERT_EQ(grd_memory_init_arena_static(&mem, first, sizeof(first)), GRD_SUCCESS);
+  uint8_t *buffer = nullptr;
+  ASSERT_EQ(grd_alloc(&buffer, 32, &mem), GRD_SUCCESS);
+
+  ASSERT_EQ(grd_memory_init_arena_static(&mem, second, sizeof(second)), GRD_SUCCESS);
+  EXPECT_EQ(mem.capacity, 128u);
+  EXPECT_EQ(mem.last_index, 0u);
+  ASSERT_EQ(grd_alloc(&buffer, 128, &mem), GRD_SUCCESS);
+  EXPECT_EQ(buffer, second);
+
+  grd_memory_free(&mem);
+}
+
+TEST(MemoryTest, InitArenaDoesNotReadPriorState) {
+  // The point of splitting init and reinit: `grd_memory mem;` followed by an init is the
+  // most natural line to write, and it has to be correct. This emulates the stack garbage
+  // that used to make init free a pointer it never owned.
+  alignas(8) uint8_t not_from_malloc[64];
+  grd_memory mem;
+  memset(&mem, 0xCD, sizeof(mem));
+  mem.allocation_type = GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED; // looks like a live owned arena
+  mem.data = not_from_malloc;                              // but this was never malloc'd
+  mem.capacity = sizeof(not_from_malloc);
+
+  ASSERT_EQ(grd_memory_init_arena(&mem, 128), GRD_SUCCESS);
+  EXPECT_EQ(mem.capacity, 128u);
+  EXPECT_EQ(mem.last_index, 0u);
+  EXPECT_EQ(mem.out_of_memory_capacity, 0u);
+  EXPECT_NE(mem.data, not_from_malloc);
+
+  uint8_t *buffer = nullptr;
+  EXPECT_EQ(grd_alloc(&buffer, 128, &mem), GRD_SUCCESS);
+  grd_memory_free(&mem);
+}
+
+TEST(MemoryTest, InitArenaLeavesTheAllocatorAloneOnFailure) {
+  grd_memory mem{};
+  ASSERT_EQ(grd_memory_init_arena(&mem, 64), GRD_SUCCESS);
+  uint8_t *before = mem.data;
+
+  // the allocation happens before anything is written, so a rejected request changes nothing
+  EXPECT_EQ(grd_memory_init_arena(&mem, UINT32_MAX), GRD_ERROR_ARITHMETIC_OVERFLOW);
+  EXPECT_EQ(mem.data, before);
+  EXPECT_EQ(mem.capacity, 64u);
+
+  uint8_t *buffer = nullptr;
+  EXPECT_EQ(grd_alloc(&buffer, 64, &mem), GRD_SUCCESS);
+  grd_memory_free(&mem);
+}
+
+TEST(MemoryTest, ReinitArenaReplacesTheOwnedBuffer) {
   grd_memory mem{};
   ASSERT_EQ(grd_memory_init_arena(&mem, 64), GRD_SUCCESS);
 
@@ -68,12 +138,24 @@ TEST(MemoryTest, InitArenaTwiceReplacesTheOwnedBuffer) {
   ASSERT_EQ(grd_alloc(&buffer, 64, &mem), GRD_SUCCESS);
   ASSERT_EQ(mem.last_index, 64u);
 
-  // re-init releases the old arena and starts over, no leak and no double free
-  ASSERT_EQ(grd_memory_init_arena(&mem, 128), GRD_SUCCESS);
+  // releases the old arena and starts over: no leak, no double free
+  ASSERT_EQ(grd_memory_reinit_arena(&mem, 128), GRD_SUCCESS);
   EXPECT_EQ(mem.capacity, 128u);
   EXPECT_EQ(mem.last_index, 0u);
 
   ASSERT_EQ(grd_alloc(&buffer, 128, &mem), GRD_SUCCESS);
+  grd_memory_free(&mem);
+}
+
+TEST(MemoryTest, ReinitArenaWorksOnAZeroedAllocator) {
+  // the free half has nothing to do, so reinit doubles as a plain init on a zeroed struct
+  grd_memory mem{};
+  ASSERT_EQ(grd_memory_reinit_arena(&mem, 64), GRD_SUCCESS);
+  EXPECT_EQ(mem.capacity, 64u);
+  EXPECT_EQ(mem.allocation_type, GRD_MEMORY_ALLOC_TYPE_ARENA_OWNED);
+
+  uint8_t *buffer = nullptr;
+  EXPECT_EQ(grd_alloc(&buffer, 64, &mem), GRD_SUCCESS);
   grd_memory_free(&mem);
 }
 
