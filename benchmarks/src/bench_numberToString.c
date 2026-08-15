@@ -1,15 +1,15 @@
 #include "bench_report.h"
+#include "gradido_blockchain_core/data/unit.h"
+#include "gradido_blockchain_core/data/wire/hiero.h"
 #include "gradido_blockchain_core/utils/converter.h"
 #include "gradido_blockchain_core/utils/duration.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
-#include "gradido_blockchain_core/data/unit.h"
-#include "gradido_blockchain_core/data/wire/hiero.h"
 
 #include "r128/r128.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 
 #define TEST_VALUES_COUNT 1000
 #define STRING_BUFFER_SIZE 32
@@ -19,32 +19,24 @@ char benchBuffer[STRING_BUFFER_SIZE];
 static uint64_t getNextTestValue() {
   static int cursor = 0;
   uint64_t result = testValues[cursor++];
-  if (cursor >= TEST_VALUES_COUNT) {
-    cursor = 0;
-  }
+  if (cursor >= TEST_VALUES_COUNT) { cursor = 0; }
   return result;
 }
 
-static void test_snprintf_integer(int stepCount)
-{
+static void test_snprintf_integer(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
     snprintf(benchBuffer, STRING_BUFFER_SIZE, "%" PRIu64, getNextTestValue());
   }
 }
 
-static void test_lr_algo_integer(int stepCount)
-{
+static void test_lr_algo_integer(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
     grdu_uint64_to_string(benchBuffer, STRING_BUFFER_SIZE, getNextTestValue());
   }
 }
 
-static void test_r128_integer(int stepCount)
-{
-  R128 v = {
-    .lo = 0,
-    .hi = 0
-  };
+static void test_r128_integer(int stepCount) {
+  R128 v = {.lo = 0, .hi = 0};
   int precision = 4;
   R128ToStringFormat opt = {
       .sign = R128ToStringSign_Default,
@@ -60,8 +52,7 @@ static void test_r128_integer(int stepCount)
   }
 }
 
-static void test_unit_fixed(int stepCount)
-{
+static void test_unit_fixed(int stepCount) {
   grdd_unit gdd;
   for (int i = 0; i < stepCount; ++i) {
     gdd = getNextTestValue();
@@ -69,49 +60,39 @@ static void test_unit_fixed(int stepCount)
   }
 }
 
-static void test_duration_to_string(int stepCount)
-{
+static void test_duration_to_string(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
     grdu_duration_string(benchBuffer, STRING_BUFFER_SIZE, getNextTestValue(), 4);
   }
 }
 
-static void test_unit_round(int stepCount)
-{
+static void test_unit_round(int stepCount) {
   grdd_unit r;
-  for (int i = 0; i < stepCount; ++i) {
-    grdd_unit_round_to_precision(&r, getNextTestValue(), 2);
-  }
+  for (int i = 0; i < stepCount; ++i) { grdd_unit_round_to_precision(&r, getNextTestValue(), 2); }
 }
 
-
-static void test_calculate_decay(int stepCount)
-{
-    for (int i = 0; i < stepCount; ++i) {
-        grdd_unit_calculate_decay(abs((int64_t)getNextTestValue()), getNextTestValue() % 31556952 * 10);
-    }
+static void test_calculate_decay(int stepCount) {
+  for (int i = 0; i < stepCount; ++i) {
+    grdd_unit_calculate_decay(abs((int64_t)getNextTestValue()), getNextTestValue() % 31556952 * 10);
+  }
 }
 
 grdw_hiero_transaction_id transactionId = {
     .transactionValidStart = {.seconds = 171627121, .nanos = 2912},
     .accountID = {.shardNum = 0, .realmNum = 0, .accountNum = 1233}
 };
-static void test_hiero_transaction_id_to_string_snprintf(int stepCount)
-{
+static void test_hiero_transaction_id_to_string_snprintf(int stepCount) {
   char buffer[128];
   for (int i = 0; i < stepCount; ++i) {
-    snprintf(buffer, 128, "%lld.%lld.%lld@%lld.%09d",
-      transactionId.accountID.shardNum,
-      transactionId.accountID.realmNum,
-      transactionId.accountID.accountNum,
-      transactionId.transactionValidStart.seconds,
-      transactionId.transactionValidStart.nanos
+    snprintf(
+        buffer, 128, "%lld.%lld.%lld@%lld.%09d", transactionId.accountID.shardNum,
+        transactionId.accountID.realmNum, transactionId.accountID.accountNum,
+        transactionId.transactionValidStart.seconds, transactionId.transactionValidStart.nanos
     );
   }
 }
 
-static void test_hiero_transaction_id_to_string(int stepCount)
-{
+static void test_hiero_transaction_id_to_string(int stepCount) {
   char buffer[128];
   for (int i = 0; i < stepCount; ++i) {
     grdw_hiero_transaction_id_to_string(buffer, 128, &transactionId);
@@ -121,33 +102,24 @@ static void test_hiero_transaction_id_to_string(int stepCount)
 #ifdef USE_SODIUM
 #include "sodium.h"
 
-static void test_uuid_from_string(int stepCount)
-{
+static void test_uuid_from_string(int stepCount) {
   const char expected[] = "48066a47-a02f-4596-883c-302c2b1aa1e1";
   int8_t uuid[16];
-  for (int i = 0; i < stepCount; ++i) {
-    grdu_uuid_from_string(uuid, expected);
-  }
+  for (int i = 0; i < stepCount; ++i) { grdu_uuid_from_string(uuid, expected); }
 }
 
-static void test_uuid_to_string(int stepCount)
-{
+static void test_uuid_to_string(int stepCount) {
   char buffer[37];
   for (int i = 0; i < stepCount; ++i) {
     uint64_t uuid[2] = {getNextTestValue(), getNextTestValue()};
-    grdu_uuid_to_string(buffer, (uint8_t*)uuid);
+    grdu_uuid_to_string(buffer, (uint8_t *)uuid);
   }
 }
 
+#endif // USE_SODIUM
 
-#endif //USE_SODIUM
-
-static void test_r128_round(int stepCount)
-{
-  R128 v = {
-    .lo = 0,
-    .hi = 0
-  };
+static void test_r128_round(int stepCount) {
+  R128 v = {.lo = 0, .hi = 0};
   R128 div;
   r128FromInt(&div, 100);
 
@@ -159,20 +131,15 @@ static void test_r128_round(int stepCount)
   }
 }
 
-static void prepare_test_data()
-{
+static void prepare_test_data() {
   srand(12812);
   for (int i = 0; i < TEST_VALUES_COUNT; ++i) {
-    testValues[i] =
-      ((uint64_t)rand() << 48) ^
-      ((uint64_t)rand() << 32) ^
-      ((uint64_t)rand() << 16) ^
-      (uint64_t)rand();
+    testValues[i] = ((uint64_t)rand() << 48) ^ ((uint64_t)rand() << 32) ^ ((uint64_t)rand() << 16) ^
+                    (uint64_t)rand();
   }
 }
 
-int main(void)
-{
+int main(void) {
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
 

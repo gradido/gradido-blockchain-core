@@ -12,7 +12,7 @@
 #define STRING_BUFFER_SIZE 32
 char benchBuffer[STRING_BUFFER_SIZE];
 
-const char* test_seed_strings[] = {
+const char *test_seed_strings[] = {
     "A medium of exchange for the people",
     "Love and health",
     "Three cheers",
@@ -42,57 +42,52 @@ const char* test_seed_strings[] = {
 };
 uint8_t test_seeds[TEST_SEEDS_COUNT][SIGN_SEED_SIZE];
 
-static const uint8_t* getNextTestValue() {
+static const uint8_t *getNextTestValue() {
   static int cursor = 0;
-  const uint8_t* result = test_seeds[cursor++];
-  if (cursor >= TEST_SEEDS_COUNT) {
-    cursor = 0;
-  }
+  const uint8_t *result = test_seeds[cursor++];
+  if (cursor >= TEST_SEEDS_COUNT) { cursor = 0; }
   return result;
 }
 
-static void test_full_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair key_pair;
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_account_from_community(&key_pair, getNextTestValue(), getNextTestValue(), 1);
-    }
-}
-
-static void test_user_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair root_key_pair;
-    grdc_sign_key_pair key_pair;
-    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
-    }
-}
-
-static void test_account_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair root_key_pair;
-    grdc_sign_key_pair key_pair;
-    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
-      grdc_sign_key_pair_derive(&key_pair, &key_pair, 0x80000000 + 1);
-    }
-}
-
-static void prepare_test_data()
-{
-  srand(12812);
-  for (int i = 0; i < TEST_SEEDS_COUNT; ++i) {
-    crypto_generichash(
-      test_seeds[i], SIGN_SEED_SIZE, (const unsigned char *)test_seed_strings[i], strlen(test_seed_strings[i]), NULL,
-        0
+static void test_full_key_derivation(int stepCount) {
+  grdc_sign_key_pair key_pair;
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_account_from_community(
+        &key_pair, getNextTestValue(), getNextTestValue(), 1
     );
   }
 }
 
-int main(void)
-{
+static void test_user_key_derivation(int stepCount) {
+  grdc_sign_key_pair root_key_pair;
+  grdc_sign_key_pair key_pair;
+  grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
+  }
+}
+
+static void test_account_key_derivation(int stepCount) {
+  grdc_sign_key_pair root_key_pair;
+  grdc_sign_key_pair key_pair;
+  grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
+    grdc_sign_key_pair_derive(&key_pair, &key_pair, 0x80000000 + 1);
+  }
+}
+
+static void prepare_test_data() {
+  srand(12812);
+  for (int i = 0; i < TEST_SEEDS_COUNT; ++i) {
+    crypto_generichash(
+        test_seeds[i], SIGN_SEED_SIZE, (const unsigned char *)test_seed_strings[i],
+        strlen(test_seed_strings[i]), NULL, 0
+    );
+  }
+}
+
+int main(void) {
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
   grdu_mono_timer_reset(&timeUsed);

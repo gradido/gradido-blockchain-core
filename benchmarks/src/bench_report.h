@@ -50,7 +50,9 @@ static inline void bench_prepared(grdu_mono_timer time_used) {
 }
 
 /** Blank line, then a heading. Steps below it are named with two leading spaces. */
-static inline void bench_section(const char *title) { printf("\n%s\n", title); }
+static inline void bench_section(const char *title) {
+  printf("\n%s\n", title);
+}
 
 /**
  * Runs one step and prints its row.
