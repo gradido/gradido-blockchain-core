@@ -72,10 +72,10 @@ hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   for (size_t i = 0; i < 36; i++) {
     if (uuid_string[i] == '-') continue;
     uint8_t hi = hex_lookup[(unsigned char)uuid_string[i]];
-    if (hi == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_ENCODE_FAILED; }
+    if (hi == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
     ++i;
     uint8_t lo = hex_lookup[(unsigned char)uuid_string[i]];
-    if (lo == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_ENCODE_FAILED; }
+    if (lo == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
     if (hi == 0 && lo == 0 && uuid_string[i - 1] != '0') continue;
     uuid[j++] = (hi << 4) | lo;
   }

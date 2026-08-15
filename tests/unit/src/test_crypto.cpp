@@ -253,3 +253,79 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
   // signature = c0_2147483647_1_2147483646_2->sign(testPayload);
   // EXPECT_TRUE(c0_2147483647_1_2147483646_2->verify(testPayload, signature.copyAsString()));
 }
+
+// --- the contract the header promises -------------------------------------------------------
+
+// Every declaration in sign.h names the code it returns per rejected argument. These pin that
+// promise: the header used to claim HOSTMEM_ERROR_INVALID_PARAM for a NULL argument, which the
+// implementation has never returned, and nothing noticed for want of a test.
+TEST(SignContract, RejectedArgumentsReturnTheDocumentedCode) {
+  grdc_sign_key_pair keyPair;
+  uint8_t seed[SIGN_SEED_SIZE] = {1};
+  uint8_t uuid[UUID_BINARY_SIZE] = {2};
+  uint8_t slip10[SIGN_PUBLIC_KEY_SIZE + 1];
+  ASSERT_EQ(grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_SIZE), HOSTMEM_SUCCESS);
+
+  // a missing pointer is a null pointer, not an invalid parameter
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(nullptr, seed, SIGN_SEED_SIZE),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(&keyPair, nullptr, SIGN_SEED_SIZE),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_copy_slip10_public_key(nullptr, &keyPair), HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(grdc_sign_key_pair_copy_slip10_public_key(slip10, nullptr), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdc_sign_key_pair_derive(nullptr, &keyPair, 1), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdc_sign_key_pair_derive(&keyPair, nullptr, 1), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdc_sign_key_pair_derive_uuid(nullptr, &keyPair, uuid), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(
+      grdc_sign_key_pair_derive_uuid(&keyPair, &keyPair, nullptr), HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_derive_account_from_community(nullptr, seed, uuid, 1),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_derive_account_from_community(&keyPair, nullptr, uuid, 1),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+
+  // a value out of range is an invalid parameter
+  EXPECT_EQ(grdc_sign_key_pair_generate_from_seed(&keyPair, seed, 0), HOSTMEM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(
+      grdc_sign_key_pair_derive(&keyPair, &keyPair, 0x80000000u), HOSTMEM_ERROR_INVALID_PARAM
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_derive_account_from_community(&keyPair, seed, uuid, 0),
+      HOSTMEM_ERROR_INVALID_PARAM
+  );
+}
+
+// The SLIP-10 seed range is enforced, so it is worth pinning from both sides: one byte inside
+// must work, one byte outside must not. A seed that is merely non-empty used to be enough, and
+// the key it produced looked exactly as trustworthy as any other.
+TEST(SignContract, SeedSizeRangeIsEnforced) {
+  grdc_sign_key_pair keyPair;
+  uint8_t seed[SIGN_SEED_MAX_SIZE] = {1};
+
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_MIN_SIZE - 1),
+      HOSTMEM_ERROR_INVALID_PARAM
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_MIN_SIZE), HOSTMEM_SUCCESS
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_MAX_SIZE), HOSTMEM_SUCCESS
+  );
+  EXPECT_EQ(
+      grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_MAX_SIZE + 1),
+      HOSTMEM_ERROR_INVALID_PARAM
+  );
+  // the size the rest of the project derives with sits inside the range
+  EXPECT_EQ(grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_SIZE), HOSTMEM_SUCCESS);
+}

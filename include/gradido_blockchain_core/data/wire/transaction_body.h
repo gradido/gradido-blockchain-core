@@ -88,11 +88,13 @@ void grdw_transaction_body_init(grdw_transaction_body *body);
  * be called before any move_memo or copy_memo operations. The array breathes
  * into existence, holding space for encrypted messages.
  *
- * @param[in/out] body          Transaction body to reserve memos in.
+ * @param[in/out] body          Transaction body to reserve memos in. Must not be NULL.
  * @param[in]     memos_count   Number of memo slots to allocate. Max 255.
- * @param[in]     allocator     Memory allocator for the pointer array.
- * @return                      HOSTMEM_SUCCESS on success
- *                              HOSTMEM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
+ * @param[in]     allocator     Memory allocator for the pointer array, or NULL for malloc.
+ * @retval HOSTMEM_SUCCESS              Slots reserved, @p body owns the array.
+ * @retval HOSTMEM_ERROR_NULL_POINTER   @p body is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM  @p memos_count is above 255.
+ * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  the allocator has no room for the array.
  */
 hostmem_result grdw_transaction_body_reserve_memos(
     grdw_transaction_body *body, size_t memos_count, hostmem *allocator

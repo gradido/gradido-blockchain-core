@@ -1,5 +1,7 @@
-#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
+#include "pb_decode.h"
+
 #include "gradido_blockchain_core/data/proto/gradido/confirmed_transaction.h"
+#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/mapping/pbtools_from_wire.h"
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
 #include "gradido_blockchain_core/result.h"
@@ -8,6 +10,7 @@
 #include <string.h>
 
 void grdw_confirmed_transaction_init(grdw_confirmed_transaction *tx) {
+  if (!tx) { return; }
   memset(tx, 0, sizeof(grdw_confirmed_transaction));
   grdw_gradido_transaction_init(&tx->transaction);
 }
@@ -42,29 +45,24 @@ hostmem_result grdw_confirmed_transaction_decode(
   if (!tx || !binary_src || !binary_src->data || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (!binary_src->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
 
-  // TODO: calculate needed memory beforhand
-  hostmem_memory_block pbBuffer;
-  // take whole static area from allocator for pbtools
-  hostmem_result result =
-      hostmem_memory_block_alloc(&pbBuffer, allocator->capacity - allocator->last_index, allocator);
+  // The workspace stays put on every failing exit below — see pb_decode.h, it is deliberate.
+  hostmem_memory_block workspace;
+  hostmem_result result = grdw_pb_workspace_take(&workspace, allocator);
   if (HOSTMEM_SUCCESS != result) { return result; }
 
-  struct proto_gradido_confirmed_transaction_t *proto_tx;
-  proto_tx = proto_gradido_confirmed_transaction_new(pbBuffer.data, pbBuffer.size);
+  struct proto_gradido_confirmed_transaction_t *proto_tx =
+      proto_gradido_confirmed_transaction_new(workspace.data, workspace.size);
   if (!proto_tx) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
-  int resultSize =
+
+  int decoded =
       proto_gradido_confirmed_transaction_decode(proto_tx, binary_src->data, binary_src->size);
-
-  // release not from pbtools used part from allocator
-  hostmem_memory_block_realloc(&pbBuffer, (uint32_t)proto_tx->base.heap_p->pos, allocator);
-
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
-  if (resultSize < 0 || (uint32_t)resultSize != binary_src->size) {
-    return HOSTMEM_ERROR_ENCODE_FAILED;
-  }
+  result = grdw_pb_decode_finish(
+      &workspace, proto_tx->base.heap_p->pos, decoded, binary_src->size, allocator
+  );
+  if (HOSTMEM_SUCCESS != result) { return result; }
 
   result = grdm_confirmed_transaction_from_pb(tx, proto_tx, allocator);
-  hostmem_memory_block_free(&pbBuffer, allocator);
+  hostmem_memory_block_free(&workspace, allocator);
   return result;
 }
 

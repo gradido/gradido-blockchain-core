@@ -161,6 +161,94 @@ TEST(PBToolsTest, TransactionBody_Decode) {
   hostmem_release(&mem);
 }
 
+// A failing decode keeps its scratch buffer on purpose: these decoders run on a static arena
+// that the caller resets, and what pbtools wrote before it gave up is what someone reads when a
+// message will not decode. This test exists so the next reviewer — human or not — sees that the
+// retained memory is a decision and not an oversight. See src/data/wire/pb_decode.h.
+TEST(PBToolsTest, FailedDecodeKeepsItsWorkspaceForInspection) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(mem.last_index, 0u);
+
+  grdw_transaction_body body{};
+  EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+  EXPECT_GT(mem.last_index, 0u) << "the workspace is kept on purpose, do not release it";
+
+  // and the caller clears it, as the caller always does
+  hostmem_reset(&mem);
+  EXPECT_EQ(mem.last_index, 0u);
+  hostmem_release(&mem);
+}
+
+// reserve_memos took the address of a member before it knew the body existed, so a NULL body
+// was a crash rather than an error. The init functions next to it had the same gap, while
+// grdc_sign_key_pair_init and grdr_complete_transaction_init have always guarded.
+TEST(PBToolsTest, WireEntryPointsSurviveANullPointer) {
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(nullptr, 4, &mem), HOSTMEM_ERROR_NULL_POINTER);
+  // the null check comes first: an out of range count must not decide the outcome for a body
+  // that was never there
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(nullptr, 999, &mem), HOSTMEM_ERROR_NULL_POINTER);
+
+  // and a valid body still reserves as before
+  grdw_transaction_body body{};
+  grdw_transaction_body_init(&body);
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(&body, 4, &mem), HOSTMEM_SUCCESS);
+  EXPECT_EQ(body.memos_count, 4u);
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(&body, 256, &mem), HOSTMEM_ERROR_INVALID_PARAM);
+  grdw_transaction_body_free(&body, &mem);
+
+  // the init functions simply do nothing rather than writing through a null pointer
+  grdw_transaction_body_init(nullptr);
+  grdw_gradido_transaction_init(nullptr);
+  grdw_confirmed_transaction_init(nullptr);
+
+  hostmem_release(&mem);
+}
+
+// A decode that fails says so with a decode error. All three wire decoders used to report
+// HOSTMEM_ERROR_ENCODE_FAILED for a malformed buffer, which sends a reader looking at the
+// wrong half of the code. Nothing covered the failing path, so nothing objected.
+TEST(PBToolsTest, DecodeOfGarbageReportsDecodeFailed) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  {
+    hostmem mem{};
+    grdw_transaction_body body{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+    hostmem_release(&mem);
+  }
+  {
+    hostmem mem{};
+    grdw_gradido_transaction tx{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+    hostmem_release(&mem);
+  }
+  {
+    hostmem mem{};
+    grdw_confirmed_transaction confirmed{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(
+        grdw_confirmed_transaction_decode(&confirmed, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED
+    );
+    hostmem_release(&mem);
+  }
+}
+
 TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
   init_key_pairs();
   hostmem mem{};

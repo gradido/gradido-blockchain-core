@@ -34,7 +34,11 @@ hostmem_result grdc_sign_key_pair_generate_from_seed(
     grdc_sign_key_pair *sign_key_pair, const uint8_t *seed, const size_t seed_size
 ) {
   if (!sign_key_pair || !seed) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (!seed_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
+  // the SLIP-10 range, enforced: a seed outside it is refused instead of yielding a key that
+  // looks as strong as any other
+  if (seed_size < SIGN_SEED_MIN_SIZE || seed_size > SIGN_SEED_MAX_SIZE) {
+    return HOSTMEM_ERROR_INVALID_PARAM;
+  }
   const uint8_t curveId[] = "ed25519 seed";
   uint8_t I[64];
   uint8_t temp[32];

@@ -75,10 +75,12 @@ void grdc_sign_key_pair_init(grdc_sign_key_pair *sign_key_pair);
  * each branch deterministic yet isolated.
  *
  * @param[out] sign_key_pair  Pointer to the key pair to populate. Must not be NULL.
- * @param[in]  seed              Input seed bytes. Must not be NULL.
- * @param[in]  seed_size         Size of the seed in bytes. Must be between 16 and 64.
- * @return                       HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
- * parameters are NULL or seed size is invalid.
+ * @param[in]  seed          Input seed bytes. Must not be NULL.
+ * @param[in]  seed_size     Size of the seed in bytes, @ref SIGN_SEED_MIN_SIZE to
+ *                           @ref SIGN_SEED_MAX_SIZE. The range is SLIP-10's and is enforced.
+ * @retval HOSTMEM_SUCCESS             Master key pair derived from the seed.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p sign_key_pair or @p seed is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p seed_size lies outside 16 to 64 bytes.
  * @whisper From one seed, a forest of keys
  */
 hostmem_result grdc_sign_key_pair_generate_from_seed(
@@ -98,9 +100,9 @@ hostmem_result grdc_sign_key_pair_generate_from_seed(
  *
  * @param[out] slip10_public_key  Output buffer of 33 bytes (SIGN_PUBLIC_KEY_SIZE + 1). Must not
  * be NULL.
- * @param[in]  sign_key_pair   Source key pair containing the public key. Must not be NULL.
- * @return                        HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
- * parameters are NULL.
+ * @param[in]  sign_key_pair     Source key pair containing the public key. Must not be NULL.
+ * @retval HOSTMEM_SUCCESS             Public key copied, prefix included.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p slip10_public_key or @p sign_key_pair is NULL.
  */
 hostmem_result grdc_sign_key_pair_copy_slip10_public_key(
     uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *sign_key_pair
@@ -120,9 +122,11 @@ hostmem_result grdc_sign_key_pair_copy_slip10_public_key(
  *
  * @param[out] sign_key_pair         Derived child key pair. Must not be NULL.
  * @param[in]  sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
- * @param[in]  index                    Derivation index (32-bit unsigned) < 0x80000000.
- * @return                              HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM
- * if parameters are NULL.
+ * @param[in]  index                 Derivation index (32-bit unsigned) < 0x80000000.
+ * @retval HOSTMEM_SUCCESS             Child key pair derived.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p sign_key_pair or @p sign_parent_key_pair is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p index has the hardening bit set. The function sets
+ *                                     it itself, so the caller passes the plain index.
  * @whisper A child grows from its parent's branch
  */
 hostmem_result grdc_sign_key_pair_derive(
@@ -145,8 +149,8 @@ hostmem_result grdc_sign_key_pair_derive(
  * @param[out] sign_key_pair  Derived user-specific key pair. Must not be NULL.
  * @param[in]  sign_parent_key Parent key pair for derivation. Must not be NULL.
  * @param[in]  uuid            16-byte UUID. Must not be NULL.
- * @return                     HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
- * parameters are NULL.
+ * @retval HOSTMEM_SUCCESS             User key pair derived.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p sign_key_pair, @p sign_parent_key or @p uuid is NULL.
  * @whisper Each user walks their own path
  */
 hostmem_result grdc_sign_key_pair_derive_uuid(
@@ -171,8 +175,11 @@ hostmem_result grdc_sign_key_pair_derive_uuid(
  * @param[in]  community_root_seed    32-byte community root seed. Must not be NULL.
  * @param[in]  user_uuid              16-byte UUID identifying the user. Must not be NULL.
  * @param[in]  account_index          Account index starting from 1.
- * @return                            HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
- * parameters are NULL or account_index is 0.
+ * @retval HOSTMEM_SUCCESS             Account key pair derived.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p sign_key_pair, @p community_root_seed or
+ *                                     @p user_uuid is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p account_index is 0.
+ * @retval Anything grdc_sign_key_pair_derive() returns on the way.
  * @whisper From community to user to account, the path unfolds
  */
 hostmem_result grdc_sign_key_pair_derive_account_from_community(

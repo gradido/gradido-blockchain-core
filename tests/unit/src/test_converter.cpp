@@ -48,7 +48,7 @@ TEST(UuidTest, InvalidInputs) {
   // Invalid hex characters
   EXPECT_EQ(
       grdu_uuid_from_string(uuid, "XXXX6a47-a02f-4596-883c-302c2b1aa1e1"),
-      HOSTMEM_ERROR_ENCODE_FAILED
+      HOSTMEM_ERROR_DECODE_FAILED
   );
 }
 

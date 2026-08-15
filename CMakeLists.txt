@@ -51,6 +51,10 @@ include(FetchContent)
 # FetchContent only populates it and the sources join this library's target below.
 FetchContent_Declare(hostmem
   URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.2.0.tar.gz
+  # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
+  # without this the build takes whatever the URL serves today. Update it with the version:
+  #   curl -sSL <url> | sha256sum
+  URL_HASH SHA256=e82b61f886c6f82616ecc02daaf7846c12789cf4a91551325957285bc2c03c93
 )
 FetchContent_MakeAvailable(hostmem)
 FILE(GLOB_RECURSE HOSTMEM_SRC "${hostmem_SOURCE_DIR}/src/*.c" "${hostmem_SOURCE_DIR}/include/hostmem/*.h")

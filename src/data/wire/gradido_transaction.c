@@ -1,5 +1,7 @@
-#include "gradido_blockchain_core/data/wire/gradido_transaction.h"
+#include "pb_decode.h"
+
 #include "gradido_blockchain_core/data/proto/gradido/gradido_transaction.h"
+#include "gradido_blockchain_core/data/wire/gradido_transaction.h"
 #include "gradido_blockchain_core/mapping/pbtools_from_wire.h"
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
 #include "gradido_blockchain_core/result.h"
@@ -10,6 +12,7 @@
 #define STATIC_BUFFER_SIZE 2048
 
 void grdw_gradido_transaction_init(grdw_gradido_transaction *tx) {
+  if (!tx) { return; }
   memset(tx, 0, sizeof(grdw_gradido_transaction));
 }
 
@@ -54,30 +57,24 @@ hostmem_result grdw_gradido_transaction_decode(
   if (!tx || !binary_src || !binary_src->data || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (!binary_src->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
 
-  // TODO: calculate needed memory beforhand
-  hostmem_memory_block pb_buffer;
-  // take whole static area from allocator for pbtools
-  hostmem_result result = hostmem_memory_block_alloc(
-      &pb_buffer, allocator->capacity - allocator->last_index, allocator
+  // The workspace stays put on every failing exit below — see pb_decode.h, it is deliberate.
+  hostmem_memory_block workspace;
+  hostmem_result result = grdw_pb_workspace_take(&workspace, allocator);
+  if (HOSTMEM_SUCCESS != result) { return result; }
+
+  struct proto_gradido_gradido_transaction_t *proto_tx =
+      proto_gradido_gradido_transaction_new(workspace.data, workspace.size);
+  if (!proto_tx) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
+
+  int decoded =
+      proto_gradido_gradido_transaction_decode(proto_tx, binary_src->data, binary_src->size);
+  result = grdw_pb_decode_finish(
+      &workspace, proto_tx->base.heap_p->pos, decoded, binary_src->size, allocator
   );
   if (HOSTMEM_SUCCESS != result) { return result; }
 
-  struct proto_gradido_gradido_transaction_t *proto_tx;
-  proto_tx = proto_gradido_gradido_transaction_new(pb_buffer.data, pb_buffer.size);
-  if (!proto_tx) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
-  int resultSize =
-      proto_gradido_gradido_transaction_decode(proto_tx, binary_src->data, binary_src->size);
-
-  // release not from pbtools used part from allocator
-  hostmem_memory_block_realloc(&pb_buffer, (uint32_t)proto_tx->base.heap_p->pos, allocator);
-
-  if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
-  if (resultSize < 0 || (uint32_t)resultSize != binary_src->size) {
-    return HOSTMEM_ERROR_ENCODE_FAILED;
-  }
-
   result = grdm_gradido_transaction_from_pb(tx, proto_tx, allocator);
-  hostmem_memory_block_free(&pb_buffer, allocator);
+  hostmem_memory_block_free(&workspace, allocator);
   return result;
 }
 
