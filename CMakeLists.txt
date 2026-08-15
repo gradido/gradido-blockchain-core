@@ -13,7 +13,7 @@ option(ENABLE_BENCHMARKS "Enable benchmark module" OFF)
 option(ENABLE_TESTS "Enable test module" OFF)
 option(USE_SODIUM "Enable use of libsodium" OFF)
 option(USE_INSTALLED_SODIUM "Link against already installed sodium lib if USE_SODIUM was also set to On" OFF)
-option(ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(ENABLE_SANITIZERS "Build with AddressSanitizer, plus UndefinedBehaviorSanitizer on non-MSVC toolchains (MSVC ships no UBSan)" OFF)
 option(ENABLE_THREAD_SANITIZER "Build with ThreadSanitizer (mutually exclusive with ENABLE_SANITIZERS)" OFF)
 
 # Sanitizers are set before any target is declared so that the library, the third party

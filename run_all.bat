@@ -9,9 +9,17 @@ set "KIND=all"
 set "VERBOSE=0"
 set "QUIET=0"
 set "PASS_ARGS="
+rem :usage serves both -h and the error paths; this says which one it was
+set "USAGE_EXIT=0"
 
 :parse
 if "%~1"=="" goto parsed
+rem Guard each value taking option first: without this a trailing -d would set DIR to the
+rem empty string and silently fall back to auto detection, ignoring what was asked for.
+if /i "%~1"=="-d"        if "%~2"=="" ( set "MISSING=%~1" & goto missing )
+if /i "%~1"=="--dir"     if "%~2"=="" ( set "MISSING=%~1" & goto missing )
+if /i "%~1"=="-o"        if "%~2"=="" ( set "MISSING=%~1" & goto missing )
+if /i "%~1"=="--only"    if "%~2"=="" ( set "MISSING=%~1" & goto missing )
 if /i "%~1"=="-d"        ( set "DIR=%~2" & shift & shift & goto parse )
 if /i "%~1"=="--dir"     ( set "DIR=%~2" & shift & shift & goto parse )
 if /i "%~1"=="-o"        ( set "FILTER=%~2" & shift & shift & goto parse )
@@ -22,10 +30,16 @@ if /i "%~1"=="-v"        ( set "VERBOSE=1" & shift & goto parse )
 if /i "%~1"=="--verbose" ( set "VERBOSE=1" & shift & goto parse )
 if /i "%~1"=="-q"        ( set "QUIET=1" & shift & goto parse )
 if /i "%~1"=="--quiet"   ( set "QUIET=1" & shift & goto parse )
-if /i "%~1"=="-h"        ( goto usage )
-if /i "%~1"=="--help"    ( goto usage )
+if /i "%~1"=="-h"        ( set "USAGE_EXIT=0" & goto usage )
+if /i "%~1"=="--help"    ( set "USAGE_EXIT=0" & goto usage )
 if "%~1"=="--"           ( shift & goto collect )
 echo unknown option: %~1 1>&2
+set "USAGE_EXIT=2"
+goto usage
+
+:missing
+echo missing value for %MISSING% 1>&2
+set "USAGE_EXIT=2"
 goto usage
 
 :collect
@@ -57,6 +71,14 @@ set "LOG=%TEMP%\grd_run_all_%RANDOM%.log"
 set "TOTAL=0"
 set "FAILED="
 set "FAILCOUNT=0"
+
+rem Guard both loops: a quoted wildcard that matches nothing can reach the loop body as the
+rem literal "*.exe", which would be counted as a binary and then "run" as one. if exist takes
+rem wildcards, so this settles it before either loop starts.
+if not exist "%DIR%\*.exe" (
+  echo no executables in %DIR% 1>&2
+  exit /b 1
+)
 
 rem count first, so the header is honest about what is about to run
 for %%f in ("%DIR%\*.exe") do (
@@ -163,4 +185,4 @@ echo   --                   everything after this is passed to every binary
 echo.
 echo Unlike run_all.sh there is no per binary timeout: cmd has no equivalent of
 echo timeout(1) that wraps a command rather than sleeping.
-exit /b 0
+exit /b %USAGE_EXIT%

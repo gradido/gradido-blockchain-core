@@ -98,8 +98,8 @@ int main(void)
 {
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
-  prepare_test_data();
   grdu_mono_timer_reset(&timeUsed);
+  prepare_test_data();
   bench_prepared(timeUsed);
 
   const int stepCount = 1000;

@@ -116,10 +116,10 @@ void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 grd_result grdr_complete_transaction_init_from_protobuf(
     grdr_complete_transaction *tx,
     const uint8_t *serialized_data,
-    size_t serialized_len,
+    uint32_t serialized_len,
     const uint8_t community_uuid[16],
     uint8_t *buffer,
-    size_t buffer_size
+    uint32_t buffer_size
 );
 
 const grdd_timestamp *grdr_complete_transaction_get_confirmed_at(

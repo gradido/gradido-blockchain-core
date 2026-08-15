@@ -175,7 +175,7 @@ TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
   body.transaction_type = GRDT_TRANSACTION_NONE;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -223,7 +223,7 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
   body.transaction_type = GRDT_TRANSACTION_COMMUNITY_ROOT;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -273,7 +273,7 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   body.transaction_type = GRDT_TRANSACTION_REGISTER_ADDRESS;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -335,7 +335,7 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   body.transaction_type = GRDT_TRANSACTION_CREATION;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -394,7 +394,7 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   body.transaction_type = GRDT_TRANSACTION_TRANSFER;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -454,7 +454,7 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   body.transaction_type = GRDT_TRANSACTION_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -519,7 +519,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   body.transaction_type = GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -578,7 +578,7 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
   body.transaction_type = GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
@@ -631,7 +631,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
   ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx, &signature, 0), GRD_SUCCESS);
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
   auto base64 = toBase64(&bufferPtr);
@@ -709,7 +709,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   alignas(8) uint8_t staticBuffer2[304]{}; // multiple of 8, as the arena requires
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   grd_memory mem2{};
   ASSERT_EQ(grd_memory_init_arena_static(&mem2, staticBuffer2, 304), GRD_SUCCESS);
   int i = 0;
@@ -744,7 +744,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
 
   uint8_t buffer[256]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
-  size_t finalSize = 0;
+  int finalSize = 0;
   ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
   bufferPtr.size = finalSize;
   auto base64 = toBase64(&bufferPtr);
@@ -796,7 +796,7 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx.transaction, &signature, 0), GRD_SUCCESS);
   uint8_t buffer[512]{};
   grdu_memory_block bufferPtr = {.data = buffer, .size = 512};
-  size_t finalSize = 0;
+  int finalSize = 0;
   tx.confirmed_at = confirmedAt;
   crypto_generichash_state state;
   crypto_generichash_init(&state, nullptr, 0, crypto_generichash_BYTES);

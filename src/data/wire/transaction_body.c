@@ -88,11 +88,11 @@ grd_result grdw_transaction_body_decode(
 
 grd_result grdw_transaction_body_encode(
     grdu_memory_block *binaryDst,
-    size_t *final_size,
+    int *final_size,
     const grdw_transaction_body *body,
     grd_memory *allocator
 ) {
-  if (!binaryDst || !body) { return GRD_ERROR_NULL_POINTER; }
+  if (!binaryDst || !body || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!binaryDst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy

@@ -1,6 +1,7 @@
 #include "gradido_blockchain_core/utils/converter.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include <cstdint>
 
 #ifdef USE_SODIUM
 #include "sodium.h"
@@ -282,6 +283,7 @@ grd_result grdu_binary_to_base64(
 ) {
   if (!result_block || !data || !allocator) { return GRD_ERROR_NULL_POINTER; }
   size_t strSize = sodium_base64_encoded_len(data->size, BASE64_VARIANT);
+  if (strSize > UINT32_MAX - 7) { return GRD_ERROR_ARITHMETIC_OVERFLOW; }
   grd_result result = grdu_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
   if (result != GRD_SUCCESS) { return result; }
 

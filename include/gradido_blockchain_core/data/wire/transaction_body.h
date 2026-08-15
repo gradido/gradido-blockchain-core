@@ -175,7 +175,7 @@ grd_result grdw_transaction_body_decode(
  */
 grd_result grdw_transaction_body_encode(
     grdu_memory_block *binary_dst,
-    size_t *final_size,
+    int *final_size,
     const grdw_transaction_body *body,
     grd_memory *allocator
 );

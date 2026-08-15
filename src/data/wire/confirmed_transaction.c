@@ -70,11 +70,11 @@ grd_result grdw_confirmed_transaction_decode(
 
 grd_result grdw_confirmed_transaction_encode(
     grdu_memory_block *binary_dst,
-    size_t *final_size,
+    int *final_size,
     const grdw_confirmed_transaction *tx,
     grd_memory *allocator
 ) {
-  if (!binary_dst || !tx) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_dst || !tx || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!binary_dst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy

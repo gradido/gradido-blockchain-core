@@ -49,13 +49,23 @@ Options:
 EOF
 }
 
+# Without this an option missing its value would leave $# at 1, where `shift 2` fails
+# without shifting -- and the loop would spin on the same argument forever.
+require_value() {
+  if [ "$2" -lt 2 ]; then
+    echo "missing value for $1" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    -d|--dir)     DIR="${2-}"; shift 2 ;;
-    -o|--only)    FILTER="${2-}"; shift 2 ;;
+    -d|--dir)     require_value "$1" $#; DIR="$2"; shift 2 ;;
+    -o|--only)    require_value "$1" $#; FILTER="$2"; shift 2 ;;
     --tests)      KIND="tests"; shift ;;
     --bench)      KIND="bench"; shift ;;
-    -t|--timeout) TIMEOUT="${2-}"; shift 2 ;;
+    -t|--timeout) require_value "$1" $#; TIMEOUT="$2"; shift 2 ;;
     -v|--verbose) VERBOSE=1; shift ;;
     -q|--quiet)   QUIET=1; shift ;;
     -h|--help)    usage; exit 0 ;;
