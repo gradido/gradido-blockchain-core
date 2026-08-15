@@ -13,6 +13,36 @@ option(ENABLE_BENCHMARKS "Enable benchmark module" OFF)
 option(ENABLE_TESTS "Enable test module" OFF)
 option(USE_SODIUM "Enable use of libsodium" OFF)
 option(USE_INSTALLED_SODIUM "Link against already installed sodium lib if USE_SODIUM was also set to On" OFF)
+option(ENABLE_SANITIZERS "Build with AddressSanitizer, plus UndefinedBehaviorSanitizer on non-MSVC toolchains (MSVC ships no UBSan)" OFF)
+option(ENABLE_THREAD_SANITIZER "Build with ThreadSanitizer (mutually exclusive with ENABLE_SANITIZERS)" OFF)
+
+# Sanitizers are set before any target is declared so that the library, the third party
+# sources, the tests and the benchmarks are all instrumented the same way — mixing an
+# instrumented library with an uninstrumented test binary produces false reports.
+if(ENABLE_SANITIZERS AND ENABLE_THREAD_SANITIZER)
+  message(FATAL_ERROR "ENABLE_SANITIZERS and ENABLE_THREAD_SANITIZER cannot be combined; ThreadSanitizer does not run together with AddressSanitizer")
+endif()
+
+if(ENABLE_SANITIZERS)
+  if(MSVC)
+    # MSVC ships AddressSanitizer only, there is no UndefinedBehaviorSanitizer counterpart
+    message(STATUS "Sanitizers enabled: address")
+    add_compile_options(/fsanitize=address /Zi)
+  else()
+    message(STATUS "Sanitizers enabled: address, undefined")
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address,undefined)
+  endif()
+endif()
+
+if(ENABLE_THREAD_SANITIZER)
+  if(MSVC)
+    message(FATAL_ERROR "ENABLE_THREAD_SANITIZER is not supported by MSVC")
+  endif()
+  message(STATUS "Sanitizers enabled: thread")
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=thread)
+endif()
 
 include(FetchContent)
 
@@ -104,9 +134,12 @@ if (USE_SODIUM)
 endif()
 
 # enable debug symbols from parent project on visual studio on windows in debug build
-target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<CONFIG:Debug>:/JMC>
-)
+# /JMC is an MSVC flag; gcc and clang reject it as an unknown linker input
+if(MSVC)
+  target_compile_options(${PROJECT_NAME} PRIVATE
+      $<$<CONFIG:Debug>:/JMC>
+  )
+endif()
 
 if(ENABLE_BENCHMARKS)
     add_subdirectory(benchmarks)

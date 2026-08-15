@@ -10,10 +10,21 @@ extern "C" {
  *  @{
  */
 
+/** @brief Outcome of an operation: success, a warning, or an error.
+ *
+ *  The order of the enumerators is part of the contract. Success is 0, warnings
+ *  follow, and every error comes after @ref GRD_ERROR_NOT_IMPLEMENTED_YET.
+ *  Keep new warnings in the warning block and new errors
+ *  after it. Please handle warnings explicit in the code.
+ */
 typedef enum grd_result {
   GRD_SUCCESS = 0,
+
+  // warnings: the operation was carried out, with a caveat worth reporting
+  GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED,
   GRD_WARNING_USED_DYNAMIC_ALLOCATION_FALLBACK,
 
+  // errors: the operation was not carried out
   GRD_ERROR_NOT_IMPLEMENTED_YET,
   GRD_ERROR_NOT_INITIALIZED,
   GRD_ERROR_INVALID_PARAM,     // if parameter validation failed

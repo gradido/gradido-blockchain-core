@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "gtest/gtest.h"
 
+#include "memory_limit.h"
 #include <string>
 
 /*

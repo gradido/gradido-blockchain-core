@@ -1,5 +1,6 @@
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/hiero.h"
+#include "memory_limit.h"
 #include <gtest/gtest.h>
 
 TEST(HieroAccountIdTest, toString) {

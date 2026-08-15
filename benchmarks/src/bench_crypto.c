@@ -1,19 +1,18 @@
+#include "bench_report.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/crypto/sign.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
 
 #include <sodium.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 #define TEST_SEEDS_COUNT 20
 #define STRING_BUFFER_SIZE 32
 char benchBuffer[STRING_BUFFER_SIZE];
 
-const char* test_seed_strings[] = {
+const char *test_seed_strings[] = {
     "A medium of exchange for the people",
     "Love and health",
     "Three cheers",
@@ -43,84 +42,69 @@ const char* test_seed_strings[] = {
 };
 uint8_t test_seeds[TEST_SEEDS_COUNT][SIGN_SEED_SIZE];
 
-static const uint8_t* getNextTestValue() {
+static const uint8_t *getNextTestValue() {
   static int cursor = 0;
-  const uint8_t* result = test_seeds[cursor++];
-  if (cursor >= TEST_SEEDS_COUNT) {
-    cursor = 0;
-  }
+  const uint8_t *result = test_seeds[cursor++];
+  if (cursor >= TEST_SEEDS_COUNT) { cursor = 0; }
   return result;
 }
 
-
-static void test_full_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair key_pair;
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_account_from_community(&key_pair, getNextTestValue(), getNextTestValue(), 1);
-    }
-}
-
-static void test_user_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair root_key_pair;
-    grdc_sign_key_pair key_pair;
-    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
-    }
-}
-
-static void test_account_key_derivation(int stepCount)
-{
-    grdc_sign_key_pair root_key_pair;
-    grdc_sign_key_pair key_pair;
-    grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
-    for (int i = 0; i < stepCount; ++i) {
-      grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
-      grdc_sign_key_pair_derive(&key_pair, &key_pair, 0x80000000 + 1);
-    }
-}
-
-static void prepare_test_data()
-{
-  srand(12812);
-  for (int i = 0; i < TEST_SEEDS_COUNT; ++i) {
-    crypto_generichash(
-      test_seeds[i], SIGN_SEED_SIZE, (const unsigned char *)test_seed_strings[i], strlen(test_seed_strings[i]), NULL,
-        0
+static void test_full_key_derivation(int stepCount) {
+  grdc_sign_key_pair key_pair;
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_account_from_community(
+        &key_pair, getNextTestValue(), getNextTestValue(), 1
     );
   }
 }
 
-static void bench_step(void (*func_ptr)(int), int stepCount, const char* name)
-{
-  char buffer[STRING_BUFFER_SIZE*2];
-  grdu_mono_timer timeUsed;
-  grdu_mono_timer_reset(&timeUsed);
-  func_ptr(stepCount);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE*2, timeUsed);
-  printf("%s: %s\n", name, buffer);
+static void test_user_key_derivation(int stepCount) {
+  grdc_sign_key_pair root_key_pair;
+  grdc_sign_key_pair key_pair;
+  grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
+  }
 }
 
-int main(void)
-{
-  char buffer[STRING_BUFFER_SIZE];
+static void test_account_key_derivation(int stepCount) {
+  grdc_sign_key_pair root_key_pair;
+  grdc_sign_key_pair key_pair;
+  grdc_sign_key_pair_generate_from_seed(&root_key_pair, getNextTestValue(), SIGN_SEED_SIZE);
+  for (int i = 0; i < stepCount; ++i) {
+    grdc_sign_key_pair_derive_uuid(&key_pair, &root_key_pair, getNextTestValue());
+    grdc_sign_key_pair_derive(&key_pair, &key_pair, 0x80000000 + 1);
+  }
+}
+
+static void prepare_test_data() {
+  srand(12812);
+  for (int i = 0; i < TEST_SEEDS_COUNT; ++i) {
+    crypto_generichash(
+        test_seeds[i], SIGN_SEED_SIZE, (const unsigned char *)test_seed_strings[i],
+        strlen(test_seed_strings[i]), NULL, 0
+    );
+  }
+}
+
+int main(void) {
   grdu_mono_timer_init();
   grdu_mono_timer timeUsed;
-  prepare_test_data();
   grdu_mono_timer_reset(&timeUsed);
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("time for prepare test data: %s\n", buffer);
+  prepare_test_data();
+  bench_prepared(timeUsed);
 
   const int stepCount = 1000;
 
-  bench_step(test_full_key_derivation, stepCount, "loop: seed -> community root key -> user public key (4 steps) -> account public key (1)");
-  bench_step(test_user_key_derivation, stepCount, "seed -> community root key, loop: community root key -> user public key (4 steps)");
-  bench_step(test_account_key_derivation, stepCount, "seed -> community root key, loop: community root key -> user public key (4 steps) -> account public key (1)");
+  /* "root" is the community root key; where it is cached, deriving it is outside the loop. */
+  bench_section("key derivation");
+  bench_step(test_full_key_derivation, stepCount, "  seed -> root -> user -> account", "chain");
+  bench_step(test_user_key_derivation, stepCount, "  root -> user, root cached", "chain");
+  bench_step(
+      test_account_key_derivation, stepCount, "  root -> user -> account, root cached", "chain"
+  );
 
-  grdu_mono_timer_string(buffer, STRING_BUFFER_SIZE, timeUsed);
-  printf("all benchmarks: %s, stepSize: %d\n", buffer, stepCount);
+  bench_total(timeUsed, stepCount, "chain");
 
   return 0;
 }

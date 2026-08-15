@@ -18,9 +18,8 @@ grd_result grdw_gradido_transaction_reserve_sig_map(
 ) {
   if (!allocator || !tx) { return GRD_ERROR_NULL_POINTER; }
   if (!sig_map_count) { return GRD_ERROR_INVALID_PARAM; }
-  grd_result result = grd_memory_buffer_alloc(
-      (uint8_t **)&tx->sig_map, allocator, sizeof(grdw_signature_pair) * sig_map_count
-  );
+  grd_result result =
+      grd_alloc((uint8_t **)&tx->sig_map, sizeof(grdw_signature_pair) * sig_map_count, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   tx->sig_map_count = sig_map_count;
@@ -49,17 +48,16 @@ grd_result grdw_gradido_transaction_copy_sig_map(
 */
 
 grd_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
+    grdw_gradido_transaction *tx, const grdu_memory_block *binary_src, grd_memory *allocator
 ) {
   if (!tx || !binary_src || !binary_src->data || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!binary_src->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: calculate needed memory beforhand
-  grd_memory_block pb_buffer;
+  grdu_memory_block pb_buffer;
   // take whole static area from allocator for pbtools
-  grd_result result = grd_memory_block_alloc(
-      &pb_buffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
-  );
+  grd_result result =
+      grdu_memory_block_alloc(&pb_buffer, allocator->capacity - allocator->last_index, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_gradido_transaction_t *proto_tx;
@@ -69,31 +67,32 @@ grd_result grdw_gradido_transaction_decode(
       proto_gradido_gradido_transaction_decode(proto_tx, binary_src->data, binary_src->size);
 
   // release not from pbtools used part from allocator
-  grd_memory_block_free_part(&pb_buffer, allocator, pb_buffer.size - proto_tx->base.heap_p->pos);
+  grdu_memory_block_realloc(&pb_buffer, (uint32_t)proto_tx->base.heap_p->pos, allocator);
 
   if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
-  if (resultSize != binary_src->size) { return GRD_ERROR_ENCODE_FAILED; }
+  if (resultSize < 0 || (uint32_t)resultSize != binary_src->size) {
+    return GRD_ERROR_ENCODE_FAILED;
+  }
 
   result = grdm_gradido_transaction_from_pb(tx, proto_tx, allocator);
-  grd_memory_block_free(&pb_buffer, allocator);
+  grdu_memory_block_free(&pb_buffer, allocator);
   return result;
 }
 
 grd_result grdw_gradido_transaction_encode(
-    grd_memory_block *binary_dst,
-    size_t *final_size,
+    grdu_memory_block *binary_dst,
+    int *final_size,
     const grdw_gradido_transaction *tx,
     grd_memory *allocator
 ) {
-  if (!binary_dst || !tx) { return GRD_ERROR_NULL_POINTER; }
+  if (!binary_dst || !tx || !allocator) { return GRD_ERROR_NULL_POINTER; }
   if (!binary_dst->size) { return GRD_ERROR_INVALID_PARAM; }
 
   // TODO: replace with more adaptable strategy
-  grd_memory_block pb_buffer;
+  grdu_memory_block pb_buffer;
   // take whole static area from allocator for pbtools
-  grd_result result = grd_memory_block_alloc(
-      &pb_buffer, allocator, allocator->capacity - ALIGN8(allocator->last_index)
-  );
+  grd_result result =
+      grdu_memory_block_alloc(&pb_buffer, allocator->capacity - allocator->last_index, allocator);
   if (GRD_SUCCESS != result) { return result; }
 
   struct proto_gradido_gradido_transaction_t *proto_tx;
@@ -106,7 +105,7 @@ grd_result grdw_gradido_transaction_encode(
   int resultSize =
       proto_gradido_gradido_transaction_encode(proto_tx, binary_dst->data, binary_dst->size);
 
-  grd_memory_block_free(&pb_buffer, allocator);
+  grdu_memory_block_free(&pb_buffer, allocator);
 
   if (PBTOOLS_ENCODE_BUFFER_FULL == -resultSize) { return GRD_ERROR_DESTINATION_BUFFER_TO_SMALL; }
   if (PBTOOLS_OUT_OF_MEMORY == -resultSize) { return GRD_ERROR_OUT_OF_MEMORY; }
@@ -117,7 +116,8 @@ grd_result grdw_gradido_transaction_encode(
 
 void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, grd_memory *allocator) {
   if (!tx || !allocator) { return; }
-  if (tx->sig_map_count) { grd_memory_buffer_free((uint8_t *)tx->sig_map, allocator); }
-  grd_memory_block_free(&tx->body_bytes, allocator);
+  // body_bytes first: it is allocated after sig_map, so an arena unwinds in order
+  grdu_memory_block_free(&tx->body_bytes, allocator);
+  grd_free((uint8_t *)tx->sig_map, sizeof(grdw_signature_pair) * tx->sig_map_count, allocator);
   grdw_gradido_transaction_init(tx);
 }

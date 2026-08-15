@@ -19,7 +19,6 @@
 #endif // USE_SODIUM
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <string.h>
 
 static const uint8_t zeros_x64[64] = {0};
@@ -57,11 +56,16 @@ static grdi_validate_result_type validateCommon(
     return GRDI_VALIDATE_INVALID_FIELD;
   }
   grdd_timestamp diff = grdd_timestamp_minus(&input_tx->created_at, &input_tx->confirmed_at);
-  if (llabs(diff.seconds) >
-      MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS) {
+  // magnitude in unsigned space: llabs(INT64_MIN) is undefined, and grdd_timestamp_minus pins
+  // a runaway difference to exactly that instead of overflowing
+  uint64_t diff_seconds =
+      diff.seconds < 0 ? (uint64_t)0 - (uint64_t)diff.seconds : (uint64_t)diff.seconds;
+  if (diff_seconds >
+      (uint64_t)MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS) {
     grd_error_details_fill_actual_is_number(
         error_details, "timespan between created at and confirmed at are more than expected",
-        llabs(diff.seconds), "120 seconds"
+        // saturates rather than wrapping, so the reported number stays a plausible one
+        diff_seconds > (uint64_t)INT64_MAX ? INT64_MAX : (int64_t)diff_seconds, "120 seconds"
     );
 
     return GRDI_VALIDATE_INVALID_FIELD;

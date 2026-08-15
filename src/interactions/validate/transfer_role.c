@@ -1,3 +1,5 @@
+#include "gradido_blockchain_core/interactions/validate/transfer_role.h"
+
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/error_details.h"
 #include "gradido_blockchain_core/interactions/validate/context.h"

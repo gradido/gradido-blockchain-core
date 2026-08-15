@@ -2,8 +2,8 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_GRADIDO_TRANSACTION_H
 
 #include "basic_types.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
+#include "gradido_blockchain_core/utils/memory_block.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -27,7 +27,7 @@ typedef struct grdw_gradido_transaction {
   //!  Array of signature pairs, allocated via reserve_sig_map.
   grdw_signature_pair *sig_map;
   //! Protobuf Serialized transaction body as a memory block, payload of signature
-  grd_memory_block body_bytes;
+  grdu_memory_block body_bytes;
   //! Ledger anchor for pairing transaction by cross-group transactions
   grdw_ledger_anchor pairing_ledger_anchor;
   //! Number of signature pairs in the array.
@@ -94,7 +94,7 @@ grd_result grdw_gradido_transaction_copy_sig_map(
  *                      not freed individually but as a whole.
  */
 grd_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const grd_memory_block *binary_src, grd_memory *allocator
+    grdw_gradido_transaction *tx, const grdu_memory_block *binary_src, grd_memory *allocator
 );
 
 /**
@@ -114,8 +114,8 @@ grd_result grdw_gradido_transaction_decode(
  * @whisper                Authorization becomes message
  */
 grd_result grdw_gradido_transaction_encode(
-    grd_memory_block *binary_dst,
-    size_t *final_size,
+    grdu_memory_block *binary_dst,
+    int *final_size,
     const grdw_gradido_transaction *tx,
     grd_memory *allocator
 );

@@ -2,7 +2,9 @@
 #include "gradido_blockchain_core/utils/mono_timer.h"
 #include <gtest/gtest.h>
 
+#include "memory_limit.h"
 #include <random>
+#include <string>
 
 TEST(Converter, grdu_uint64_to_string) {
   char buffer[20];
@@ -174,3 +176,23 @@ TEST(UuidTest, MultipleRoundtrips) {
 }
 
 #endif // USE_SODIUM
+
+// INT64_MIN is the one value that cannot be negated in int64_t: `v * -1` is undefined there,
+// and the result only looked right because two's complement wrapping happened to land on it.
+TEST(ConverterInt64, HandlesInt64Min) {
+  const std::string expected = std::to_string(INT64_MIN); // "-9223372036854775808"
+  ASSERT_EQ(expected.size(), 20u);
+
+  EXPECT_EQ(grdu_int64_to_string_size(INT64_MIN), expected.size());
+
+  char buffer[32] = {};
+  const size_t written = grdu_int64_to_string_known_string_size(buffer, INT64_MIN, expected.size());
+  EXPECT_EQ(written, expected.size());
+  EXPECT_STREQ(buffer, expected.c_str());
+
+  // and the neighbours, so an off by one in the negation would not slip through
+  EXPECT_EQ(grdu_int64_to_string_size(INT64_MIN + 1), 20u);
+  EXPECT_EQ(grdu_int64_to_string_size(INT64_MAX), 19u);
+  EXPECT_EQ(grdu_int64_to_string_size(-1), 2u);
+  EXPECT_EQ(grdu_int64_to_string_size(0), 1u);
+}

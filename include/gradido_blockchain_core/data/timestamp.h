@@ -1,7 +1,6 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_TIMESTAMP_H
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_TIMESTAMP_H
 
-#include "gradido_blockchain_core/result.h"
 #include "types.h"
 
 #include <stdbool.h>

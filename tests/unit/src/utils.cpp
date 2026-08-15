@@ -7,10 +7,10 @@
 
 #include <cstring>
 
-grd_memory_block fromBase64(
+grdu_memory_block fromBase64(
     const char *base64String, size_t size, int variant /* = sodium_base64_VARIANT_ORIGINAL  */
 ) {
-  grd_memory_block result{};
+  grdu_memory_block result{};
   size_t binSize = (size / 4) * 3;
 
   uint8_t *buffer = (uint8_t *)malloc(binSize);
@@ -35,7 +35,7 @@ grd_memory_block fromBase64(
   return result;
 }
 
-std::string toBase64(grd_memory_block *data, int variant /* = sodium_base64_VARIANT_ORIGINAL  */) {
+std::string toBase64(grdu_memory_block *data, int variant /* = sodium_base64_VARIANT_ORIGINAL  */) {
   if (!data || !data->size) { return ""; }
   size_t encodedSize = sodium_base64_encoded_len(data->size, variant);
   uint8_t *buffer = (uint8_t *)malloc(encodedSize);

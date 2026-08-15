@@ -1,5 +1,7 @@
 #include "gradido_blockchain_core/data/timestamp.h"
+#include "memory_limit.h"
 #include <climits>
+#include <cstdint>
 #include <gtest/gtest.h>
 
 static size_t expected_length(const grdd_timestamp *ts) {
@@ -76,6 +78,25 @@ TEST(TimestampToString, MinSeconds) {
   EXPECT_STREQ(buffer, expected.c_str());
 }
 
+// nanos outside [0, 999999999] has no 9 digit representation. It used to drive the zero
+// padding negative, and memset took that as a length near SIZE_MAX — a stack overflow
+// reachable from a decoded transaction, since no wire type bounds the field.
+TEST(TimestampToString, RejectsNanosOutOfRange) {
+  char buffer[64];
+  for (int32_t bad : {-1, -999999999, -1000000000, INT32_MIN, 1000000000, INT32_MAX}) {
+    grdd_timestamp ts = {.seconds = 1, .nanos = bad};
+    EXPECT_EQ(grdd_timestamp_to_string(buffer, sizeof(buffer), &ts), 0u) << "nanos " << bad;
+    EXPECT_EQ(grdd_timestamp_calculate_string_size(&ts), 0u) << "nanos " << bad;
+  }
+
+  // the edges of the valid range still work
+  for (int32_t good : {0, 1, 999999999}) {
+    grdd_timestamp ts = {.seconds = 1, .nanos = good};
+    EXPECT_EQ(grdd_timestamp_to_string(buffer, sizeof(buffer), &ts), 11u) << "nanos " << good;
+    EXPECT_EQ(grdd_timestamp_calculate_string_size(&ts), 11u) << "nanos " << good;
+  }
+}
+
 TEST(TimestampToString, BufferTooSmall) {
   grdd_timestamp ts = {.seconds = 123456789, .nanos = 123456789};
   char buffer[10];
@@ -149,4 +170,90 @@ TEST(TimestampPlus, Carry) {
   auto result = grdd_timestamp_plus(&t1, &t2);
   ASSERT_EQ(result.seconds, 8);
   ASSERT_EQ(result.nanos, 300000000);
+}
+
+// ---------------------------------------------------------------------------
+// arithmetic: normalized results and no overflow
+// ---------------------------------------------------------------------------
+
+// A timestamp is seconds + nanos/1e9, so whole seconds may move between the fields. Both
+// operations put the result back into nanos ∈ [0, 1e9) — the range grdd_timestamp_to_string
+// can print, and the one nothing in the wire types enforces on the way in.
+TEST(TimestampArithmetic, NormalizesOutOfRangeNanos) {
+  char buffer[64];
+
+  // an operand carrying more than a second's worth of nanos
+  grdd_timestamp a = {.seconds = 5, .nanos = 1500000000};
+  grdd_timestamp zero = {.seconds = 0, .nanos = 0};
+  auto r = grdd_timestamp_plus(&a, &zero);
+  EXPECT_EQ(r.seconds, 6);
+  EXPECT_EQ(r.nanos, 500000000);
+  EXPECT_EQ(grdd_timestamp_to_string(buffer, sizeof(buffer), &r), 11u); // 1 + '.' + 9
+  EXPECT_STREQ(buffer, "6.500000000");
+
+  // and one carrying a negative amount
+  grdd_timestamp b = {.seconds = 5, .nanos = -1500000000};
+  r = grdd_timestamp_plus(&b, &zero);
+  EXPECT_EQ(r.seconds, 3);
+  EXPECT_EQ(r.nanos, 500000000);
+
+  // a difference that borrows across the second boundary stays normalized
+  grdd_timestamp t1 = {.seconds = 0, .nanos = 0};
+  grdd_timestamp t2 = {.seconds = 0, .nanos = 1};
+  r = grdd_timestamp_minus(&t1, &t2);
+  EXPECT_EQ(r.seconds, -1);
+  EXPECT_EQ(r.nanos, 999999999);
+  EXPECT_EQ(grdd_timestamp_to_string(buffer, sizeof(buffer), &r), 12u);
+  EXPECT_STREQ(buffer, "-1.999999999");
+}
+
+TEST(TimestampArithmetic, ResultIsAlwaysPrintable) {
+  // whatever comes in, the result can be fed straight to the string functions
+  const int32_t nanos[] = {INT32_MIN, -1000000001, -1, 0, 1, 999999999, 1000000000, INT32_MAX};
+  const int64_t seconds[] = {INT64_MIN, -1, 0, 1, INT64_MAX};
+  char buffer[64];
+  for (int64_t s1 : seconds) {
+    for (int32_t n1 : nanos) {
+      for (int64_t s2 : seconds) {
+        for (int32_t n2 : nanos) {
+          grdd_timestamp a = {.seconds = s1, .nanos = n1};
+          grdd_timestamp b = {.seconds = s2, .nanos = n2};
+          for (auto r : {grdd_timestamp_plus(&a, &b), grdd_timestamp_minus(&a, &b)}) {
+            ASSERT_GE(r.nanos, 0);
+            ASSERT_LT(r.nanos, 1000000000);
+            ASSERT_NE(grdd_timestamp_to_string(buffer, sizeof(buffer), &r), 0u);
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST(TimestampArithmetic, SaturatesInsteadOfOverflowing) {
+  grdd_timestamp max = {.seconds = INT64_MAX, .nanos = 0};
+  grdd_timestamp min = {.seconds = INT64_MIN, .nanos = 0};
+  grdd_timestamp one = {.seconds = 1, .nanos = 0};
+
+  EXPECT_EQ(grdd_timestamp_plus(&max, &one).seconds, INT64_MAX);
+  EXPECT_EQ(grdd_timestamp_plus(&max, &max).seconds, INT64_MAX);
+  EXPECT_EQ(grdd_timestamp_minus(&min, &one).seconds, INT64_MIN);
+  EXPECT_EQ(grdd_timestamp_minus(&min, &max).seconds, INT64_MIN);
+  // INT64_MIN - INT64_MIN is representable and must not be pinned
+  EXPECT_EQ(grdd_timestamp_minus(&min, &min).seconds, 0);
+  EXPECT_EQ(grdd_timestamp_minus(&max, &max).seconds, 0);
+  // the borrow at the very bottom has nowhere to go either
+  grdd_timestamp min_borrow = {.seconds = INT64_MIN, .nanos = 0};
+  grdd_timestamp tick = {.seconds = 0, .nanos = 1};
+  EXPECT_EQ(grdd_timestamp_minus(&min_borrow, &tick).seconds, INT64_MIN);
+}
+
+TEST(TimestampArithmetic, ToleratesNullOperands) {
+  grdd_timestamp t = {.seconds = 7, .nanos = 8};
+  for (auto r :
+       {grdd_timestamp_plus(nullptr, &t), grdd_timestamp_plus(&t, nullptr),
+        grdd_timestamp_minus(nullptr, &t), grdd_timestamp_minus(&t, nullptr),
+        grdd_timestamp_plus(nullptr, nullptr)}) {
+    EXPECT_EQ(r.seconds, 0);
+    EXPECT_EQ(r.nanos, 0);
+  }
 }

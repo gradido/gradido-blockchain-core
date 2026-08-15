@@ -16,7 +16,7 @@ extern "C" {
 /*
  * C11 static assert fallback safety
  */
-#if !defined(static_assert)
+#if !defined(__cplusplus) && !defined(static_assert)
 #define static_assert _Static_assert
 #endif
 
