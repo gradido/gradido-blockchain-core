@@ -1,7 +1,7 @@
 #include "gradido_blockchain_core/utils/converter.h"
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
-#include <cstdint>
+#include <stdint.h>
 
 #ifdef USE_SODIUM
 #include "sodium.h"

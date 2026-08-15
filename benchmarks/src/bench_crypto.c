@@ -5,10 +5,8 @@
 
 #include <sodium.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 #define TEST_SEEDS_COUNT 20
 #define STRING_BUFFER_SIZE 32
@@ -52,7 +50,6 @@ static const uint8_t* getNextTestValue() {
   }
   return result;
 }
-
 
 static void test_full_key_derivation(int stepCount)
 {

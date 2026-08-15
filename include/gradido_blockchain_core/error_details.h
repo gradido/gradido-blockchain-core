@@ -6,7 +6,8 @@ extern "C" {
 #endif
 
 #include "result.h"
-#include <inttypes.h>
+
+#include <stdint.h>
 
 typedef struct grd_memory grd_memory;
 

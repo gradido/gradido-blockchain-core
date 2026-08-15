@@ -1,6 +1,5 @@
 #include "gradido_blockchain_core/utils/duration.h"
 
-#include <stdio.h>
 #include <string.h>
 
 #include "gradido_blockchain_core/utils/converter.h"

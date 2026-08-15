@@ -1,7 +1,6 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 #define GRADIDO_BLOCKCHAIN_CORE_MEMORY_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 

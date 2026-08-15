@@ -3,7 +3,6 @@
 #include "gradido_blockchain_core/utils/bucket_vector.h"
 #include "gradido_blockchain_core/utils/mono_timer.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -52,7 +51,7 @@ static void test_bvec_push(int stepCount) {
 static void test_bvec_push_reserved(int stepCount) {
   bvec_u64 v;
   bvec_u64_init(&v, NULL);
-  bvec_u64_reserve(&v, (size_t)stepCount);
+  bvec_u64_reserve(&v, (uint32_t)stepCount);
   for (int i = 0; i < stepCount; ++i) bvec_u64_push(&v, (uint64_t)i);
   bvec_u64_free(&v);
 }
@@ -61,7 +60,7 @@ static void test_bvec_push_arena(int stepCount) {
   bvec_u64 v;
   grd_memory_reset(&g_arena);
   bvec_u64_init(&v, &g_arena);
-  bvec_u64_reserve(&v, (size_t)stepCount);
+  bvec_u64_reserve(&v, (uint32_t)stepCount);
   for (int i = 0; i < stepCount; ++i) bvec_u64_push(&v, (uint64_t)i);
   bvec_u64_free(&v);
 }
@@ -110,7 +109,7 @@ static void test_payload_push_by_value(int stepCount) {
   bvec_payload v;
   bench_payload p;
   bvec_payload_init(&v, NULL);
-  bvec_payload_reserve(&v, (size_t)stepCount);
+  bvec_payload_reserve(&v, (uint32_t)stepCount);
   memset(&p, 0, sizeof(p));
   for (int i = 0; i < stepCount; ++i) {
     p.id = (uint64_t)i;
@@ -124,7 +123,7 @@ static void test_payload_emplace(int stepCount) {
   bvec_payload v;
   bench_payload *slot;
   bvec_payload_init(&v, NULL);
-  bvec_payload_reserve(&v, (size_t)stepCount);
+  bvec_payload_reserve(&v, (uint32_t)stepCount);
   for (int i = 0; i < stepCount; ++i) {
     if (bvec_payload_emplace(&v, &slot) != GRD_SUCCESS) break;
     memset(slot, 0, sizeof(*slot));
@@ -139,10 +138,10 @@ static void test_payload_emplace(int stepCount) {
 static void test_bvec_iterate_buckets(int stepCount) {
   uint64_t sum = 0;
   (void)stepCount;
-  for (size_t b = 0, buckets = bvec_u64_bucket_count(&g_filled); b < buckets; ++b) {
+  for (uint32_t b = 0, buckets = bvec_u64_bucket_count(&g_filled); b < buckets; ++b) {
     const uint64_t *data = bvec_u64_bucket_data(&g_filled, b);
-    const size_t count = bvec_u64_bucket_size(&g_filled, b);
-    for (size_t k = 0; k < count; ++k) sum += data[k];
+    const uint32_t count = bvec_u64_bucket_size(&g_filled, b);
+    for (uint32_t k = 0; k < count; ++k) sum += data[k];
   }
   g_sink += sum;
 }
@@ -164,11 +163,15 @@ static void test_flat_iterate(int stepCount) {
   g_sink += sum;
 }
 
-/** Scattered reads — the case that pays for the extra indirection. */
+/** Scattered reads — the case that pays for the extra indirection.
+ *
+ * The index runs in uint32_t here and in the flat reference alike: the modulo is the hottest
+ * instruction in both loops, and a 64 bit divisor would put the difference in the step
+ * instead of in the container. */
 static void test_bvec_random_access(int stepCount) {
   uint64_t sum = 0;
-  size_t index = 0;
-  const size_t size = bvec_u64_size(&g_filled);
+  uint32_t index = 0;
+  const uint32_t size = bvec_u64_size(&g_filled);
   for (int i = 0; i < stepCount; ++i) {
     index = (index + 524287) % size; /* prime stride: defeats the prefetcher */
     sum += *bvec_u64_get(&g_filled, index);
@@ -178,8 +181,8 @@ static void test_bvec_random_access(int stepCount) {
 
 static void test_flat_random_access(int stepCount) {
   uint64_t sum = 0;
-  size_t index = 0;
-  const size_t size = (size_t)ELEMENT_COUNT;
+  uint32_t index = 0;
+  const uint32_t size = (uint32_t)ELEMENT_COUNT;
   for (int i = 0; i < stepCount; ++i) {
     index = (index + 524287) % size;
     sum += g_flat[index];
@@ -191,7 +194,7 @@ static void test_flat_random_access(int stepCount) {
 static void test_bvec_push_pop_cycle(int stepCount) {
   bvec_u64 v;
   bvec_u64_init(&v, NULL);
-  bvec_u64_reserve(&v, (size_t)stepCount);
+  bvec_u64_reserve(&v, (uint32_t)stepCount);
   for (int i = 0; i < stepCount; ++i) bvec_u64_push(&v, (uint64_t)i);
   for (int i = 0; i < stepCount; ++i) bvec_u64_pop(&v);
   bvec_u64_free(&v);
@@ -202,17 +205,17 @@ static void test_bvec_push_pop_cycle(int stepCount) {
 static void prepare_test_data(void) {
   g_flat = (uint64_t *)malloc((size_t)ELEMENT_COUNT * sizeof(uint64_t));
   bvec_u64_init(&g_filled, NULL);
-  bvec_u64_reserve(&g_filled, (size_t)ELEMENT_COUNT);
+  bvec_u64_reserve(&g_filled, (uint32_t)ELEMENT_COUNT);
   for (int i = 0; i < ELEMENT_COUNT; ++i) {
     bvec_u64_push(&g_filled, (uint64_t)i);
     g_flat[i] = (uint64_t)i;
   }
   /* filled once, then cleared: the refill step finds every bucket already in place */
   bvec_u64_init(&g_reused, NULL);
-  bvec_u64_reserve(&g_reused, (size_t)ELEMENT_COUNT);
+  bvec_u64_reserve(&g_reused, (uint32_t)ELEMENT_COUNT);
   bvec_u64_clear(&g_reused);
   /* payload for the index array included, so no step runs the arena dry */
-  grd_memory_init_arena(&g_arena, (size_t)ELEMENT_COUNT * sizeof(uint64_t) + 1024 * 1024);
+  grd_memory_init_arena(&g_arena, (uint32_t)ELEMENT_COUNT * sizeof(uint64_t) + 1024 * 1024);
 }
 
 static void release_test_data(void) {
@@ -235,7 +238,9 @@ int main(void) {
   bench_step(test_bvec_push, stepCount, "  bucket vector push", "element");
   bench_step(test_bvec_push_reserved, stepCount, "  bucket vector push, reserved", "element");
   bench_step(test_bvec_push_arena, stepCount, "  bucket vector push, arena", "element");
-  bench_step(test_bvec_refill_after_clear, stepCount, "  bucket vector refill after clear", "element");
+  bench_step(
+      test_bvec_refill_after_clear, stepCount, "  bucket vector refill after clear", "element"
+  );
   bench_step(test_flat_push, stepCount, "  flat array push, doubling realloc", "element");
   bench_step(test_bvec_push_pop_cycle, stepCount, "  bucket vector push + pop cycle", "element");
 

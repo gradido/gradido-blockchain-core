@@ -4,12 +4,19 @@
 #include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 
+#include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+/* C11 static assert fallback; in C++ the keyword is already there */
+#if !defined(__cplusplus) && !defined(static_assert)
+#define static_assert _Static_assert
 #endif
 
 /** @defgroup utils Utilities */
@@ -105,11 +112,13 @@ extern "C" {
  * `sizeof(type) << log2_bucket` between 512 B and 64 KiB is a sound default. Small buckets
  * pay more index lookups, large ones waste tail space.
  *
- * @note Counts and indices are `uint32_t`, matching @ref grd_memory. `_reserve` therefore
- * refuses a count whose payload would not stay addressable in that width — without that
- * bound a request just under UINT32_MAX would be accepted and would try to allocate hundreds
- * of millions of buckets one at a time. Only the byte sizes handed to the allocator stay
- * `size_t`, and that is where the narrowing is checked.
+ * @note Counts, indices and byte sizes are `uint32_t` throughout, the same width as
+ * @ref grd_memory. Two bounds keep them there. One bucket's byte size is fixed at
+ * instantiation, so a static assert settles it at compile time; a payload too large for its
+ * bucket size never reaches a runtime check. `_reserve` carries the other: it refuses a count
+ * whose payload would not stay addressable in that width — without it a request just under
+ * UINT32_MAX would be accepted and would try to allocate hundreds of millions of buckets one
+ * at a time.
  *
  * @note Arena memory is 8-byte aligned; payloads needing stricter alignment want NULL
  * (malloc/free) or an externally aligned arena. An arena cannot reclaim a superseded index
@@ -128,15 +137,23 @@ extern "C" {
 #define GRDU_BVEC_INDEX_INITIAL_CAPACITY 8
 
 /**
+ * @brief Bytes one bucket of @p type occupies at bucket size `1 << log2_bucket`.
+ *
+ * Internal to the generated bodies. The cast is safe for every instantiation the static
+ * assert in GRDU_BVEC_DECLARE() admits.
+ */
+#define GRDU_BVEC_BUCKET_BYTES(type, log2_bucket) ((uint32_t)(sizeof(type) << (log2_bucket)))
+
+/**
  * @brief Allocate a raw block through an optional allocator.
  *
  * Internal primitive of the generated containers.
  *
- * @param[in]     size      Bytes to allocate; must be > 0 and fit uint32_t.
+ * @param[in]     size      Bytes to allocate; must be > 0.
  * @param[in,out] allocator Allocator to draw from, or NULL for malloc.
  * @return Pointer to the block, or NULL if the request could not be served.
  */
-void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator);
+void *grdu_bvec_raw_alloc(uint32_t size, grd_memory *allocator);
 
 /**
  * @brief Release a block obtained from grdu_bvec_raw_alloc().
@@ -150,7 +167,7 @@ void *grdu_bvec_raw_alloc(size_t size, grd_memory *allocator);
  * @param[in,out] allocator Allocator the block came from, or NULL for free().
  * @return true when the block really came back, false when an arena kept it.
  */
-bool grdu_bvec_raw_free(void *ptr, size_t size, grd_memory *allocator);
+bool grdu_bvec_raw_free(void *ptr, uint32_t size, grd_memory *allocator);
 
 /**
  * @brief Resize the index array of bucket pointers.
@@ -174,14 +191,36 @@ bool grdu_bvec_index_grow(
 );
 
 /**
+ * @brief Release an index array, counted in slots like the calls that created it.
+ *
+ * The counterpart of grdu_bvec_index_grow(): both take slot counts, so the conversion to
+ * bytes stays in one place. An arena may keep the block; nothing here depends on which
+ * happened, the caller drops the pointer either way.
+ *
+ * @param[in]     index     Index array to release; may be NULL.
+ * @param[in]     capacity  Slots @p index was allocated with, not the used count.
+ * @param[in,out] allocator Allocator the block came from, or NULL for free().
+ */
+void grdu_bvec_index_free(void **index, uint32_t capacity, grd_memory *allocator);
+
+/**
  * @brief Generate the container type and the function prototypes.
  *
  * @param name         Identifier of the generated type; every function is prefixed with it.
  * @param type         Payload type stored by value.
  * @param log2_bucket  Binary logarithm of the bucket size in elements (0 … 24).
  * @param scope        Linkage of the generated functions, e.g. `extern` or `static inline`.
+ *
+ * @note One bucket is one allocation, so its byte size has to fit the allocator's uint32_t.
+ * Both factors are known here, and the static assert settles the question at instantiation
+ * instead of leaving a check on every allocation path.
  */
 #define GRDU_BVEC_DECLARE(name, type, log2_bucket, scope)                                          \
+                                                                                                   \
+  static_assert(                                                                                   \
+      sizeof(type) <= (size_t)(UINT32_MAX >> (log2_bucket)),                                       \
+      "bucket_vector: sizeof(type) << log2_bucket must fit uint32_t"                               \
+  );                                                                                               \
                                                                                                    \
   enum {                                                                                           \
     name##_BUCKET_SHIFT = (log2_bucket),                                                           \
@@ -252,10 +291,9 @@ bool grdu_bvec_index_grow(
   scope grd_result name##_reserve(name *v, uint32_t element_count) {                               \
     uint32_t needed;                                                                               \
     if (!v) return GRD_ERROR_NULL_POINTER;                                                         \
-    /* the payload has to stay addressable in the allocator's uint32_t, and rounding */            \
-    /* up to whole buckets must not wrap */                                                        \
-    if (element_count > UINT32_MAX / sizeof(type) ||                                               \
-        element_count > UINT32_MAX - (uint32_t)name##_BUCKET_MASK) {                               \
+    /* one bound for two demands: the whole payload stays addressable in the allocator's */        \
+    /* uint32_t, and rounding up to whole buckets cannot wrap */                                   \
+    if (element_count > (UINT32_MAX - (uint32_t)name##_BUCKET_MASK) / sizeof(type)) {              \
       return GRD_ERROR_ARITHMETIC_OVERFLOW;                                                        \
     }                                                                                              \
     needed = (element_count + (uint32_t)name##_BUCKET_MASK) >> (uint32_t)name##_BUCKET_SHIFT;      \
@@ -269,9 +307,8 @@ bool grdu_bvec_index_grow(
       v->bucket_capacity = needed;                                                                 \
     }                                                                                              \
     while (v->bucket_count < needed) {                                                             \
-      type *bucket = (type *)grdu_bvec_raw_alloc(                                                  \
-          sizeof(type) * (uint32_t)name##_BUCKET_CAPACITY, v->allocator                            \
-      );                                                                                           \
+      type *bucket =                                                                               \
+          (type *)grdu_bvec_raw_alloc(GRDU_BVEC_BUCKET_BYTES(type, log2_bucket), v->allocator);    \
       if (!bucket) return GRD_ERROR_OUT_OF_MEMORY;                                                 \
       v->buckets[v->bucket_count++] = bucket;                                                      \
     }                                                                                              \
@@ -281,20 +318,19 @@ bool grdu_bvec_index_grow(
   /** Release every bucket that holds no element and tighten the index array onto the rest. */     \
   scope grd_result name##_shrink(name *v) {                                                        \
     uint32_t used, i;                                                                              \
-    size_t bucket_size;                                                                            \
     if (!v) return GRD_ERROR_NULL_POINTER;                                                         \
                                                                                                    \
-    used = v->tail ? v->tail_index + 1 : 0;                                                        \
-    bucket_size = sizeof(type) * (uint32_t)name##_BUCKET_CAPACITY;                                 \
+    const uint32_t bucket_bytes = GRDU_BVEC_BUCKET_BYTES(type, log2_bucket);                       \
+    used = name##_bucket_count(v);                                                                 \
     /* top down, so an arena unwinds in allocation order; it stops at the first bucket it   */     \
     /* refuses to reclaim, and nothing is lost when it does — that block is simply kept.    */     \
     for (i = v->bucket_count; i > used; --i) {                                                     \
-      if (!grdu_bvec_raw_free(v->buckets[i - 1], bucket_size, v->allocator)) break;                \
+      if (!grdu_bvec_raw_free(v->buckets[i - 1], bucket_bytes, v->allocator)) break;               \
       v->buckets[i - 1] = NULL;                                                                    \
     }                                                                                              \
     v->bucket_count = i;                                                                           \
     if (!i) {                                                                                      \
-      grdu_bvec_raw_free(v->buckets, v->bucket_capacity * sizeof(type *), v->allocator);           \
+      grdu_bvec_index_free((void **)v->buckets, v->bucket_capacity, v->allocator);                 \
       v->buckets = NULL;                                                                           \
       v->bucket_capacity = 0;                                                                      \
       return GRD_SUCCESS;                                                                          \
@@ -319,26 +355,21 @@ bool grdu_bvec_index_grow(
   scope void name##_free(name *v) {                                                                \
     uint32_t i;                                                                                    \
     if (!v) return;                                                                                \
+    const uint32_t bucket_bytes = GRDU_BVEC_BUCKET_BYTES(type, log2_bucket);                       \
     /* buckets backwards then the index array, the reverse of how they were taken */               \
     for (i = v->bucket_count; i > 0; --i) {                                                        \
-      grdu_bvec_raw_free(                                                                          \
-          v->buckets[i - 1], sizeof(type) * (uint32_t)name##_BUCKET_CAPACITY, v->allocator         \
-      );                                                                                           \
+      grdu_bvec_raw_free(v->buckets[i - 1], bucket_bytes, v->allocator);                           \
     }                                                                                              \
-    grdu_bvec_raw_free(v->buckets, v->bucket_capacity * sizeof(type *), v->allocator);             \
-    v->buckets = NULL;                                                                             \
-    v->bucket_count = 0;                                                                           \
-    v->bucket_capacity = 0;                                                                        \
-    v->tail = NULL;                                                                                \
-    v->tail_index = 0;                                                                             \
-    v->tail_used = (uint32_t)name##_BUCKET_CAPACITY;                                               \
-    v->size = 0;                                                                                   \
+    grdu_bvec_index_free((void **)v->buckets, v->bucket_capacity, v->allocator);                   \
+    /* the empty state is what _init writes, and the allocator stays attached */                   \
+    (void)name##_init(v, v->allocator);                                                            \
   }                                                                                                \
                                                                                                    \
   /** Cold path of @c _emplace: open the next bucket, reusing an already allocated one. */         \
   scope grd_result name##_grow(name *v, type **out_slot) {                                         \
     if (!v || !out_slot) return GRD_ERROR_NULL_POINTER;                                            \
-    uint32_t next = v->tail ? v->tail_index + 1 : 0;                                               \
+    /* the buckets in use are exactly the ones behind us; the next one starts where they end */    \
+    uint32_t next = name##_bucket_count(v);                                                        \
     if (next >= v->bucket_count) {                                                                 \
       type *bucket;                                                                                \
       if (v->bucket_count == v->bucket_capacity) {                                                 \
@@ -353,9 +384,8 @@ bool grdu_bvec_index_grow(
         }                                                                                          \
         v->bucket_capacity = new_capacity;                                                         \
       }                                                                                            \
-      bucket = (type *)grdu_bvec_raw_alloc(                                                        \
-          sizeof(type) * (uint32_t)name##_BUCKET_CAPACITY, v->allocator                            \
-      );                                                                                           \
+      bucket =                                                                                     \
+          (type *)grdu_bvec_raw_alloc(GRDU_BVEC_BUCKET_BYTES(type, log2_bucket), v->allocator);    \
       if (!bucket) return GRD_ERROR_OUT_OF_MEMORY;                                                 \
       v->buckets[v->bucket_count++] = bucket;                                                      \
     }                                                                                              \

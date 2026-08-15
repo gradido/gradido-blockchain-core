@@ -6,7 +6,6 @@
 #include "gradido_blockchain_core/mapping/memo_key_pb_compat.h"
 
 #include <pbtools.h>
-#include <string.h>
 
 #include "gradido_blockchain_core/data/proto/gradido/basic_types.h"
 #include "gradido_blockchain_core/data/proto/gradido/community_friends_update.h"

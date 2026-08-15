@@ -1,3 +1,5 @@
+#include "gradido_blockchain_core/mapping/runtime_from_wire.h"
+
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"

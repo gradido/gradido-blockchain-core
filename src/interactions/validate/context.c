@@ -19,7 +19,6 @@
 #endif // USE_SODIUM
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <string.h>
 
 static const uint8_t zeros_x64[64] = {0};

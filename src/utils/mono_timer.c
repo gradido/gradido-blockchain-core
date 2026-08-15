@@ -1,7 +1,7 @@
 #include "gradido_blockchain_core/utils/mono_timer.h"
 
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include "gradido_blockchain_core/utils/duration.h"
@@ -47,7 +47,6 @@ static int64_t get_time_ns() {
 }
 
 #else
-#include <time.h>
 
 static int64_t get_time_ns() {
   struct timespec t;
