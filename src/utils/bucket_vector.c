@@ -43,9 +43,13 @@ bool grdu_bvec_index_grow(
   grd_result result = grd_realloc(
       (uint8_t **)index, index_bytes(old_capacity), index_bytes(new_capacity), allocator
   );
-  return GRD_SUCCESS == result || GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED == result;
+  if (GRD_WARNING_ARENA_MEMORY_NOT_RECLAIMED == result) {
+    if (new_capacity > old_capacity) { return true; }
+    return false;
+  }
+  return GRD_SUCCESS == result;
 }
 
-void grdu_bvec_index_free(void **index, uint32_t capacity, grd_memory *allocator) {
-  grdu_bvec_raw_free(index, index_bytes(capacity), allocator);
+bool grdu_bvec_index_free(void **index, uint32_t capacity, grd_memory *allocator) {
+  return grdu_bvec_raw_free(index, index_bytes(capacity), allocator);
 }

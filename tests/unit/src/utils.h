@@ -1,7 +1,7 @@
 #include "gradido_blockchain_core/utils/memory_block.h"
 
-#include <string>
 #include <stddef.h>
+#include <string>
 #include <vector>
 
 #ifdef USE_SODIUM
@@ -12,8 +12,8 @@ grdu_memory_block fromBase64(
 );
 std::string toBase64(grdu_memory_block *data, int variant /* = sodium_base64_VARIANT_ORIGINAL  */);
 std::string toHex(uint8_t publicKey[32]);
-std::string toHex(uint8_t* data, size_t size);
-inline std::string toHex(grdu_memory_block* data) {
+std::string toHex(uint8_t *data, size_t size);
+inline std::string toHex(grdu_memory_block *data) {
   return toHex(data->data, data->size);
 }
 std::vector<uint8_t> fromHex(const char *hex);
