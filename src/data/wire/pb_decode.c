@@ -6,6 +6,11 @@ hostmem_result grdw_pb_workspace_take(hostmem_memory_block *workspace, hostmem *
   if (!workspace || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   // a default mode allocator has no arena to lend, and pbtools cannot work out of malloc here
   if (!allocator->capacity) { return HOSTMEM_ERROR_INVALID_PARAM; }
+  // An arena with nothing left is out of memory, not a bad argument. Left to hostmem_alloc it
+  // would arrive as a zero sized request and come back as INVALID_PARAM, sending the caller to
+  // inspect arguments that were all correct. The >= also keeps the subtraction below from
+  // wrapping into a very large request should last_index ever run past capacity.
+  if (allocator->last_index >= allocator->capacity) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
   return hostmem_memory_block_alloc(
       workspace, allocator->capacity - allocator->last_index, allocator
   );

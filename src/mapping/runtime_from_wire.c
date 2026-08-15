@@ -8,6 +8,7 @@
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "hostmem/memory.h"
+#include "hostmem/result.h"
 #include <string.h>
 
 static size_t calculate_memory_size(
@@ -103,9 +104,11 @@ hostmem_result grdm_complete_transaction_from_wire(
     const struct grdw_confirmed_transaction *confirmed_tx,
     const uint8_t community_uuid[UUID_BINARY_SIZE]
 ) {
-  if (!tx || !confirmed_tx) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!tx || !body || !confirmed_tx) { return HOSTMEM_ERROR_NULL_POINTER; }
   grdr_complete_transaction_release(tx);
-  hostmem_init_arena(&tx->memory_area, calculate_memory_size(confirmed_tx, body));
+  hostmem_result result =
+      hostmem_init_arena(&tx->memory_area, calculate_memory_size(confirmed_tx, body));
+  if (HOSTMEM_SUCCESS != result) { return result; }
 
   tx->tx_nr = confirmed_tx->id;
   tx->confirmed_at = confirmed_tx->confirmed_at;
@@ -144,7 +147,7 @@ hostmem_result grdm_complete_transaction_from_wire(
   tx->balance_derivation_type = confirmed_tx->balance_derivation;
   memcpy(tx->tx_running_hash, confirmed_tx->running_hash, GENERIC_HASH_SIZE);
 
-  hostmem_result result = HOSTMEM_SUCCESS;
+  result = HOSTMEM_SUCCESS;
   // arrays
   if (confirmed_tx->account_balances_count) {
     result = hostmem_clone(

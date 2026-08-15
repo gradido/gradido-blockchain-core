@@ -161,6 +161,33 @@ TEST(PBToolsTest, TransactionBody_Decode) {
   hostmem_release(&mem);
 }
 
+// An arena with nothing left is out of memory. Handing the zero sized remainder to the
+// allocator instead would answer INVALID_PARAM, which sends the caller inspecting arguments
+// that were all correct.
+TEST(PBToolsTest, DecodeOnAnExhaustedArenaSaysOutOfMemory) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, 1024), HOSTMEM_SUCCESS);
+  uint8_t *hog = nullptr;
+  ASSERT_EQ(hostmem_alloc(&hog, 1024, &mem), HOSTMEM_SUCCESS);
+  ASSERT_EQ(mem.last_index, mem.capacity)
+      << "the arena has to be full for this test to mean anything";
+
+  grdw_transaction_body body{};
+  EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+  grdw_gradido_transaction tx{};
+  EXPECT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+  grdw_confirmed_transaction confirmed{};
+  EXPECT_EQ(grdw_confirmed_transaction_decode(&confirmed, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+
+  hostmem_release(&mem);
+}
+
 // A failing decode keeps its scratch buffer on purpose: these decoders run on a static arena
 // that the caller resets, and what pbtools wrote before it gave up is what someone reads when a
 // message will not decode. This test exists so the next reviewer — human or not — sees that the

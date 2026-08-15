@@ -310,7 +310,11 @@ TEST(SignContract, RejectedArgumentsReturnTheDocumentedCode) {
 // the key it produced looked exactly as trustworthy as any other.
 TEST(SignContract, SeedSizeRangeIsEnforced) {
   grdc_sign_key_pair keyPair;
-  uint8_t seed[SIGN_SEED_MAX_SIZE] = {1};
+  // one byte more than the largest accepted seed, so the over-length call below stays inside
+  // the buffer. Today the range check returns before the seed is read, but a test must not
+  // depend on the very check it is there to verify — remove that check and this call would
+  // read past the array.
+  uint8_t seed[SIGN_SEED_MAX_SIZE + 1] = {1};
 
   EXPECT_EQ(
       grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_MIN_SIZE - 1),

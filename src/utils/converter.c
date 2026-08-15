@@ -84,7 +84,9 @@ hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
 }
 
 hostmem_result grdu_binary_to_hex(char *result_buffer, const hostmem_memory_block *data) {
-  if (!result_buffer || !data || !data->size) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!result_buffer || !data || !data->data) { return HOSTMEM_ERROR_NULL_POINTER; }
+  // an empty block is a parameter the caller can fix, not a pointer they forgot
+  if (!data->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
   size_t hex_size = data->size * 2 + 1;
 
   sodium_bin2hex((char *)result_buffer, hex_size, data->data, data->size);
@@ -95,7 +97,8 @@ hostmem_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex) {
   if (!result_buffer || !hex) { return HOSTMEM_ERROR_NULL_POINTER; }
   size_t hex_size = strlen(hex);
   size_t bin_size = hex_size / 2;
-  // invalid hex if size isn't power of 2
+  // two characters make one byte, so an odd length cannot be hex — the division above dropped
+  // the stray character and multiplying back reveals it
   if (bin_size * 2 != hex_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
   size_t result_bin_size = 0;
   if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &result_bin_size, NULL)) {
@@ -114,13 +117,19 @@ size_t grdu_binary_to_base64_length(size_t binSize) {
 hostmem_result grdu_binary_to_base64_with_known_size(
     hostmem_memory_block *result_block, const hostmem_memory_block *data
 ) {
-  if (!result_block || !data) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (NULL ==
-      sodium_bin2base64(
-          (char *)result_block->data, result_block->size, data->data, data->size, BASE64_VARIANT
-      )) {
-    return HOSTMEM_ERROR_OUT_OF_MEMORY;
+  if (!result_block || !result_block->data || !data || !data->data) {
+    return HOSTMEM_ERROR_NULL_POINTER;
   }
+  // sodium_bin2base64 does not report a destination that is too small: it calls
+  // sodium_misuse(), which aborts the process. Checking the room here is the only way to turn
+  // a caller's miscalculation into a result they can handle — and the reason the NULL check
+  // that used to stand here was unreachable.
+  if (result_block->size < sodium_base64_encoded_len(data->size, BASE64_VARIANT)) {
+    return HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL;
+  }
+  sodium_bin2base64(
+      (char *)result_block->data, result_block->size, data->data, data->size, BASE64_VARIANT
+  );
   return HOSTMEM_SUCCESS;
 }
 

@@ -41,7 +41,14 @@ void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZ
 hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string);
 
 /**
- * @param result_buffer expected to be data->size * 2 + 1
+ * @brief Write @p data as lowercase hex into a buffer the caller sized.
+ *
+ * @param[out] result_buffer Expected to hold data->size * 2 + 1 bytes. Not checkable from
+ *                           here — a short buffer aborts inside libsodium.
+ * @param[in]  data          Block to encode; not NULL and not empty.
+ * @retval HOSTMEM_SUCCESS             Hex written, terminator included.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p result_buffer, @p data or its data pointer is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p data holds no bytes.
  */
 hostmem_result grdu_binary_to_hex(char *result_buffer, const hostmem_memory_block *data);
 
@@ -57,8 +64,17 @@ hostmem_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex);
 size_t grdu_binary_to_base64_length(size_t binSize);
 
 /**
- * reserve enough memory before in result_block, for example with grdu_binary_to_base64_length
- * will write string with terminator \0 into result_block->data
+ * @brief Write @p data as base64 into a block the caller reserved.
+ *
+ * Size the block with grdu_binary_to_base64_length() beforehand. The room is verified here
+ * rather than trusted: libsodium answers a destination that is too small by aborting the
+ * process, so the check has to happen before the call.
+ *
+ * @param[out] result_block Receives the string including its \0 terminator.
+ * @param[in]  data         Block to encode; not NULL.
+ * @retval HOSTMEM_SUCCESS                        Base64 written.
+ * @retval HOSTMEM_ERROR_NULL_POINTER             A pointer, or a block's data pointer, is NULL.
+ * @retval HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL @p result_block cannot hold the string.
  */
 hostmem_result grdu_binary_to_base64_with_known_size(
     hostmem_memory_block *result_block, const hostmem_memory_block *data
