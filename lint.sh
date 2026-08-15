@@ -4,7 +4,7 @@
 # find, not a ladder of */**/ globs: bash expands ** like a single * unless globstar is set,
 # so such a ladder reaches a fixed depth and quietly stops there. src/data/proto/gradido sat
 # one level below the deepest rung and was never formatted.
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")"
 
 # Two trees stay out on purpose:
