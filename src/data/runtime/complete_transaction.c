@@ -3,9 +3,9 @@
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
+#include "hostmem/memory.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +24,7 @@ void grdr_complete_transaction_init(grdr_complete_transaction *tx) {
 
 void grdr_complete_transaction_release(grdr_complete_transaction *tx) {
   if (tx) {
-    grd_memory_free(&tx->memory_area);
+    hostmem_release(&tx->memory_area);
     grdr_complete_transaction_init(tx);
   }
 }
@@ -37,7 +37,7 @@ void grdr_complete_transaction_free(grdr_complete_transaction *tx) {
   }
 }
 
-grd_result grdr_complete_transaction_init_from_protobuf(
+hostmem_result grdr_complete_transaction_init_from_protobuf(
     grdr_complete_transaction *tx,
     const uint8_t *serialized_data,
     uint32_t serialized_len,
@@ -45,25 +45,25 @@ grd_result grdr_complete_transaction_init_from_protobuf(
     uint8_t *buffer,
     uint32_t buffer_size
 ) {
-  if (!tx || !serialized_data || !community_uuid || !buffer) { return GRD_ERROR_NULL_POINTER; }
-  if (!serialized_len || !buffer_size) { return GRD_ERROR_INVALID_PARAM; }
+  if (!tx || !serialized_data || !community_uuid || !buffer) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!serialized_len || !buffer_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
 
   // zeroed: init inspects the previous state to find an arena it already owns
-  grd_memory alloc = {0};
-  grd_result init_result = grd_memory_init_arena_static(&alloc, buffer, buffer_size);
-  if (GRD_SUCCESS != init_result) { return init_result; }
+  hostmem alloc = {0};
+  hostmem_result init_result = hostmem_init_arena_static(&alloc, buffer, buffer_size);
+  if (HOSTMEM_SUCCESS != init_result) { return init_result; }
 
   grdw_confirmed_transaction wire_tx;
   grdw_confirmed_transaction_init(&wire_tx);
 
-  grdu_memory_block input_block = {(uint8_t *)serialized_data, serialized_len};
+  hostmem_memory_block input_block = {(uint8_t *)serialized_data, serialized_len};
   int result = grdw_confirmed_transaction_decode(&wire_tx, &input_block, &alloc);
-  if (result != GRD_SUCCESS) { return result; }
+  if (result != HOSTMEM_SUCCESS) { return result; }
 
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   result = grdw_transaction_body_decode(&body, &wire_tx.transaction.body_bytes, &alloc);
-  if (result != GRD_SUCCESS) { return result; }
+  if (result != HOSTMEM_SUCCESS) { return result; }
 
   grdr_complete_transaction_release(tx);
   return grdm_complete_transaction_from_wire(tx, &body, &wire_tx, community_uuid);

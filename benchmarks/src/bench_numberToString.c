@@ -2,8 +2,7 @@
 #include "gradido_blockchain_core/data/unit.h"
 #include "gradido_blockchain_core/data/wire/hiero.h"
 #include "gradido_blockchain_core/utils/converter.h"
-#include "gradido_blockchain_core/utils/duration.h"
-#include "gradido_blockchain_core/utils/mono_timer.h"
+#include "hostmem/mono_timer.h"
 
 #include "r128/r128.h"
 
@@ -29,12 +28,6 @@ static void test_snprintf_integer(int stepCount) {
   }
 }
 
-static void test_lr_algo_integer(int stepCount) {
-  for (int i = 0; i < stepCount; ++i) {
-    grdu_uint64_to_string(benchBuffer, STRING_BUFFER_SIZE, getNextTestValue());
-  }
-}
-
 static void test_r128_integer(int stepCount) {
   R128 v = {.lo = 0, .hi = 0};
   int precision = 4;
@@ -57,12 +50,6 @@ static void test_unit_fixed(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
     gdd = getNextTestValue();
     grdd_unit_to_string(benchBuffer, STRING_BUFFER_SIZE, gdd, 4);
-  }
-}
-
-static void test_duration_to_string(int stepCount) {
-  for (int i = 0; i < stepCount; ++i) {
-    grdu_duration_string(benchBuffer, STRING_BUFFER_SIZE, getNextTestValue(), 4);
   }
 }
 
@@ -140,10 +127,10 @@ static void prepare_test_data() {
 }
 
 int main(void) {
-  grdu_mono_timer_init();
-  grdu_mono_timer timeUsed;
+  hostmem_mono_timer_init();
+  hostmem_mono_timer timeUsed;
 
-  grdu_mono_timer_reset(&timeUsed);
+  hostmem_mono_timer_reset(&timeUsed);
   prepare_test_data();
   bench_prepared(timeUsed);
 
@@ -151,12 +138,10 @@ int main(void) {
 
   bench_section("integer to string");
   bench_step(test_snprintf_integer, stepCount, "  snprintf", "conversion");
-  bench_step(test_lr_algo_integer, stepCount, "  lr algo", "conversion");
   bench_step(test_r128_integer, stepCount, "  r128", "conversion");
 
   bench_section("fixed point to string");
   bench_step(test_unit_fixed, stepCount, "  grdd unit", "conversion");
-  bench_step(test_duration_to_string, stepCount, "  duration, r128 backed", "conversion");
 
   bench_section("rounding");
   bench_step(test_unit_round, stepCount, "  grdd unit", "operation");

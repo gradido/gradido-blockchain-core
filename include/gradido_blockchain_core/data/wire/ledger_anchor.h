@@ -71,9 +71,9 @@ void grdw_ledger_anchor_assemble_hiero_transaction_id(
  * @param[in/out] ledger_anchor Ledger anchor to configure.
  * @param[in]     type          Ledger anchor type to set.
  * @param[in]     legacy_id     Legacy numeric identifier.
- * @return                     GRD_SUCCESS on success.
+ * @return                     HOSTMEM_SUCCESS on success.
  */
-grd_result grdw_ledger_anchor_assemble_legacy_id(
+hostmem_result grdw_ledger_anchor_assemble_legacy_id(
     grdw_ledger_anchor *ledger_anchor, grdt_ledger_anchor type, uint64_t legacy_id
 );
 
@@ -85,9 +85,9 @@ grd_result grdw_ledger_anchor_assemble_legacy_id(
  *
  * @param[in/out] ledger_anchor               Ledger anchor to configure.
  * @param[in]     node_trigger_transaction_id Node trigger transaction identifier.
- * @return                                   GRD_SUCCESS on success.
+ * @return                                   HOSTMEM_SUCCESS on success.
  */
-grd_result grdw_ledger_anchor_assemble_node_trigger_transaction_id(
+hostmem_result grdw_ledger_anchor_assemble_node_trigger_transaction_id(
     grdw_ledger_anchor *ledger_anchor, uint64_t node_trigger_transaction_id
 );
 

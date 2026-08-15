@@ -77,11 +77,11 @@ void grdc_sign_key_pair_init(grdc_sign_key_pair *sign_key_pair);
  * @param[out] sign_key_pair  Pointer to the key pair to populate. Must not be NULL.
  * @param[in]  seed              Input seed bytes. Must not be NULL.
  * @param[in]  seed_size         Size of the seed in bytes. Must be between 16 and 64.
- * @return                       GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
+ * @return                       HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
  * parameters are NULL or seed size is invalid.
  * @whisper From one seed, a forest of keys
  */
-grd_result grdc_sign_key_pair_generate_from_seed(
+hostmem_result grdc_sign_key_pair_generate_from_seed(
     grdc_sign_key_pair *sign_key_pair, const uint8_t *seed, const size_t seed_size
 );
 
@@ -99,10 +99,10 @@ grd_result grdc_sign_key_pair_generate_from_seed(
  * @param[out] slip10_public_key  Output buffer of 33 bytes (SIGN_PUBLIC_KEY_SIZE + 1). Must not
  * be NULL.
  * @param[in]  sign_key_pair   Source key pair containing the public key. Must not be NULL.
- * @return                        GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
+ * @return                        HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
  * parameters are NULL.
  */
-grd_result grdc_sign_key_pair_copy_slip10_public_key(
+hostmem_result grdc_sign_key_pair_copy_slip10_public_key(
     uint8_t slip10_public_key[SIGN_PUBLIC_KEY_SIZE + 1], const grdc_sign_key_pair *sign_key_pair
 );
 
@@ -121,11 +121,11 @@ grd_result grdc_sign_key_pair_copy_slip10_public_key(
  * @param[out] sign_key_pair         Derived child key pair. Must not be NULL.
  * @param[in]  sign_parent_key_pair  Parent key pair for derivation. Must not be NULL.
  * @param[in]  index                    Derivation index (32-bit unsigned) < 0x80000000.
- * @return                              GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER
+ * @return                              HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM
  * if parameters are NULL.
  * @whisper A child grows from its parent's branch
  */
-grd_result grdc_sign_key_pair_derive(
+hostmem_result grdc_sign_key_pair_derive(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key_pair,
     const uint32_t index
@@ -145,11 +145,11 @@ grd_result grdc_sign_key_pair_derive(
  * @param[out] sign_key_pair  Derived user-specific key pair. Must not be NULL.
  * @param[in]  sign_parent_key Parent key pair for derivation. Must not be NULL.
  * @param[in]  uuid            16-byte UUID. Must not be NULL.
- * @return                     GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
+ * @return                     HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
  * parameters are NULL.
  * @whisper Each user walks their own path
  */
-grd_result grdc_sign_key_pair_derive_uuid(
+hostmem_result grdc_sign_key_pair_derive_uuid(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key,
     const uint8_t uuid[UUID_BINARY_SIZE]
@@ -171,11 +171,11 @@ grd_result grdc_sign_key_pair_derive_uuid(
  * @param[in]  community_root_seed    32-byte community root seed. Must not be NULL.
  * @param[in]  user_uuid              16-byte UUID identifying the user. Must not be NULL.
  * @param[in]  account_index          Account index starting from 1.
- * @return                            GRD_RESULT_SUCCESS on success, GRD_RESULT_INVALID_PARAMETER if
+ * @return                            HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_INVALID_PARAM if
  * parameters are NULL or account_index is 0.
  * @whisper From community to user to account, the path unfolds
  */
-grd_result grdc_sign_key_pair_derive_account_from_community(
+hostmem_result grdc_sign_key_pair_derive_account_from_community(
     grdc_sign_key_pair *sign_key_pair,
     const uint8_t community_root_seed[SIGN_SEED_SIZE],
     const uint8_t user_uuid[UUID_BINARY_SIZE],

@@ -24,7 +24,7 @@ typedef struct grdw_confirmed_transaction grdw_confirmed_transaction;
 typedef struct grdw_gradido_transaction grdw_gradido_transaction;
 typedef struct grdw_transaction_body grdw_transaction_body;
 
-typedef struct grd_memory grd_memory;
+typedef struct hostmem hostmem;
 
 /**
  * @brief Convert transaction body from protobuf to wire format.
@@ -36,12 +36,12 @@ typedef struct grd_memory grd_memory;
  * @param[out] transaction_body Wire-format transaction body to populate.
  * @param[in]  pb_transaction_body Protobuf transaction body source.
  * @param[in]  allocator          Memory allocator for the conversion.
- * @return                        GRD_SUCCESS on success, error code on failure.
+ * @return                        HOSTMEM_SUCCESS on success, error code on failure.
  */
-grd_result grdm_transaction_body_from_pbtools(
+hostmem_result grdm_transaction_body_from_pbtools(
     grdw_transaction_body *transaction_body,
     const struct proto_gradido_transaction_body_t *pb_transaction_body,
-    grd_memory *allocator
+    hostmem *allocator
 );
 
 /**
@@ -54,12 +54,12 @@ grd_result grdm_transaction_body_from_pbtools(
  * @param[out] tx        Wire-format gradido transaction to populate.
  * @param[in]  pbtx      Protobuf gradido transaction source.
  * @param[in]  allocator Memory allocator for the conversion.
- * @return              GRD_SUCCESS on success, error code on failure.
+ * @return              HOSTMEM_SUCCESS on success, error code on failure.
  */
-grd_result grdm_gradido_transaction_from_pb(
+hostmem_result grdm_gradido_transaction_from_pb(
     grdw_gradido_transaction *tx,
     const struct proto_gradido_gradido_transaction_t *pbtx,
-    grd_memory *allocator
+    hostmem *allocator
 );
 
 /**
@@ -72,12 +72,12 @@ grd_result grdm_gradido_transaction_from_pb(
  * @param[out] confirmed_tx Wire-format confirmed transaction to populate.
  * @param[in]  pb_confirmed_tx Protobuf confirmed transaction source.
  * @param[in]  allocator       Memory allocator for the conversion.
- * @return                    GRD_SUCCESS on success, error code on failure.
+ * @return                    HOSTMEM_SUCCESS on success, error code on failure.
  */
-grd_result grdm_confirmed_transaction_from_pb(
+hostmem_result grdm_confirmed_transaction_from_pb(
     grdw_confirmed_transaction *confirmed_tx,
     const struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
-    grd_memory *allocator
+    hostmem *allocator
 );
 
 /** @} */

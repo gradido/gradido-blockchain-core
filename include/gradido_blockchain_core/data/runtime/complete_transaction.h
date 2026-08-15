@@ -11,7 +11,7 @@
 #include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
-#include "gradido_blockchain_core/utils/memory_block.h"
+#include "hostmem/memory_block.h"
 
 #include <stdint.h>
 
@@ -92,10 +92,10 @@ typedef struct grdr_complete_transaction {
   grdw_ledger_anchor *pairing_ledger_anchor; // null on local txs
 
   // transaction body as protobuf serialization, payload for signature
-  grdu_memory_block body_bytes;
+  hostmem_memory_block body_bytes;
 
   // contains memory used for all pointer in this obj
-  grd_memory memory_area;
+  hostmem memory_area;
 
 } grdr_complete_transaction;
 
@@ -112,8 +112,8 @@ void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 
 // buffer is used as scratch arena for decoding, so it must be 8 byte aligned and
-// buffer_size a multiple of 8 — otherwise GRD_ERROR_INVALID_PARAM comes back
-grd_result grdr_complete_transaction_init_from_protobuf(
+// buffer_size a multiple of 8 — otherwise HOSTMEM_ERROR_INVALID_PARAM comes back
+hostmem_result grdr_complete_transaction_init_from_protobuf(
     grdr_complete_transaction *tx,
     const uint8_t *serialized_data,
     uint32_t serialized_len,
