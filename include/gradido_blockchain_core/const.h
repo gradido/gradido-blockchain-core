@@ -9,6 +9,11 @@ extern "C" {
 
 #define SIGN_PUBLIC_KEY_SIZE 32
 #define SIGN_SEED_SIZE 32
+/* Seed length a master key may be derived from, in bytes. The bounds are SLIP-10 and BIP-32:
+   128 to 512 bits of entropy. Shorter is refused rather than quietly accepted, because the
+   derived key would carry less entropy than its own length suggests. */
+#define SIGN_SEED_MIN_SIZE 16
+#define SIGN_SEED_MAX_SIZE 64
 #define SIGN_CHAIN_CODE_SIZE 32
 #define SIGN_PRIVATE_KEY_SIZE 64
 #define SIGN_SIGNATURE_SIZE 64

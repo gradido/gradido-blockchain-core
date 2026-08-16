@@ -5,10 +5,10 @@
 
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "hiero.h"
+#include "hostmem/memory.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus

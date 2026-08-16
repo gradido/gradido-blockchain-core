@@ -1,6 +1,6 @@
 #include "gradido_blockchain_core/utils/converter.h"
-#include "gradido_blockchain_core/memory.h"
-#include "gradido_blockchain_core/result.h"
+#include "hostmem/memory.h"
+#include "hostmem/result.h"
 #include <stdint.h>
 
 #ifdef USE_SODIUM
@@ -9,160 +9,6 @@
 
 #include <assert.h>
 #include <string.h>
-
-/**
- * @brief Compute the number of decimal digits of a uint64_t value.
- *
- * This function returns the length of the decimal representation of `v`
- * without converting it to a string.
- *
- * Implementation details:
- * - Uses a fully unrolled decision tree of comparisons against powers of 10.
- * - Avoids loops, divisions, and memory lookups.
- * - Runs in O(1) time with a small, fixed number of branches.
- *
- * Rationale:
- * - A naive implementation (e.g., repeated division by 10 or scanning a powers[] array)
- *   introduces loops, branch dependencies, and potential cache access.
- * - This version minimizes branch depth and allows the CPU branch predictor
- *   to perform efficiently, making it faster in hot paths.
- *
- * Range:
- * - Supports full uint64_t range [0, UINT64_MAX].
- * - Maximum return value is 19 (since UINT64_MAX < 10^20).
- *
- * Notes:
- * - The structure may look unusual, but it is intentionally optimized for performance.
- * - Any modification should preserve the exact boundary conditions (powers of 10),
- *   otherwise subtle off-by-one errors may occur.
- */
-uint8_t grdu_uint64_to_string_size(uint64_t v) {
-  if (v < 100000000ULL) {
-    if (v < 10000ULL) {
-      if (v < 100ULL) return v < 10 ? 1 : 2;
-      return v < 1000ULL ? 3 : 4;
-    }
-    if (v < 1000000ULL) { return v < 100000ULL ? 5 : 6; }
-    return v < 10000000ULL ? 7 : 8;
-  }
-
-  if (v < 1000000000000ULL) {
-    if (v < 10000000000ULL) { return v < 1000000000ULL ? 9 : 10; }
-    return v < 100000000000ULL ? 11 : 12;
-  }
-
-  if (v < 10000000000000000ULL) {
-    if (v < 100000000000000ULL) { return v < 10000000000000ULL ? 13 : 14; }
-    return v < 1000000000000000ULL ? 15 : 16;
-  }
-
-  return v < 100000000000000000ULL ? 17 : (v < 1000000000000000000ULL ? 18 : 19);
-}
-
-/*
- * |v| as an unsigned value. `v * -1` is undefined for INT64_MIN, because +2^63 has no int64_t
- * to live in — the two's complement range is asymmetric. Negating after the conversion works
- * for every input: the conversion of a negative value to uint64_t is defined as v + 2^64, and
- * unsigned subtraction wraps by definition, so the result is exactly |v|.
- */
-static inline uint64_t int64_to_abs_u64(int64_t v) {
-  return v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
-}
-
-uint8_t grdu_int64_to_string_size(int64_t v) {
-  uint8_t str_size = grdu_uint64_to_string_size(int64_to_abs_u64(v));
-  if (v < 0) {
-    str_size++; // add one place for minus in front of number string
-  }
-  return str_size;
-}
-
-uint8_t grdu_uint64_to_string_known_string_size(char *buffer, uint64_t value, uint8_t stringSize) {
-  if (value == 0) {
-    if (stringSize < 1) {
-      return 1; // return required size without null terminator
-    }
-    buffer[0] = '0';
-    buffer[1] = '\0';
-    return 1;
-  }
-  uint64_t temp = value;
-  int len = stringSize;
-  int cursor = len;
-  buffer[cursor] = '\0';
-
-  static const char DIGIT_TABLE[201] = "00010203040506070809"
-                                       "10111213141516171819"
-                                       "20212223242526272829"
-                                       "30313233343536373839"
-                                       "40414243444546474849"
-                                       "50515253545556575859"
-                                       "60616263646566676869"
-                                       "70717273747576777879"
-                                       "80818283848586878889"
-                                       "90919293949596979899";
-
-  // process 2 digits at a time
-  while (temp >= 100) {
-    if (cursor < 2) {
-      return grdu_uint64_to_string_size(value); // return required size without null terminator
-    }
-    uint64_t q = temp / 100;
-    uint64_t r = temp - q * 100;
-    buffer[--cursor] = DIGIT_TABLE[r * 2 + 1];
-    buffer[--cursor] = DIGIT_TABLE[r * 2];
-    temp = q;
-  }
-
-  // last 1 or 2 digits
-  if (temp < 10) {
-    if (cursor < 1) {
-      return grdu_uint64_to_string_size(value); // return required size without null terminator
-    }
-    buffer[--cursor] = '0' + (char)temp;
-  } else {
-    if (cursor < 2) {
-      return grdu_uint64_to_string_size(value); // return required size without null terminator
-    }
-    buffer[--cursor] = DIGIT_TABLE[temp * 2 + 1];
-    buffer[--cursor] = DIGIT_TABLE[temp * 2];
-  }
-  return len; // return number of characters written, not counting null terminator
-}
-
-uint8_t grdu_int64_to_string_known_string_size(char *buffer, int64_t value, uint8_t stringSize) {
-  if (value >= 0) {
-    return grdu_uint64_to_string_known_string_size(buffer, (uint64_t)value, stringSize);
-  } else {
-    buffer[0] = '-';
-    return grdu_uint64_to_string_known_string_size(
-               &buffer[1], int64_to_abs_u64(value), stringSize - 1
-           ) +
-           1;
-  }
-}
-// for easy use, one call
-
-uint8_t grdu_uint64_to_string(char *buffer, uint8_t bufferSize, uint64_t value) {
-  uint8_t requiredSize = grdu_uint64_to_string_size(value);
-  if (bufferSize < requiredSize + 1) {
-    // better safe then sorry
-    if (bufferSize) { buffer[0] = '\0'; }
-    return requiredSize; // return required size without null terminator
-  }
-  return grdu_uint64_to_string_known_string_size(buffer, value, requiredSize);
-}
-
-uint8_t grdu_int64_to_string(char *buffer, uint8_t bufferSize, int64_t value) {
-  size_t requiredSize = grdu_int64_to_string_size(value);
-  if (bufferSize < requiredSize + 1) {
-    // better safe then sorry
-    if (bufferSize) { buffer[0] = '\0'; }
-    return requiredSize; // return required size without null terminator
-  }
-  return grdu_int64_to_string_known_string_size(buffer, value, requiredSize);
-}
-
 #ifdef USE_SODIUM
 
 /*
@@ -190,9 +36,9 @@ void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZ
 }
 
 /*
-grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
-  if (!uuid || !uuid_string) { return GRD_ERROR_NULL_POINTER; }
-  if (strlen(uuid_string) != 36) { return GRD_ERROR_INVALID_PARAM; }
+hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
+  if (!uuid || !uuid_string) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (strlen(uuid_string) != 36) { return HOSTMEM_ERROR_INVALID_PARAM; }
 
   char hex[33];
   memcpy(hex, uuid_string, 8);
@@ -204,16 +50,16 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
 
   size_t bin_len = 0;
   if (sodium_hex2bin(uuid, 16, hex, 32, NULL, &bin_len, NULL) != 0) {
-    return GRD_ERROR_ENCODE_FAILED;
+    return HOSTMEM_ERROR_ENCODE_FAILED;
   }
-  if (bin_len != 16) { return GRD_ERROR_INVALID_PARAM; }
-  return GRD_SUCCESS;
+  if (bin_len != 16) { return HOSTMEM_ERROR_INVALID_PARAM; }
+  return HOSTMEM_SUCCESS;
 }
 */
 // faster as version above
-grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
-  if (!uuid || !uuid_string) return GRD_ERROR_NULL_POINTER;
-  if (strlen(uuid_string) != 36) return GRD_ERROR_INVALID_PARAM;
+hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
+  if (!uuid || !uuid_string) return HOSTMEM_ERROR_NULL_POINTER;
+  if (strlen(uuid_string) != 36) return HOSTMEM_ERROR_INVALID_PARAM;
 
   static const uint8_t hex_lookup[256] = {
       ['0'] = 0,  ['1'] = 1,  ['2'] = 2,  ['3'] = 3,  ['4'] = 4,  ['5'] = 5,
@@ -226,37 +72,40 @@ grd_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
   for (size_t i = 0; i < 36; i++) {
     if (uuid_string[i] == '-') continue;
     uint8_t hi = hex_lookup[(unsigned char)uuid_string[i]];
-    if (hi == 0 && uuid_string[i] != '0') { return GRD_ERROR_ENCODE_FAILED; }
+    if (hi == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
     ++i;
     uint8_t lo = hex_lookup[(unsigned char)uuid_string[i]];
-    if (lo == 0 && uuid_string[i] != '0') { return GRD_ERROR_ENCODE_FAILED; }
+    if (lo == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
     if (hi == 0 && lo == 0 && uuid_string[i - 1] != '0') continue;
     uuid[j++] = (hi << 4) | lo;
   }
 
-  return GRD_SUCCESS;
+  return HOSTMEM_SUCCESS;
 }
 
-grd_result grdu_binary_to_hex(char *result_buffer, const grdu_memory_block *data) {
-  if (!result_buffer || !data || !data->size) { return GRD_ERROR_NULL_POINTER; }
+hostmem_result grdu_binary_to_hex(char *result_buffer, const hostmem_memory_block *data) {
+  if (!result_buffer || !data || !data->data) { return HOSTMEM_ERROR_NULL_POINTER; }
+  // an empty block is a parameter the caller can fix, not a pointer they forgot
+  if (!data->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
   size_t hex_size = data->size * 2 + 1;
 
   sodium_bin2hex((char *)result_buffer, hex_size, data->data, data->size);
-  return GRD_SUCCESS;
+  return HOSTMEM_SUCCESS;
 }
 
-grd_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex) {
-  if (!result_buffer || !hex) { return GRD_ERROR_NULL_POINTER; }
+hostmem_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex) {
+  if (!result_buffer || !hex) { return HOSTMEM_ERROR_NULL_POINTER; }
   size_t hex_size = strlen(hex);
   size_t bin_size = hex_size / 2;
-  // invalid hex if size isn't power of 2
-  if (bin_size * 2 != hex_size) { return GRD_ERROR_INVALID_PARAM; }
+  // two characters make one byte, so an odd length cannot be hex — the division above dropped
+  // the stray character and multiplying back reveals it
+  if (bin_size * 2 != hex_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
   size_t result_bin_size = 0;
   if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &result_bin_size, NULL)) {
-    return GRD_ERROR_DECODE_FAILED;
+    return HOSTMEM_ERROR_DECODE_FAILED;
   }
-  if (result_bin_size != bin_size) { return GRD_ERROR_INVALID_STATE; }
-  return GRD_SUCCESS;
+  if (result_bin_size != bin_size) { return HOSTMEM_ERROR_INVALID_STATE; }
+  return HOSTMEM_SUCCESS;
 }
 
 const static int BASE64_VARIANT = sodium_base64_VARIANT_ORIGINAL;
@@ -265,32 +114,38 @@ size_t grdu_binary_to_base64_length(size_t binSize) {
   return sodium_base64_encoded_len(binSize, BASE64_VARIANT);
 }
 
-grd_result grdu_binary_to_base64_with_known_size(
-    grdu_memory_block *result_block, const grdu_memory_block *data
+hostmem_result grdu_binary_to_base64_with_known_size(
+    hostmem_memory_block *result_block, const hostmem_memory_block *data
 ) {
-  if (!result_block || !data) { return GRD_ERROR_NULL_POINTER; }
-  if (NULL ==
-      sodium_bin2base64(
-          (char *)result_block->data, result_block->size, data->data, data->size, BASE64_VARIANT
-      )) {
-    return GRD_ERROR_OUT_OF_MEMORY;
+  if (!result_block || !result_block->data || !data || !data->data) {
+    return HOSTMEM_ERROR_NULL_POINTER;
   }
-  return GRD_SUCCESS;
+  // sodium_bin2base64 does not report a destination that is too small: it calls
+  // sodium_misuse(), which aborts the process. Checking the room here is the only way to turn
+  // a caller's miscalculation into a result they can handle — and the reason the NULL check
+  // that used to stand here was unreachable.
+  if (result_block->size < sodium_base64_encoded_len(data->size, BASE64_VARIANT)) {
+    return HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL;
+  }
+  sodium_bin2base64(
+      (char *)result_block->data, result_block->size, data->data, data->size, BASE64_VARIANT
+  );
+  return HOSTMEM_SUCCESS;
 }
 
-grd_result grdu_binary_to_base64(
-    grdu_memory_block *result_block, const grdu_memory_block *data, grd_memory *allocator
+hostmem_result grdu_binary_to_base64(
+    hostmem_memory_block *result_block, const hostmem_memory_block *data, hostmem *allocator
 ) {
-  if (!result_block || !data || !allocator) { return GRD_ERROR_NULL_POINTER; }
+  if (!result_block || !data || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   size_t strSize = sodium_base64_encoded_len(data->size, BASE64_VARIANT);
-  if (strSize > UINT32_MAX - 7) { return GRD_ERROR_ARITHMETIC_OVERFLOW; }
-  grd_result result = grdu_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
-  if (result != GRD_SUCCESS) { return result; }
+  if (strSize > UINT32_MAX - 7) { return HOSTMEM_ERROR_ARITHMETIC_OVERFLOW; }
+  hostmem_result result = hostmem_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
+  if (result != HOSTMEM_SUCCESS) { return result; }
 
   return grdu_binary_to_base64_with_known_size(result_block, data);
 }
 
-size_t grdu_binary_from_base64(grdu_memory_block *result_block, const char *base64_str) {
+size_t grdu_binary_from_base64(hostmem_memory_block *result_block, const char *base64_str) {
   if (!result_block || !base64_str) { return 0; }
   size_t result_bin_size = 0;
   if (sodium_base642bin(

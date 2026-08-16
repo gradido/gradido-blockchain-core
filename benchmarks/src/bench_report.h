@@ -1,7 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_BENCH_REPORT_H
 #define GRADIDO_BLOCKCHAIN_CORE_BENCH_REPORT_H
 
-#include "gradido_blockchain_core/utils/mono_timer.h"
+#include "hostmem/mono_timer.h"
 
 #include <stdio.h>
 
@@ -27,7 +27,7 @@
 
 /*
  * Picks a unit for the per step figure and keeps one decimal at every scale. Not
- * grdu_duration_string: that takes whole nanoseconds, and a step costing 4.2 ns would arrive
+ * hostmem_duration_string: that takes whole nanoseconds, and a step costing 4.2 ns would arrive
  * there as 4 — the fraction is the interesting part at this end of the range.
  */
 static inline void bench_per_step_string(char *buffer, size_t buffer_size, double nanos) {
@@ -43,9 +43,9 @@ static inline void bench_per_step_string(char *buffer, size_t buffer_size, doubl
 }
 
 /** Header line, printed once before the first section. */
-static inline void bench_prepared(grdu_mono_timer time_used) {
+static inline void bench_prepared(hostmem_mono_timer time_used) {
   char buffer[BENCH_STRING_BUFFER_SIZE];
-  grdu_mono_timer_string(buffer, BENCH_STRING_BUFFER_SIZE, time_used);
+  hostmem_mono_timer_string(buffer, BENCH_STRING_BUFFER_SIZE, time_used);
   printf("time for prepare test data: %s\n", buffer);
 }
 
@@ -65,23 +65,23 @@ static inline void bench_step(
 ) {
   char total[BENCH_STRING_BUFFER_SIZE];
   char per_step[BENCH_STRING_BUFFER_SIZE];
-  grdu_mono_timer time_used;
+  hostmem_mono_timer time_used;
 
-  grdu_mono_timer_reset(&time_used);
+  hostmem_mono_timer_reset(&time_used);
   func_ptr(step_count);
-  grdu_mono_timer_string(total, BENCH_STRING_BUFFER_SIZE, time_used);
+  hostmem_mono_timer_string(total, BENCH_STRING_BUFFER_SIZE, time_used);
 
   double nanos =
-      step_count > 0 ? (double)grdu_mono_timer_nanos(time_used) / (double)step_count : 0.0;
+      step_count > 0 ? (double)hostmem_mono_timer_nanos(time_used) / (double)step_count : 0.0;
   bench_per_step_string(per_step, BENCH_STRING_BUFFER_SIZE, nanos);
 
   printf("%-*s %12s  %10s/%s\n", BENCH_NAME_WIDTH, name, total, per_step, unit);
 }
 
 /** Closing line: wall clock for the whole run and what one step was. */
-static inline void bench_total(grdu_mono_timer time_used, int step_count, const char *unit) {
+static inline void bench_total(hostmem_mono_timer time_used, int step_count, const char *unit) {
   char buffer[BENCH_STRING_BUFFER_SIZE];
-  grdu_mono_timer_string(buffer, BENCH_STRING_BUFFER_SIZE, time_used);
+  hostmem_mono_timer_string(buffer, BENCH_STRING_BUFFER_SIZE, time_used);
   printf("\nall benchmarks: %s, %ss per step: %d\n", buffer, unit, step_count);
 }
 

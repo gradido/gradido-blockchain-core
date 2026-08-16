@@ -1,7 +1,7 @@
 #include "bench_report.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/crypto/sign.h"
-#include "gradido_blockchain_core/utils/mono_timer.h"
+#include "hostmem/mono_timer.h"
 
 #include <sodium.h>
 
@@ -88,9 +88,9 @@ static void prepare_test_data() {
 }
 
 int main(void) {
-  grdu_mono_timer_init();
-  grdu_mono_timer timeUsed;
-  grdu_mono_timer_reset(&timeUsed);
+  hostmem_mono_timer_init();
+  hostmem_mono_timer timeUsed;
+  hostmem_mono_timer_reset(&timeUsed);
   prepare_test_data();
   bench_prepared(timeUsed);
 

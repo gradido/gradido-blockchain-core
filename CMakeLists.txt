@@ -46,6 +46,20 @@ endif()
 
 include(FetchContent)
 
+# hostmem carries the allocator, the containers and the number conversions this project used to
+# keep in src/utils. It ships no CMakeLists of its own — six C files and a header tree — so
+# FetchContent only populates it and the sources join this library's target below.
+FetchContent_Declare(hostmem
+  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.2.0.tar.gz
+  # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
+  # without this the build takes whatever the URL serves today. Update it with the version:
+  #   curl -sSL <url> | sha256sum
+  URL_HASH SHA256=e82b61f886c6f82616ecc02daaf7846c12789cf4a91551325957285bc2c03c93
+)
+FetchContent_MakeAvailable(hostmem)
+FILE(GLOB_RECURSE HOSTMEM_SRC "${hostmem_SOURCE_DIR}/src/*.c" "${hostmem_SOURCE_DIR}/include/hostmem/*.h")
+message(STATUS "hostmem from ${hostmem_SOURCE_DIR}")
+
 if (USE_SODIUM)
   add_compile_definitions(USE_SODIUM)
   set(SODIUM_DISABLE_TESTS ON)
@@ -82,6 +96,7 @@ FILE(GLOB INTERACTION_VALIDATE
 )
 
 set(GRADIDO_BLOCKCHAIN_CORE_SRC
+  ${HOSTMEM_SRC}
   ${DATA}
   ${DATA_PROTO_GRADIDO}
   ${DATA_RUNTIME}
@@ -115,6 +130,7 @@ endif()
     source_group("mapping" FILES ${MAPPING} )
     source_group("types" FILES ${TYPES})
     source_group("utils" FILES ${UTILS} )
+    source_group("hostmem" FILES ${HOSTMEM_SRC})
     source_group("third_party/fp256" FILES ${FP256})
     source_group("third_party/pbtools" FILES ${PBTOOLS})
     source_group("third_party/r128" FILES ${R128})
@@ -122,6 +138,7 @@ endif()
 
 include_directories(
     include
+    ${hostmem_SOURCE_DIR}/include
     include/gradido_blockchain_core/data/proto/gradido
     third_party
     third_party/pbtools

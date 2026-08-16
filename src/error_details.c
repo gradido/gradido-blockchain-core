@@ -1,19 +1,20 @@
 #include "gradido_blockchain_core/error_details.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/utils/converter.h"
+#include "hostmem/converter.h"
+#include "hostmem/memory.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-grd_result grd_error_details_init(grd_error_details *error_details, grd_memory *alloc) {
-  if (!error_details) { return GRD_ERROR_NULL_POINTER; }
+hostmem_result grd_error_details_init(grd_error_details *error_details, hostmem *alloc) {
+  if (!error_details) { return HOSTMEM_ERROR_NULL_POINTER; }
   memset(error_details, 0, sizeof(grd_error_details));
   error_details->allocator = alloc;
-  return GRD_SUCCESS;
+  return HOSTMEM_SUCCESS;
 }
 
-grd_error_details *grd_error_details_create(grd_memory *alloc) {
+grd_error_details *grd_error_details_create(hostmem *alloc) {
   grd_error_details *error_details = (grd_error_details *)malloc(sizeof(grd_error_details));
   grd_error_details_init(error_details, alloc);
   return error_details;
@@ -24,10 +25,10 @@ int grd_error_details_is_initalized_and_empty(grd_error_details *error_details) 
          !error_details->expected && !error_details->used_default_malloc_flag;
 }
 
-static int alloc_and_fill_field(char **field, const char *input, grd_memory *alloc, int flag) {
+static int alloc_and_fill_field(char **field, const char *input, hostmem *alloc, int flag) {
   size_t size = strlen(input) + 1;
   int result_alloc_flag = 0;
-  if (grd_alloc((uint8_t **)field, (uint32_t)size, alloc) != GRD_SUCCESS) {
+  if (hostmem_alloc((uint8_t **)field, (uint32_t)size, alloc) != HOSTMEM_SUCCESS) {
     *field = (char *)malloc(size);
     result_alloc_flag = flag;
   }
@@ -35,12 +36,12 @@ static int alloc_and_fill_field(char **field, const char *input, grd_memory *all
   return result_alloc_flag;
 }
 
-grd_result grd_error_details_fill(
+hostmem_result grd_error_details_fill(
     grd_error_details *error_details, const char *message, const char *actual, const char *expected
 ) {
-  if (!error_details) { return GRD_ERROR_NULL_POINTER; }
+  if (!error_details) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (error_details->message || error_details->actual || error_details->expected) {
-    return GRD_ERROR_INVALID_STATE;
+    return HOSTMEM_ERROR_INVALID_STATE;
   }
   if (message) {
     error_details->used_default_malloc_flag |=
@@ -54,23 +55,23 @@ grd_result grd_error_details_fill(
     error_details->used_default_malloc_flag |=
         alloc_and_fill_field(&error_details->expected, expected, error_details->allocator, 4);
   }
-  return GRD_SUCCESS;
+  return HOSTMEM_SUCCESS;
 }
 
-grd_result grd_error_details_fill_actual_is_number(
+hostmem_result grd_error_details_fill_actual_is_number(
     grd_error_details *error_details,
     const char *message,
     const int64_t actual,
     const char *expected
 ) {
-  if (!error_details) { return GRD_ERROR_NULL_POINTER; }
+  if (!error_details) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (error_details->message || error_details->actual || error_details->expected) {
-    return GRD_ERROR_INVALID_STATE;
+    return HOSTMEM_ERROR_INVALID_STATE;
   }
 
   char strBuffer[22];
   memset(strBuffer, 0, 22);
-  int strLen = grdu_int64_to_string(strBuffer, 22, actual);
+  int strLen = hostmem_int64_to_string(strBuffer, 22, actual);
   return grd_error_details_fill(error_details, message, strBuffer, expected);
 }
 
@@ -80,7 +81,7 @@ static void release_field(char *field, grd_error_details *error_details, int fie
     free(field);
   } else {
     // the field is a NUL terminated copy, so its allocated size is recoverable
-    grd_free((uint8_t *)field, (uint32_t)strlen(field) + 1, error_details->allocator);
+    hostmem_free((uint8_t *)field, (uint32_t)strlen(field) + 1, error_details->allocator);
   }
 }
 

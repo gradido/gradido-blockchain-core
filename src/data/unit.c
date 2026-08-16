@@ -5,6 +5,7 @@
 #define R128_IMPLEMENTATION
 #define R128_STDC_ONLY
 #include "fp256/fp256.h"
+#include "hostmem/converter.h"
 #include "r128/r128.h"
 
 #include <ctype.h>
@@ -174,16 +175,16 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
   }
   if (!precision) {
     int64_t integerPart = rounded / 10000;
-    size_t integerPartStringSize = grdu_uint64_to_string_size(integerPart);
+    size_t integerPartStringSize = hostmem_uint64_to_string_size(integerPart);
     if (bufferSize < cursor + integerPartStringSize + 1) {
       return cursor + integerPartStringSize; // return required size without null terminator
     }
-    cursor += grdu_uint64_to_string_known_string_size(
+    cursor += hostmem_uint64_to_string_known_string_size(
         &buffer[cursor], integerPart, integerPartStringSize
     );
     return cursor;
   }
-  size_t numberPlacesCount = grdu_uint64_to_string_size(rounded);
+  size_t numberPlacesCount = hostmem_uint64_to_string_size(rounded);
   if (numberPlacesCount < 5 && bufferSize < cursor + 7) {
     return cursor + 6; // return required size without null terminator
   }
@@ -191,7 +192,7 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
     return cursor + numberPlacesCount + 1; // return required size without null terminator
   }
   size_t stringSize =
-      grdu_uint64_to_string_known_string_size(&buffer[cursor], rounded, numberPlacesCount);
+      hostmem_uint64_to_string_known_string_size(&buffer[cursor], rounded, numberPlacesCount);
   if (numberPlacesCount != stringSize) {
     return -3; // this should never happen, but just in case
   }

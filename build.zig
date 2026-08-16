@@ -57,6 +57,7 @@ const BuildContext = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     core_lib: *std.Build.Step.Compile,
+    hostmem_dep: *std.Build.Dependency,
     googletest_dep: ?*std.Build.Dependency,
     sodium_dep: ?*std.Build.Dependency,
     singleOutputDir: bool,
@@ -99,6 +100,7 @@ fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, p
 
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(b.path("third_party"));
+    exe.addIncludePath(context.hostmem_dep.path("include"));
 
     for (build_target.srcs) |src_file| {
         exe.addCSourceFiles(.{
@@ -136,11 +138,16 @@ pub fn build(b: *std.Build) void {
     }) });
     applySanitize(core_lib.root_module, sanitize);
 
+    // hostmem carries the allocator, the containers and the conversions this project used to
+    // keep in src/utils. It is pulled in as a package, not vendored.
+    const hostmem_dep = b.dependency("hostmem", .{ .target = target, .optimize = optimize });
+
     const context: BuildContext = .{
         .b = b,
         .target = target,
         .optimize = optimize,
         .core_lib = core_lib,
+        .hostmem_dep = hostmem_dep,
         .googletest_dep = b.lazyDependency("googletest", .{
             .target = target,
             .optimize = optimize,
@@ -164,6 +171,8 @@ pub fn build(b: *std.Build) void {
     }
 
     core_lib.linkLibC();
+    core_lib.linkLibrary(hostmem_dep.artifact("hostmem"));
+    core_lib.addIncludePath(hostmem_dep.path("include"));
 
     core_lib.addIncludePath(b.path("include"));
     core_lib.addIncludePath(b.path("include/gradido_blockchain_core/data/proto/gradido"));
@@ -190,12 +199,6 @@ pub fn build(b: *std.Build) void {
       const path = "benchmarks/src";
       processBuildTarget(&context, .{
           .link_googletest = false,
-          .link_sodium = false,
-          .name = "bench_bucket_vector",
-          .srcs = &.{"bench_bucket_vector.c"},
-      }, path);
-      processBuildTarget(&context, .{
-          .link_googletest = false,
           .link_sodium = enable_sodium,
           .name = "bench_numberToString",
           .srcs = &.{"bench_numberToString.c"},
@@ -207,14 +210,11 @@ pub fn build(b: *std.Build) void {
 
     if (enable_tests) {
         const path = "tests/unit/src";
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_bucket_vector", .srcs = &.{"test_bucket_vector.cpp"} }, path);
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data", .srcs = &.{"test_data.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data_wire", .srcs = &.{"test_data_wire.cpp"} }, path);
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_duration", .srcs = &.{"test_duration.cpp"} }, path);
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_memory", .srcs = &.{"test_memory.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);
         if (enable_sodium) {
+            processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_crypto", .srcs = &.{ "test_crypto.cpp", "utils.cpp" } }, path);
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_pbtools", .srcs = &.{ "test_pbtools.cpp", "key_pairs.cpp" } }, path);
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_runtime", .srcs = &.{ "test_runtime.cpp", "key_pairs.cpp" } }, path);

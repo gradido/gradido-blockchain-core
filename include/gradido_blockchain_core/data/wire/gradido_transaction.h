@@ -3,7 +3,7 @@
 
 #include "basic_types.h"
 #include "gradido_blockchain_core/result.h"
-#include "gradido_blockchain_core/utils/memory_block.h"
+#include "hostmem/memory_block.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -27,7 +27,7 @@ typedef struct grdw_gradido_transaction {
   //!  Array of signature pairs, allocated via reserve_sig_map.
   grdw_signature_pair *sig_map;
   //! Protobuf Serialized transaction body as a memory block, payload of signature
-  grdu_memory_block body_bytes;
+  hostmem_memory_block body_bytes;
   //! Ledger anchor for pairing transaction by cross-group transactions
   grdw_ledger_anchor pairing_ledger_anchor;
   //! Number of signature pairs in the array.
@@ -54,11 +54,11 @@ void grdw_gradido_transaction_init(grdw_gradido_transaction *tx);
  * @param[in/out] tx            Gradido transaction to reserve signatures in.
  * @param[in]     sig_map_count Number of signature slots to allocate. Max 255.
  * @param[in]     allocator     Memory allocator for the pointer array.
- * @return                      GRD_SUCCESS on success, GRD_ERROR_OUT_OF_MEMORY if allocator
+ * @return                      HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_OUT_OF_MEMORY if allocator
  *                              hasn't enough space.
  */
-grd_result grdw_gradido_transaction_reserve_sig_map(
-    grdw_gradido_transaction *tx, uint8_t sig_map_count, grd_memory *allocator
+hostmem_result grdw_gradido_transaction_reserve_sig_map(
+    grdw_gradido_transaction *tx, uint8_t sig_map_count, hostmem *allocator
 );
 
 /**
@@ -71,10 +71,10 @@ grd_result grdw_gradido_transaction_reserve_sig_map(
  * @param[in/out] tx       Gradido transaction to receive the signature copy.
  * @param[in]     sig_map  Source signature pair to copy from.
  * @param[in]     index    Target slot index.
- * @return                GRD_SUCCESS on success, GRD_ERROR_OUT_OF_MEMORY if allocator
+ * @return                HOSTMEM_SUCCESS on success, HOSTMEM_ERROR_OUT_OF_MEMORY if allocator
  *                        hasn't enough space.
  */
-grd_result grdw_gradido_transaction_copy_sig_map(
+hostmem_result grdw_gradido_transaction_copy_sig_map(
     grdw_gradido_transaction *tx, const grdw_signature_pair *sig_map, uint8_t index
 );
 
@@ -88,13 +88,13 @@ grd_result grdw_gradido_transaction_copy_sig_map(
  * @param[out] tx       Gradido transaction to populate.
  * @param[in]  binary_src Source memory block containing binary data.
  * @param[in]  allocator Area allocator for nested allocations.
- * @return              GRD_SUCCESS on success,
- *                      GRD_ERROR_OUT_OF_MEMORY if allocator hasn't enough space.
+ * @return              HOSTMEM_SUCCESS on success,
+ *                      HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough space.
  * @note                The allocator must be an area allocator; memory is
  *                      not freed individually but as a whole.
  */
-grd_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const grdu_memory_block *binary_src, grd_memory *allocator
+hostmem_result grdw_gradido_transaction_decode(
+    grdw_gradido_transaction *tx, const hostmem_memory_block *binary_src, hostmem *allocator
 );
 
 /**
@@ -107,17 +107,17 @@ grd_result grdw_gradido_transaction_decode(
  * @param[out] final_size  Number of bytes written to binary_dst.
  * @param[in]  tx          Gradido transaction to encode.
  * @param[in]  allocator   Memory allocator for temporary encoding buffers.
- * @return                GRD_SUCCESS on success
- *                        GRD_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
- *                        GRD_ERROR_OUT_OF_MEMORY if allocator hasn't enough capacity
- *                        GRD_ERROR_ENCODE_FAILED should only happen on message schema update
+ * @return                HOSTMEM_SUCCESS on success
+ *                        HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
+ *                        HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough capacity
+ *                        HOSTMEM_ERROR_ENCODE_FAILED should only happen on message schema update
  * @whisper                Authorization becomes message
  */
-grd_result grdw_gradido_transaction_encode(
-    grdu_memory_block *binary_dst,
+hostmem_result grdw_gradido_transaction_encode(
+    hostmem_memory_block *binary_dst,
     int *final_size,
     const grdw_gradido_transaction *tx,
-    grd_memory *allocator
+    hostmem *allocator
 );
 
 /**
@@ -129,7 +129,7 @@ grd_result grdw_gradido_transaction_encode(
  * @param[in/out] tx        Gradido transaction to free.
  * @param[in]     allocator Memory allocator used for allocating memory.
  */
-void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, grd_memory *allocator);
+void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, hostmem *allocator);
 
 /** @} */
 

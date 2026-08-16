@@ -5,7 +5,6 @@
 #include "gradido_blockchain_core/error_details.h"
 #include "gradido_blockchain_core/interactions/validate/options.h"
 #include "gradido_blockchain_core/interactions/validate/result_type.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
@@ -13,6 +12,7 @@
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/types/transaction.h"
+#include "hostmem/memory.h"
 
 #ifdef USE_SODIUM
 #include "sodium.h"

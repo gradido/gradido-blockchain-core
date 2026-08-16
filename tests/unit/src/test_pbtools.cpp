@@ -6,10 +6,10 @@
 #include "gradido_blockchain_core/data/wire/hiero.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
-#include "gradido_blockchain_core/memory.h"
 #include "gradido_blockchain_core/result.h"
-#include "gradido_blockchain_core/utils/mono_timer.h"
 #include "gradido_blockchain_core/utils/version.h"
+#include "hostmem/memory.h"
+#include "hostmem/mono_timer.h"
 #include "key_pairs.h"
 
 #include "memory_limit.h"
@@ -73,10 +73,10 @@ grdd_timestamp confirmedAt = {.seconds = 1609464130, .nanos = 0};
 grdw_timestamp_seconds targetDate = {.seconds = 1609459000};
 constexpr size_t BUFFER_SIZE = 512;
 
-static grdu_memory_block fromBase64(
+static hostmem_memory_block fromBase64(
     const char *base64String, size_t size, int variant = sodium_base64_VARIANT_ORIGINAL
 ) {
-  grdu_memory_block result{};
+  hostmem_memory_block result{};
   size_t binSize = (size / 4) * 3;
 
   uint8_t *buffer = (uint8_t *)malloc(binSize);
@@ -101,7 +101,9 @@ static grdu_memory_block fromBase64(
   return result;
 }
 
-static std::string toBase64(grdu_memory_block *data, int variant = sodium_base64_VARIANT_ORIGINAL) {
+static std::string toBase64(
+    hostmem_memory_block *data, int variant = sodium_base64_VARIANT_ORIGINAL
+) {
   if (!data || !data->size) { return ""; }
   size_t encodedSize = sodium_base64_encoded_len(data->size, variant);
   uint8_t *buffer = (uint8_t *)malloc(encodedSize);
@@ -115,7 +117,7 @@ static std::string toBase64(grdu_memory_block *data, int variant = sodium_base64
   return base64String;
 }
 
-static std::string toHex(grdu_memory_block *data) {
+static std::string toHex(hostmem_memory_block *data) {
   if (!data || !data->size) { return ""; }
   size_t hexSize = data->size * 2 + 1;
   uint8_t *buffer = (uint8_t *)malloc(hexSize);
@@ -132,8 +134,8 @@ static std::string toHex(uint8_t publicKey[32]) {
   return std::string((char *)buffer, 64);
 }
 
-static grdu_memory_block fromHex(const char *hex) {
-  grdu_memory_block result{};
+static hostmem_memory_block fromHex(const char *hex) {
+  hostmem_memory_block result{};
   if (!hex) { return result; }
   size_t hex_size = strlen(hex);
   size_t binSize = hex_size / 2;
@@ -151,32 +153,147 @@ static grdu_memory_block fromHex(const char *hex) {
 }
 
 TEST(PBToolsTest, TransactionBody_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(emptyTransactionBodyBase64, strlen(emptyTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body_decode(&body, &bin, &mem);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
+}
+
+// An arena with nothing left is out of memory. Handing the zero sized remainder to the
+// allocator instead would answer INVALID_PARAM, which sends the caller inspecting arguments
+// that were all correct.
+TEST(PBToolsTest, DecodeOnAnExhaustedArenaSaysOutOfMemory) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, 1024), HOSTMEM_SUCCESS);
+  uint8_t *hog = nullptr;
+  ASSERT_EQ(hostmem_alloc(&hog, 1024, &mem), HOSTMEM_SUCCESS);
+  ASSERT_EQ(mem.last_index, mem.capacity)
+      << "the arena has to be full for this test to mean anything";
+
+  grdw_transaction_body body{};
+  EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+  grdw_gradido_transaction tx{};
+  EXPECT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+  grdw_confirmed_transaction confirmed{};
+  EXPECT_EQ(grdw_confirmed_transaction_decode(&confirmed, &bin, &mem), HOSTMEM_ERROR_OUT_OF_MEMORY);
+
+  hostmem_release(&mem);
+}
+
+// A failing decode keeps its scratch buffer on purpose: these decoders run on a static arena
+// that the caller resets, and what pbtools wrote before it gave up is what someone reads when a
+// message will not decode. This test exists so the next reviewer — human or not — sees that the
+// retained memory is a decision and not an oversight. See src/data/wire/pb_decode.h.
+TEST(PBToolsTest, FailedDecodeKeepsItsWorkspaceForInspection) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(mem.last_index, 0u);
+
+  grdw_transaction_body body{};
+  EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+  EXPECT_GT(mem.last_index, 0u) << "the workspace is kept on purpose, do not release it";
+
+  // and the caller clears it, as the caller always does
+  hostmem_reset(&mem);
+  EXPECT_EQ(mem.last_index, 0u);
+  hostmem_release(&mem);
+}
+
+// reserve_memos took the address of a member before it knew the body existed, so a NULL body
+// was a crash rather than an error. The init functions next to it had the same gap, while
+// grdc_sign_key_pair_init and grdr_complete_transaction_init have always guarded.
+TEST(PBToolsTest, WireEntryPointsSurviveANullPointer) {
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(nullptr, 4, &mem), HOSTMEM_ERROR_NULL_POINTER);
+  // the null check comes first: an out of range count must not decide the outcome for a body
+  // that was never there
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(nullptr, 999, &mem), HOSTMEM_ERROR_NULL_POINTER);
+
+  // and a valid body still reserves as before
+  grdw_transaction_body body{};
+  grdw_transaction_body_init(&body);
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(&body, 4, &mem), HOSTMEM_SUCCESS);
+  EXPECT_EQ(body.memos_count, 4u);
+  EXPECT_EQ(grdw_transaction_body_reserve_memos(&body, 256, &mem), HOSTMEM_ERROR_INVALID_PARAM);
+  grdw_transaction_body_free(&body, &mem);
+
+  // the init functions simply do nothing rather than writing through a null pointer
+  grdw_transaction_body_init(nullptr);
+  grdw_gradido_transaction_init(nullptr);
+  grdw_confirmed_transaction_init(nullptr);
+
+  hostmem_release(&mem);
+}
+
+// A decode that fails says so with a decode error. All three wire decoders used to report
+// HOSTMEM_ERROR_ENCODE_FAILED for a malformed buffer, which sends a reader looking at the
+// wrong half of the code. Nothing covered the failing path, so nothing objected.
+TEST(PBToolsTest, DecodeOfGarbageReportsDecodeFailed) {
+  uint8_t garbage[64];
+  for (size_t i = 0; i < sizeof(garbage); ++i) {
+    garbage[i] = static_cast<uint8_t>(0xF0 | (i & 7));
+  }
+  hostmem_memory_block bin{garbage, sizeof(garbage)};
+
+  {
+    hostmem mem{};
+    grdw_transaction_body body{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+    hostmem_release(&mem);
+  }
+  {
+    hostmem mem{};
+    grdw_gradido_transaction tx{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED);
+    hostmem_release(&mem);
+  }
+  {
+    hostmem mem{};
+    grdw_confirmed_transaction confirmed{};
+    ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+    EXPECT_EQ(
+        grdw_confirmed_transaction_decode(&confirmed, &bin, &mem), HOSTMEM_ERROR_DECODE_FAILED
+    );
+    hostmem_release(&mem);
+  }
 }
 
 TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
 
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
-  grd_alloc(&body.other_community_uuid, 16, &mem);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_alloc(&body.other_community_uuid, 16, &mem);
   memcpy(body.other_community_uuid, communityUuid.data, 16);
   free(communityUuid.data);
 
   body.transaction_type = GRDT_TRANSACTION_NONE;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
   auto base64 = toBase64(&bufferPtr);
@@ -184,33 +301,33 @@ TEST(PBtoolsTest, TransactionBody_Encode_OtherCommunity) {
   // printf("other community:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
 
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBtoolsTest, TransactionBody_Decode_OtherCommunity) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin =
       fromBase64(transactionBodyOtherCommunityBase64, strlen(transactionBodyOtherCommunityBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.type, GRDT_CROSS_GROUP_LOCAL);
   EXPECT_FALSE(body.memos);
   EXPECT_FALSE(body.memos_count);
   EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_NONE);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   ASSERT_TRUE(body.other_community_uuid);
   EXPECT_FALSE(memcmp(body.other_community_uuid, communityUuid.data, 16));
   free(communityUuid.data);
 
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
@@ -222,9 +339,9 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_COMMUNITY_ROOT;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
   auto base64 = toBase64(&bufferPtr);
@@ -232,16 +349,16 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Encode) {
   // printf("community root:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
 
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_CommunityRoot_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin =
       fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
@@ -252,13 +369,13 @@ TEST(PBToolsTest, TransactionBody_CommunityRoot_Decode) {
   EXPECT_FALSE(memcmp(body.community_root.pubkey, g_KeyPairs[0].public_key, 32));
   EXPECT_FALSE(memcmp(body.community_root.gmw_pubkey, g_KeyPairs[1].public_key, 32));
   EXPECT_FALSE(memcmp(body.community_root.auf_pubkey, g_KeyPairs[2].public_key, 32));
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt1;
@@ -272,9 +389,9 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_REGISTER_ADDRESS;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -283,17 +400,17 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Encode) {
   // printf("register address:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
 
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_RegisterAddress_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(
       registerAddressTransactionBodyBase64, strlen(registerAddressTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
@@ -309,24 +426,24 @@ TEST(PBToolsTest, TransactionBody_RegisterAddress_Decode) {
   uint8_t nameHash[crypto_generichash_BYTES];
   crypto_generichash(nameHash, crypto_generichash_BYTES, g_KeyPairs[3].public_key, 32, NULL, 0);
   EXPECT_FALSE(memcmp(body.register_address.name_hash, nameHash, 32));
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
   grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
-  grdu_memory_block_alloc(&memo.memo, 13, &mem);
+  hostmem_memory_block_alloc(&memo.memo, 13, &mem);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt1;
 
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   grdw_gradido_creation_assemble(
       &body.creation, g_KeyPairs[4].public_key, 10000000, communityUuid.data, targetDate.seconds
   );
@@ -334,9 +451,9 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_CREATION;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -344,15 +461,15 @@ TEST(PBToolsTest, TransactionBody_Creation_Encode) {
   // printf("creation:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
   EXPECT_EQ(base64, creationTransactionBodyBase64);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Creation_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(creationTransactionBodyBase64, strlen(creationTransactionBodyBase64));
-  EXPECT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  EXPECT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt1.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt1.nanos);
@@ -364,28 +481,28 @@ TEST(PBToolsTest, TransactionBody_Creation_Decode) {
   EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_CREATION);
   EXPECT_FALSE(memcmp(body.creation.recipient.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.creation.recipient.amount, 10000000);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   EXPECT_FALSE(memcmp(body.creation.recipient.community_uuid, communityUuid.data, 16));
   free(communityUuid.data);
   EXPECT_EQ(body.creation.target_date.seconds, targetDate.seconds);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
   grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
-  grdu_memory_block_alloc(&memo.memo, 13, &mem);
+  hostmem_memory_block_alloc(&memo.memo, 13, &mem);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
 
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   grdw_gradido_transfer_assemble(
       &body.transfer, g_KeyPairs[4].public_key, 100000, communityUuid.data, g_KeyPairs[5].public_key
   );
@@ -393,9 +510,9 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_TRANSFER;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -403,15 +520,15 @@ TEST(PBToolsTest, TransactionBody_Transfer_Encode) {
   // printf("transfer:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
   EXPECT_EQ(base64, transferTransactionBodyBase64);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Transfer_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(transferTransactionBodyBase64, strlen(transferTransactionBodyBase64));
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
@@ -423,28 +540,28 @@ TEST(PBToolsTest, TransactionBody_Transfer_Decode) {
   EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_TRANSFER);
   EXPECT_FALSE(memcmp(body.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.transfer.sender.amount, 100000);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   EXPECT_FALSE(memcmp(body.transfer.sender.community_uuid, communityUuid.data, 16));
   free(communityUuid.data);
   EXPECT_FALSE(memcmp(body.transfer.recipient, g_KeyPairs[5].public_key, 32));
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
   grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
-  grdu_memory_block_alloc(&memo.memo, 13, &mem);
+  hostmem_memory_block_alloc(&memo.memo, 13, &mem);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
 
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   grdw_gradido_deferred_transfer_assemble(
       &body.deferred_transfer, g_KeyPairs[4].public_key, 100000, communityUuid.data,
       g_KeyPairs[5].public_key, 17261
@@ -453,9 +570,9 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -463,17 +580,17 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Encode) {
   // printf("deferred transfer:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
   EXPECT_EQ(base64, deferredTransferTransactionBodyBase64);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(
       deferredTransferTransactionBodyBase64, strlen(deferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
@@ -485,31 +602,31 @@ TEST(PBToolsTest, TransactionBody_Deferred_Transfer_Decode) {
   EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_DEFERRED_TRANSFER);
   EXPECT_FALSE(memcmp(body.deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32));
   EXPECT_EQ(body.deferred_transfer.transfer.sender.amount, 100000);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   EXPECT_FALSE(
       memcmp(body.deferred_transfer.transfer.sender.community_uuid, communityUuid.data, 16)
   );
   free(communityUuid.data);
   EXPECT_FALSE(memcmp(body.deferred_transfer.transfer.recipient, g_KeyPairs[5].public_key, 32));
   EXPECT_EQ(body.deferred_transfer.timeout_duration, 17261);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   grdw_transaction_body_reserve_memos(&body, 1, &mem);
   grdw_encrypted_memo memo = {.type = GRDT_MEMO_KEY_PLAIN};
-  grdu_memory_block_alloc(&memo.memo, 13, &mem);
+  hostmem_memory_block_alloc(&memo.memo, 13, &mem);
   assert(memo.memo.data);
   memcpy(memo.memo.data, "Hello World2", 13);
   grdw_transaction_body_move_memo(&body, &memo, 0);
   body.created_at = createdAt2;
 
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   grdw_gradido_redeem_deferred_transfer_assemble(
       &body.redeem_deferred_transfer, 15, g_KeyPairs[4].public_key, 100000, communityUuid.data,
       g_KeyPairs[5].public_key
@@ -518,9 +635,9 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -528,18 +645,18 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Encode) {
   // printf("redeem deferred transfer:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
   EXPECT_EQ(base64, redeemDeferredTransferTransactionBodyBase64);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(
       redeemDeferredTransferTransactionBodyBase64,
       strlen(redeemDeferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
@@ -553,7 +670,7 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
       memcmp(body.redeem_deferred_transfer.transfer.sender.pubkey, g_KeyPairs[4].public_key, 32)
   );
   EXPECT_EQ(body.redeem_deferred_transfer.transfer.sender.amount, 100000);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   EXPECT_FALSE(
       memcmp(body.redeem_deferred_transfer.transfer.sender.community_uuid, communityUuid.data, 16)
   );
@@ -562,13 +679,13 @@ TEST(PBToolsTest, TransactionBody_Redeem_Deferred_Transfer_Decode) {
       memcmp(body.redeem_deferred_transfer.transfer.recipient, g_KeyPairs[5].public_key, 32)
   );
   EXPECT_EQ(body.redeem_deferred_transfer.deferred_transfer_transaction_nr, 15);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
   init_key_pairs();
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   body.created_at = createdAt2;
@@ -577,9 +694,9 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
 
   body.transaction_type = GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER;
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_encode(&bufferPtr, &finalSize, &body, &mem), HOSTMEM_SUCCESS);
   // printf("finalSize: %lld\n", finalSize);
   bufferPtr.size = finalSize;
   auto hex = toHex(&bufferPtr);
@@ -587,18 +704,18 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Encode) {
   // printf("timeout deferred transfer:\n%s\n", base64.c_str());
   // printf("xxd -r -ps <<< \"%s\" | protoscope\n", hex.c_str());
   EXPECT_EQ(base64, timeoutDeferredTransferTransactionBodyBase64);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Decode) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_transaction_body body{};
   auto bin = fromBase64(
       timeoutDeferredTransferTransactionBodyBase64,
       strlen(timeoutDeferredTransferTransactionBodyBase64)
   );
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
-  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_transaction_body_decode(&body, &bin, &mem), HOSTMEM_SUCCESS);
   free(bin.data);
   EXPECT_EQ(body.created_at.seconds, createdAt2.seconds);
   EXPECT_EQ(body.created_at.nanos, createdAt2.nanos);
@@ -608,15 +725,15 @@ TEST(PBToolsTest, TransactionBody_Timeout_Deferred_Transfer_Decode) {
 
   EXPECT_EQ(body.transaction_type, GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER);
   EXPECT_EQ(body.timeout_deferred_transfer.deferred_transfer_transaction_nr, 16);
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 // ###############    Gradido Transaction    ############################################
 
 TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_gradido_transaction tx{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   tx.body_bytes =
       fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
@@ -628,11 +745,11 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
   );
-  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx, &signature, 0), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx, &signature, 0), HOSTMEM_SUCCESS);
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), HOSTMEM_SUCCESS);
   bufferPtr.size = finalSize;
   auto base64 = toBase64(&bufferPtr);
   ASSERT_EQ(base64, communityRootTransactionBase64);
@@ -645,46 +762,46 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
 }
 
 TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
-  grdu_mono_timer timeUsed;
-  grd_memory mem{};
+  hostmem_mono_timer timeUsed;
+  hostmem mem{};
   grdw_gradido_transaction tx{};
   grdw_gradido_transaction_init(&tx);
 
   grdw_transaction_body body{};
   grdw_transaction_body_init(&body);
 
-  grdu_mono_timer_reset(&timeUsed);
+  hostmem_mono_timer_reset(&timeUsed);
   auto bin = fromBase64(communityRootTransactionBase64, strlen(communityRootTransactionBase64));
   alignas(8) uint8_t staticBuffer[BUFFER_SIZE * 2];
-  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, BUFFER_SIZE * 2), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
   char buffer[256];
-  grdu_mono_timer_reset(&timeUsed);
+  hostmem_mono_timer_reset(&timeUsed);
   int i = 0;
   for (; i < 1000; ++i) {
-    grd_memory_reset(&mem);
+    hostmem_reset(&mem);
 
-    ASSERT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), GRD_SUCCESS);
-    ASSERT_EQ(grdw_transaction_body_decode(&body, &tx.body_bytes, &mem), GRD_SUCCESS);
+    ASSERT_EQ(grdw_gradido_transaction_decode(&tx, &bin, &mem), HOSTMEM_SUCCESS);
+    ASSERT_EQ(grdw_transaction_body_decode(&body, &tx.body_bytes, &mem), HOSTMEM_SUCCESS);
 
     grdw_transaction_body_free(&body, &mem);
     grdw_gradido_transaction_free(&tx, &mem);
   }
   free(bin.data);
 
-  grdu_mono_timer_string(buffer, 256, timeUsed);
+  hostmem_mono_timer_string(buffer, 256, timeUsed);
   // printf("time for decode community root %d times: %s\n", i, buffer);
   std::cout << TIME_GTEST_BLUE << "time for decode community root " << i << " times: " << buffer
             << ANSI_TXT_DFT << std::endl;
-  grd_memory_free(&mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
-  grdu_mono_timer timeUsed;
-  grd_memory mem{};
+  hostmem_mono_timer timeUsed;
+  hostmem mem{};
 
   grdw_gradido_transaction tx{};
   alignas(8) uint8_t staticBuffer[128]{};
-  ASSERT_EQ(grd_memory_init_arena_static(&mem, staticBuffer, 128), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, 128), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   // tx.body_bytes = fromBase64(communityRootTransactionBodyBase64,
   // strlen(communityRootTransactionBodyBase64));
@@ -696,7 +813,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
   );
-  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx, &signature, 0), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx, &signature, 0), HOSTMEM_SUCCESS);
 
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
@@ -708,22 +825,24 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
 
   alignas(8) uint8_t staticBuffer2[304]{}; // multiple of 8, as the arena requires
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  grd_memory mem2{};
-  ASSERT_EQ(grd_memory_init_arena_static(&mem2, staticBuffer2, 304), GRD_SUCCESS);
+  hostmem mem2{};
+  ASSERT_EQ(hostmem_init_arena_static(&mem2, staticBuffer2, 304), HOSTMEM_SUCCESS);
   int i = 0;
-  grdu_mono_timer_reset(&timeUsed);
+  hostmem_mono_timer_reset(&timeUsed);
   for (; i < 1000; ++i) {
-    grd_memory_reset(&mem2);
-    grdu_memory_block_alloc(&tx.body_bytes, 128, &mem2);
-    ASSERT_EQ(grdw_transaction_body_encode(&tx.body_bytes, &finalSize, &body, &mem2), GRD_SUCCESS);
-    grdu_memory_block_realloc(&tx.body_bytes, finalSize, &mem2);
-    ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem2), GRD_SUCCESS);
-    grdu_memory_block_free(&tx.body_bytes, &mem2);
+    hostmem_reset(&mem2);
+    hostmem_memory_block_alloc(&tx.body_bytes, 128, &mem2);
+    ASSERT_EQ(
+        grdw_transaction_body_encode(&tx.body_bytes, &finalSize, &body, &mem2), HOSTMEM_SUCCESS
+    );
+    hostmem_memory_block_realloc(&tx.body_bytes, finalSize, &mem2);
+    ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem2), HOSTMEM_SUCCESS);
+    hostmem_memory_block_free(&tx.body_bytes, &mem2);
   }
   char timerBuffer[256];
-  grdu_mono_timer_string(timerBuffer, 256, timeUsed);
+  hostmem_mono_timer_string(timerBuffer, 256, timeUsed);
   std::cout << TIME_GTEST_BLUE << "time for encode community root " << i
             << " times: " << timerBuffer << ANSI_TXT_DFT << std::endl;
   // printf("time for encode community root %d times: %s\n", i, timerBuffer);
@@ -731,9 +850,9 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
 }
 
 TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_gradido_transaction tx{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   tx.body_bytes = fromBase64(
       timeoutDeferredTransferTransactionBodyBase64,
@@ -743,9 +862,9 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
   tx.pairing_ledger_anchor.type = GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID;
 
   uint8_t buffer[256]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 256};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
-  ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), HOSTMEM_SUCCESS);
   bufferPtr.size = finalSize;
   auto base64 = toBase64(&bufferPtr);
   EXPECT_EQ(base64, timeoutDeferredTransferTransactionBase64);
@@ -758,14 +877,14 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
 }
 
 TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
-  grd_memory mem{};
+  hostmem mem{};
   grdw_gradido_transaction tx{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE), GRD_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   auto serializedTx = fromBase64(
       timeoutDeferredTransferTransactionBase64, strlen(timeoutDeferredTransferTransactionBase64)
   );
-  ASSERT_EQ(grdw_gradido_transaction_decode(&tx, &serializedTx, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_decode(&tx, &serializedTx, &mem), HOSTMEM_SUCCESS);
   free(serializedTx.data);
   EXPECT_FALSE(tx.sig_map_count);
   EXPECT_FALSE(tx.sig_map);
@@ -777,15 +896,15 @@ TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
 
 // ###############  Confirmed Transaction    ############################################
 TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE * 2), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
 
   grdw_confirmed_transaction tx;
   grdw_confirmed_transaction_init(&tx);
   tx.id = 121;
   tx.transaction.body_bytes =
       fromBase64(communityRootTransactionBodyBase64, strlen(communityRootTransactionBodyBase64));
-  ASSERT_EQ(grdw_gradido_transaction_reserve_sig_map(&tx.transaction, 1, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_reserve_sig_map(&tx.transaction, 1, &mem), HOSTMEM_SUCCESS);
   grdw_signature_pair signature{};
   memcpy(signature.public_key, g_KeyPairs[0].public_key, 32);
   unsigned long long sig_len = 64;
@@ -793,9 +912,9 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
       signature.signature, &sig_len, (const unsigned char *)communityRootTransactionBodyBase64,
       strlen(communityRootTransactionBodyBase64), g_KeyPairs[0].private_key
   );
-  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx.transaction, &signature, 0), GRD_SUCCESS);
+  ASSERT_EQ(grdw_gradido_transaction_copy_sig_map(&tx.transaction, &signature, 0), HOSTMEM_SUCCESS);
   uint8_t buffer[512]{};
-  grdu_memory_block bufferPtr = {.data = buffer, .size = 512};
+  hostmem_memory_block bufferPtr = {.data = buffer, .size = 512};
   int finalSize = 0;
   tx.confirmed_at = confirmedAt;
   crypto_generichash_state state;
@@ -805,17 +924,19 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   grdw_ledger_anchor_assemble_hiero_transaction_id(
       &tx.ledger_anchor, createdAt2.seconds, createdAt2.nanos, 0, 0, 121
   );
-  ASSERT_EQ(grdw_confirmed_transaction_reserve_account_balances(&tx, 1, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_confirmed_transaction_reserve_account_balances(&tx, 1, &mem), HOSTMEM_SUCCESS);
   grdw_account_balance accountBalance;
   accountBalance.balance = 10000;
   memcpy(accountBalance.pubkey, g_KeyPairs[4].public_key, 32);
-  grdu_memory_block communityUuid = fromHex(communityUuidHex);
+  hostmem_memory_block communityUuid = fromHex(communityUuidHex);
   memcpy(accountBalance.community_uuid, communityUuid.data, 16);
   free(communityUuid.data);
-  ASSERT_EQ(grdw_confirmed_transaction_copy_account_balance(&tx, &accountBalance, 0), GRD_SUCCESS);
+  ASSERT_EQ(
+      grdw_confirmed_transaction_copy_account_balance(&tx, &accountBalance, 0), HOSTMEM_SUCCESS
+  );
   tx.balance_derivation = GRDT_BALANCE_DERIVATION_EXTERN;
 
-  ASSERT_EQ(grdw_confirmed_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_confirmed_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), HOSTMEM_SUCCESS);
   bufferPtr.size = finalSize;
   auto base64 = toBase64(&bufferPtr);
   ASSERT_EQ(base64, confirmedCommunityRootTransactionBase64);
@@ -828,15 +949,15 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
 }
 
 TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
-  grd_memory mem{};
-  ASSERT_EQ(grd_memory_init_arena(&mem, BUFFER_SIZE * 2), GRD_SUCCESS);
+  hostmem mem{};
+  ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
 
   grdw_confirmed_transaction tx;
   grdw_confirmed_transaction_init(&tx);
   auto base64 = fromBase64(
       confirmedCommunityRootTransactionBase64, strlen(confirmedCommunityRootTransactionBase64)
   );
-  ASSERT_EQ(grdw_confirmed_transaction_decode(&tx, &base64, &mem), GRD_SUCCESS);
+  ASSERT_EQ(grdw_confirmed_transaction_decode(&tx, &base64, &mem), HOSTMEM_SUCCESS);
   EXPECT_EQ(tx.id, 121);
   auto bodyBytesBase64 = toBase64(&tx.transaction.body_bytes);
   EXPECT_EQ(bodyBytesBase64, communityRootTransactionBodyBase64);
