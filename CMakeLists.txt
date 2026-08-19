@@ -56,11 +56,11 @@ include(FetchContent)
 # SOURCE_SUBDIR names a directory that holds no CMakeLists, which is the documented way to say
 # populate only. Point it at the real thing instead if this project ever wants that target.
 FetchContent_Declare(hostmem
-  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.3.1.tar.gz
+  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.4.0.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=24fdafd560e2e570fdf10ee9823b4b67b5736fb49136038948391b12898a0032
+  URL_HASH SHA256=92479e8a1e9c6256e75f81f4debd0ec59e7886fa65fbcd52baa8c0f682bd169e
   SOURCE_SUBDIR do-not-add-subdirectory
 )
 FetchContent_MakeAvailable(hostmem)

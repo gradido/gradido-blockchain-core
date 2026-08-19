@@ -132,7 +132,7 @@ void grdw_transaction_body_free(grdw_transaction_body *body, hostmem *allocator)
         (uint8_t *)body->memos, sizeof(grdw_encrypted_memo) * body->memos_count, allocator
     );
   }
-  // reserve/from_pbtools always take exactly UUID_BINARY_SIZE for this one
-  hostmem_free(body->other_community_uuid, UUID_BINARY_SIZE, allocator);
+  // reserve/from_pbtools always take exactly HOSTMEM_UUID_BINARY_SIZE for this one
+  hostmem_free(body->other_community_uuid, HOSTMEM_UUID_BINARY_SIZE, allocator);
   grdw_transaction_body_init(body);
 }

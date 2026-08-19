@@ -22,7 +22,7 @@ int grdc_generic_hash_size() {
   return GENERIC_HASH_SIZE;
 }
 int grdc_uuid_binary_size() {
-  return UUID_BINARY_SIZE;
+  return HOSTMEM_UUID_BINARY_SIZE;
 }
 int64_t grdc_decay_respite_cent() {
   return GRADIDO_DECAY_RESPITE_CENT;

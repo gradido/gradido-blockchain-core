@@ -23,7 +23,7 @@ typedef struct grdr_complete_transaction {
   uint64_t tx_nr;
   grdd_timestamp confirmed_at;
   grdd_timestamp created_at;
-  uint8_t tx_community_uuid[UUID_BINARY_SIZE];
+  uint8_t tx_community_uuid[HOSTMEM_UUID_BINARY_SIZE];
   grdw_ledger_anchor ledger_anchor;
 
   // --- Transaction Detail Data ---
@@ -39,7 +39,7 @@ typedef struct grdr_complete_transaction {
       uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE]; // set to 00000... on creation tx
       uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE];
       grdd_unit amount;
-      uint8_t coin_community_uuid[UUID_BINARY_SIZE];
+      uint8_t coin_community_uuid[HOSTMEM_UUID_BINARY_SIZE];
     } transfer;
     struct {
       uint8_t user_public_key[SIGN_PUBLIC_KEY_SIZE];

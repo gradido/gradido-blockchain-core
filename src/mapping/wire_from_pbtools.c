@@ -37,13 +37,13 @@
 #include "hostmem/memory.h"
 
 static hostmem_result community_uuid_from_pbtools(
-    uint8_t community_uuid[UUID_BINARY_SIZE], const struct pbtools_bytes_t *bytes
+    uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE], const struct pbtools_bytes_t *bytes
 ) {
   if (!community_uuid || !bytes) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (UUID_BINARY_SIZE == bytes->size) {
-    memcpy(community_uuid, bytes->buf_p, UUID_BINARY_SIZE);
+  if (HOSTMEM_UUID_BINARY_SIZE == bytes->size) {
+    memcpy(community_uuid, bytes->buf_p, HOSTMEM_UUID_BINARY_SIZE);
   } else if (0 == bytes->size) {
-    memset(community_uuid, 0, UUID_BINARY_SIZE);
+    memset(community_uuid, 0, HOSTMEM_UUID_BINARY_SIZE);
   } else {
     return HOSTMEM_ERROR_INVALID_PARAM;
   }
@@ -351,7 +351,8 @@ hostmem_result grdm_transaction_body_from_pbtools(
     }
   }
   if (pb_transaction_body->other_community_uuid.size) {
-    result = hostmem_alloc(&transaction_body->other_community_uuid, UUID_BINARY_SIZE, allocator);
+    result =
+        hostmem_alloc(&transaction_body->other_community_uuid, HOSTMEM_UUID_BINARY_SIZE, allocator);
     if (HOSTMEM_SUCCESS != result) { return result; }
     result = community_uuid_from_pbtools(
         transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid

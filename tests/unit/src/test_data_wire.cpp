@@ -1,6 +1,7 @@
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/hiero.h"
 #include "memory_limit.h"
+#include <cstring>
 #include <gtest/gtest.h>
 
 TEST(HieroAccountIdTest, toString) {
@@ -26,4 +27,47 @@ TEST(HieroTransactionIdTest, toString) {
   size_t written = grdw_hiero_transaction_id_to_string(buffer, 128, &transactionId);
   ASSERT_EQ(written, 28);
   EXPECT_STREQ(buffer, "0.0.1233@171627121.000002912");
+}
+
+// promise: both hiero conversions size their destination the way snprintf does -- buffer_size
+// counts the terminator, and the return is the character count without it, so a caller adds one
+// to what it was told. A buffer of exactly the character count is refused rather than filled,
+// which is what keeps the terminator inside it.
+TEST(HieroAccountIdTest, BufferSizeCountsTheTerminator) {
+  grdw_hiero_account_id accountId = {.shardNum = 0, .realmNum = 0, .accountNum = 12121};
+  const char *expected = "0.0.12121";
+  const size_t characters = strlen(expected);
+  ASSERT_EQ(grdw_hiero_account_id_calculate_string_size(&accountId), characters);
+
+  char exact[16];
+  memset(exact, 'x', sizeof(exact));
+  ASSERT_EQ(grdw_hiero_account_id_to_string(exact, characters + 1, &accountId), characters);
+  EXPECT_STREQ(exact, expected);
+  EXPECT_EQ(exact[characters + 1], 'x') << "wrote past the buffer it was given";
+
+  char one_short[16];
+  memset(one_short, 'x', sizeof(one_short));
+  EXPECT_EQ(grdw_hiero_account_id_to_string(one_short, characters, &accountId), characters);
+  for (char c : one_short) { EXPECT_EQ(c, 'x') << "wrote into a buffer it had refused"; }
+}
+
+TEST(HieroTransactionIdTest, BufferSizeCountsTheTerminator) {
+  grdw_hiero_transaction_id transactionId = {
+      .transactionValidStart = {.seconds = 171627121, .nanos = 2912},
+      .accountID = {.shardNum = 0, .realmNum = 0, .accountNum = 1233}
+  };
+  const char *expected = "0.0.1233@171627121.000002912";
+  const size_t characters = strlen(expected);
+  ASSERT_EQ(grdw_hiero_transaction_id_calculate_string_size(&transactionId), characters);
+
+  char exact[40];
+  memset(exact, 'x', sizeof(exact));
+  ASSERT_EQ(grdw_hiero_transaction_id_to_string(exact, characters + 1, &transactionId), characters);
+  EXPECT_STREQ(exact, expected);
+  EXPECT_EQ(exact[characters + 1], 'x') << "wrote past the buffer it was given";
+
+  char one_short[40];
+  memset(one_short, 'x', sizeof(one_short));
+  EXPECT_EQ(grdw_hiero_transaction_id_to_string(one_short, characters, &transactionId), characters);
+  for (char c : one_short) { EXPECT_EQ(c, 'x') << "wrote into a buffer it had refused"; }
 }

@@ -36,12 +36,12 @@
  * simply copy ptr to dst, or do nothing if at least one parameter is NULL
  */
 static void community_uuid_from_wire(
-    struct pbtools_bytes_t *dst, const uint8_t community_uuid[UUID_BINARY_SIZE]
+    struct pbtools_bytes_t *dst, const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE]
 ) {
   if (!community_uuid || !dst) { return; }
 
   dst->buf_p = (uint8_t *)community_uuid;
-  dst->size = UUID_BINARY_SIZE;
+  dst->size = HOSTMEM_UUID_BINARY_SIZE;
 }
 /*
  * simply copy ptr to dst, or do nothing if at least one parameter is NULL

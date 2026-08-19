@@ -102,7 +102,7 @@ hostmem_result grdc_sign_key_pair_derive(
 hostmem_result grdc_sign_key_pair_derive_uuid(
     grdc_sign_key_pair *sign_key_pair,
     const grdc_sign_key_pair *sign_parent_key,
-    const uint8_t user_uuid[UUID_BINARY_SIZE]
+    const uint8_t user_uuid[HOSTMEM_UUID_BINARY_SIZE]
 ) {
   if (!sign_key_pair || !sign_parent_key || !user_uuid) { return HOSTMEM_ERROR_NULL_POINTER; }
   hostmem_result result = HOSTMEM_SUCCESS;
@@ -125,7 +125,7 @@ hostmem_result grdc_sign_key_pair_derive_uuid(
 hostmem_result grdc_sign_key_pair_derive_account_from_community(
     grdc_sign_key_pair *sign_key_pair,
     const uint8_t community_root_seed[SIGN_SEED_SIZE],
-    const uint8_t user_uuid[UUID_BINARY_SIZE],
+    const uint8_t user_uuid[HOSTMEM_UUID_BINARY_SIZE],
     const uint32_t account_index
 ) {
   if (!sign_key_pair || !community_root_seed || !user_uuid) { return HOSTMEM_ERROR_NULL_POINTER; }

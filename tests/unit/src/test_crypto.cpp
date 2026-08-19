@@ -262,7 +262,7 @@ TEST(TestEd25519Bip32, SLIP0010TestVectors2) {
 TEST(SignContract, RejectedArgumentsReturnTheDocumentedCode) {
   grdc_sign_key_pair keyPair;
   uint8_t seed[SIGN_SEED_SIZE] = {1};
-  uint8_t uuid[UUID_BINARY_SIZE] = {2};
+  uint8_t uuid[HOSTMEM_UUID_BINARY_SIZE] = {2};
   uint8_t slip10[SIGN_PUBLIC_KEY_SIZE + 1];
   ASSERT_EQ(grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_SIZE), HOSTMEM_SUCCESS);
 

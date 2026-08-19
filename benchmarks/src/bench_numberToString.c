@@ -91,16 +91,14 @@ static void test_hiero_transaction_id_to_string(int stepCount) {
 #include "sodium.h"
 
 /*
- * grdu_uuid_from_string and grdu_uuid_to_string were built on libsodium until lookup tables
- * replaced them. The two functions below are what they used to be, kept here so this section
- * measures the change instead of asserting it -- the rows are named after which one ran.
+ * These four conversions live in hostmem now, which links no crypto library and therefore has
+ * nothing to compare itself against. That comparison is the reason this section stayed behind:
+ * the two functions below are what hostmem's uuid pair used to be, back when it was built on
+ * libsodium, kept here so the rows measure the difference instead of asserting it.
  *
- * They live in the benchmark and not in the library because that is the only place they are
- * still wanted. Keeping them compiling also means a claim about the hand written versions can
- * be rechecked on any machine rather than taken from a commit message.
- *
- * Only this comparison needs libsodium; the hand written pair is in every build now, and the
- * unit tests cover it in both.
+ * The hex section further down needs no such copy -- grdu_secret_to_hex and
+ * grdu_secret_from_hex are libsodium and ship in this library, so both of its rows call
+ * something real.
  */
 static hostmem_result uuid_from_string_sodium(uint8_t *uuid, const char *uuid_string) {
   if (!uuid || !uuid_string) { return HOSTMEM_ERROR_NULL_POINTER; }
@@ -122,7 +120,9 @@ static hostmem_result uuid_from_string_sodium(uint8_t *uuid, const char *uuid_st
   return HOSTMEM_SUCCESS;
 }
 
-static void uuid_to_string_sodium(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZE]) {
+static void uuid_to_string_sodium(
+    char *result_buffer, const uint8_t uuid[HOSTMEM_UUID_BINARY_SIZE]
+) {
   char hex[33];
   sodium_bin2hex(hex, sizeof(hex), uuid, 16);
   memcpy(result_buffer, hex, 8);
@@ -143,17 +143,17 @@ static void uuid_to_string_sodium(char *result_buffer, const uint8_t uuid[UUID_B
  * one path through it and time the cache rather than the code.
  */
 #define UUID_SAMPLE_COUNT 64
-static uint8_t uuidSamples[UUID_SAMPLE_COUNT][UUID_BINARY_SIZE];
+static uint8_t uuidSamples[UUID_SAMPLE_COUNT][HOSTMEM_UUID_BINARY_SIZE];
 static char uuidSampleStrings[UUID_SAMPLE_COUNT][37];
 
 /* Written where the compiler cannot see they go unread, so no row loses work the others do. */
-uint8_t benchUuidBinary[UUID_BINARY_SIZE];
+uint8_t benchUuidBinary[HOSTMEM_UUID_BINARY_SIZE];
 char benchUuidString[37];
 
 static void prepare_uuid_samples(void) {
   for (int i = 0; i < UUID_SAMPLE_COUNT; ++i) {
     uint64_t halves[2] = {getNextTestValue(), getNextTestValue()};
-    memcpy(uuidSamples[i], halves, UUID_BINARY_SIZE);
+    memcpy(uuidSamples[i], halves, HOSTMEM_UUID_BINARY_SIZE);
     /* the reference implementation writes them, so the parsers are timed on inputs neither of
        them produced */
     uuid_to_string_sodium(uuidSampleStrings[i], uuidSamples[i]);
@@ -168,7 +168,7 @@ static void test_uuid_from_string_sodium(int stepCount) {
 
 static void test_uuid_from_string(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
-    grdu_uuid_from_string(benchUuidBinary, uuidSampleStrings[i % UUID_SAMPLE_COUNT]);
+    hostmem_uuid_from_string(benchUuidBinary, uuidSampleStrings[i % UUID_SAMPLE_COUNT]);
   }
 }
 
@@ -180,20 +180,18 @@ static void test_uuid_to_string_sodium(int stepCount) {
 
 static void test_uuid_to_string(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
-    grdu_uuid_to_string(benchUuidString, uuidSamples[i % UUID_SAMPLE_COUNT]);
+    hostmem_uuid_to_string(benchUuidString, uuidSamples[i % UUID_SAMPLE_COUNT]);
   }
 }
 
 /*
- * The same comparison for the general hex conversions, which moved off libsodium too. 32 bytes
- * is the size that actually occurs here -- a hash or a public key -- and the ratio holds from
- * one byte up to a few thousand.
+ * The same comparison for the general hex conversions: hostmem's fast pair against the constant
+ * time pair this library keeps for secrets. 32 bytes is the size that actually occurs here -- a
+ * hash or a public key -- and the ratio holds from one byte up to a few thousand.
  *
  * The two directions do not come out alike, and the reason is worth keeping next to the
  * numbers: sodium_bin2hex is a branchless map over the bytes, which a compiler can vectorise,
  * while sodium_hex2bin carries a state machine and a bounds check per nibble and cannot be.
- * Where libsodium is built with -O3 by a compiler that takes the hint -- the CMake path does,
- * the zig one does not -- its bin2hex beats the table here.
  */
 #define HEX_SAMPLE_BYTES 32
 static uint8_t hexSampleBinary[HEX_SAMPLE_BYTES];
@@ -217,7 +215,7 @@ static void test_binary_to_hex_secret(int stepCount) {
 
 static void test_binary_to_hex(int stepCount) {
   hostmem_memory_block block = {hexSampleBinary, HEX_SAMPLE_BYTES};
-  for (int i = 0; i < stepCount; ++i) { grdu_binary_to_hex(benchHexString, &block); }
+  for (int i = 0; i < stepCount; ++i) { hostmem_binary_to_hex(benchHexString, &block); }
 }
 
 static void test_binary_from_hex_secret(int stepCount) {
@@ -225,7 +223,7 @@ static void test_binary_from_hex_secret(int stepCount) {
 }
 
 static void test_binary_from_hex(int stepCount) {
-  for (int i = 0; i < stepCount; ++i) { grdu_binary_from_hex(benchHexBinary, hexSampleString); }
+  for (int i = 0; i < stepCount; ++i) { hostmem_binary_from_hex(benchHexBinary, hexSampleString); }
 }
 
 #endif // USE_SODIUM
@@ -279,24 +277,24 @@ int main(void) {
 
   bench_section("hiero transaction id to string");
   bench_step(test_hiero_transaction_id_to_string_snprintf, stepCount, "  snprintf", "conversion");
-  bench_step(test_hiero_transaction_id_to_string, stepCount, "  hand written", "conversion");
+  bench_step(test_hiero_transaction_id_to_string, stepCount, "  hostmem", "conversion");
 
 #ifdef USE_SODIUM
   bench_section("uuid from string");
   bench_step(test_uuid_from_string_sodium, stepCount, "  libsodium", "conversion");
-  bench_step(test_uuid_from_string, stepCount, "  hand written", "conversion");
+  bench_step(test_uuid_from_string, stepCount, "  hostmem", "conversion");
 
   bench_section("uuid to string");
   bench_step(test_uuid_to_string_sodium, stepCount, "  libsodium", "conversion");
-  bench_step(test_uuid_to_string, stepCount, "  hand written", "conversion");
+  bench_step(test_uuid_to_string, stepCount, "  hostmem", "conversion");
 
   bench_section("32 bytes to hex");
   bench_step(test_binary_to_hex_secret, stepCount, "  secret, libsodium", "conversion");
-  bench_step(test_binary_to_hex, stepCount, "  fast, hand written", "conversion");
+  bench_step(test_binary_to_hex, stepCount, "  fast, hostmem", "conversion");
 
   bench_section("32 bytes from hex");
   bench_step(test_binary_from_hex_secret, stepCount, "  secret, libsodium", "conversion");
-  bench_step(test_binary_from_hex, stepCount, "  fast, hand written", "conversion");
+  bench_step(test_binary_from_hex, stepCount, "  fast, hostmem", "conversion");
 #endif // USE_SODIUM
 
   bench_total(timeUsed, stepCount, "value");

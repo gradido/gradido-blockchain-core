@@ -83,4 +83,10 @@ TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
       grdm_complete_transaction_from_wire(&tx, &body, &confirmed_tx, community_uuid),
       HOSTMEM_SUCCESS
   );
+
+  // the runtime transaction carries an arena of its own, the wire decode borrowed this one, and
+  // fromBase64 hands back malloc'd bytes -- three owners, three releases
+  grdr_complete_transaction_release(&tx);
+  free(base64.data);
+  hostmem_release(&mem);
 }
