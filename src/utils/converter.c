@@ -23,10 +23,11 @@
  * build has no vector path at all. Writing the conditional as an arithmetic mask does not fix
  * it; the compiler turns that back into a branch as well.
  *
- * What they cost, measured over 32 bytes in a ReleaseFast build: 12.2 ns against 5.6 for
- * encoding, 91.2 ns against 9.1 for decoding. Roughly twice the time one way and ten times the
- * other -- the decoding gap is the wider one because sodium_hex2bin carries a state machine
- * that cannot vectorise at all.
+ * What they cost, over 32 bytes in a ReleaseFast build: about 12 ns against 6 for encoding,
+ * about 94 ns against 9 for decoding. Roughly twice the time one way and ten times the other --
+ * the decoding gap is the wider one because sodium_hex2bin carries a state machine that cannot
+ * vectorise at all. Rounded on purpose: `bench_numberToString` prints the figure of the day,
+ * and the ratio is what survives a different machine.
  *
  * Use these when the bytes are a key, a seed or a passphrase. Use the pair above for hashes,
  * transaction ids, public keys and anything else already public. Both pairs answer with the

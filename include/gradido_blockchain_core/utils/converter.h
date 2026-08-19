@@ -45,7 +45,8 @@ extern "C" {
  * Same arguments, same result codes, libsodium underneath. Its bin2hex is written so that no
  * branch and no memory access follows the value being converted, and it is tested and reviewed
  * for holding that — which is the part hostmem_binary_to_hex() cannot promise, however it
- * is written. Roughly twice as slow: 12.2 ns against 5.6 for 32 bytes in a ReleaseFast build.
+ * is written. Roughly twice as slow: about 12 ns against 6 for 32 bytes in a ReleaseFast build,
+ * a ratio `bench_numberToString` reprints on whatever machine asks.
  *
  * Reach for this when the bytes are a key, a seed or a passphrase. For hashes, transaction ids,
  * public keys and anything already public, hostmem_binary_to_hex() is the one to use.
@@ -62,7 +63,7 @@ hostmem_result grdu_secret_to_hex(char *result_buffer, const hostmem_memory_bloc
  * Same arguments, same result codes, libsodium underneath, and the output is wiped with
  * sodium_memzero() rather than memset() when the string does not decode — a clearing whose
  * result nobody reads is the kind a compiler may drop, and here it must not. The wider of the
- * two gaps: 91.2 ns against 9.1 for 32 bytes in a ReleaseFast build, because sodium_hex2bin
+ * two gaps: about 94 ns against 9 for 32 bytes in a ReleaseFast build, because sodium_hex2bin
  * carries a state machine that cannot be vectorised at all.
  *
  * @see hostmem_binary_from_hex
