@@ -39,7 +39,7 @@ hostmem_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const grdw_transaction_body *body,
     const grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[UUID_BINARY_SIZE]
+    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE]
 );
 
 /** @} */

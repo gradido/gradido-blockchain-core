@@ -47,14 +47,21 @@ endif()
 include(FetchContent)
 
 # hostmem carries the allocator, the containers and the number conversions this project used to
-# keep in src/utils. It ships no CMakeLists of its own — six C files and a header tree — so
-# FetchContent only populates it and the sources join this library's target below.
+# keep in src/utils. Its sources join this library's target below rather than linking a second
+# archive, which is also what keeps the sanitizer flags set above on every byte of it.
+#
+# Since v0.3.0 hostmem ships a CMakeLists of its own. FetchContent_MakeAvailable would call
+# add_subdirectory() on it, and because our ENABLE_TESTS / ENABLE_BENCHMARKS options carry the
+# same names as its own, -DENABLE_TESTS=ON here would build hostmem's googletest suite too.
+# SOURCE_SUBDIR names a directory that holds no CMakeLists, which is the documented way to say
+# populate only. Point it at the real thing instead if this project ever wants that target.
 FetchContent_Declare(hostmem
-  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.2.0.tar.gz
+  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.4.0.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=e82b61f886c6f82616ecc02daaf7846c12789cf4a91551325957285bc2c03c93
+  URL_HASH SHA256=92479e8a1e9c6256e75f81f4debd0ec59e7886fa65fbcd52baa8c0f682bd169e
+  SOURCE_SUBDIR do-not-add-subdirectory
 )
 FetchContent_MakeAvailable(hostmem)
 FILE(GLOB_RECURSE HOSTMEM_SRC "${hostmem_SOURCE_DIR}/src/*.c" "${hostmem_SOURCE_DIR}/include/hostmem/*.h")
@@ -163,5 +170,10 @@ if(ENABLE_BENCHMARKS)
 endif()
 
 if(ENABLE_TESTS)
+    # Called here and not only down in tests/unit: ctest reads the CTestTestfile.cmake of the
+    # directory it is pointed at, and a top level that never enabled testing writes one that
+    # does not descend. Without this `ctest --test-dir <build>` answers "No tests were found"
+    # while the binaries sit one level down, and only `--test-dir <build>/tests/unit` works.
+    enable_testing()
     add_subdirectory(tests)
 endif()

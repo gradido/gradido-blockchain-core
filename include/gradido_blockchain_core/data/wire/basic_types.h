@@ -36,7 +36,7 @@ extern "C" {
 typedef struct grdw_account_balance {
   uint8_t pubkey[SIGN_PUBLIC_KEY_SIZE];
   int64_t balance;
-  uint8_t community_uuid[UUID_BINARY_SIZE];
+  uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE];
 } grdw_account_balance;
 
 int64_t grdw_account_balance_get_balance(const grdw_account_balance *account_balance);
@@ -119,7 +119,7 @@ typedef struct grdw_timestamp_seconds {
 typedef struct grdw_transfer_amount {
   uint8_t pubkey[SIGN_PUBLIC_KEY_SIZE];
   int64_t amount;
-  uint8_t community_uuid[UUID_BINARY_SIZE];
+  uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE];
 } grdw_transfer_amount;
 
 /** @} */

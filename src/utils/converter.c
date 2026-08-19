@@ -7,104 +7,58 @@
 #include "sodium.h"
 #endif // USE_SODIUM
 
-#include <assert.h>
 #include <string.h>
+
 #ifdef USE_SODIUM
 
 /*
- * C11 static assert fallback safety
+ * The same two conversions for material that has to keep quiet about itself, handed to
+ * libsodium instead of done here.
+ *
+ * What they buy: libsodium computes each digit with arithmetic chosen so that no branch and no
+ * memory access follows the value being converted, and it is tested and reviewed for holding
+ * that. The fast pair above computes its digits too, but only the vectorised half of the
+ * generated code stays branchless -- the scalar path beside it, which takes the remainder and
+ * takes short inputs whole, compiles to a compare and a jump on the nibble, and an unoptimised
+ * build has no vector path at all. Writing the conditional as an arithmetic mask does not fix
+ * it; the compiler turns that back into a branch as well.
+ *
+ * What they cost, over 32 bytes in a ReleaseFast build: about 12 ns against 6 for encoding,
+ * about 94 ns against 9 for decoding. Roughly twice the time one way and ten times the other --
+ * the decoding gap is the wider one because sodium_hex2bin carries a state machine that cannot
+ * vectorise at all. Rounded on purpose: `bench_numberToString` prints the figure of the day,
+ * and the ratio is what survives a different machine.
+ *
+ * Use these when the bytes are a key, a seed or a passphrase. Use the pair above for hashes,
+ * transaction ids, public keys and anything else already public. Both pairs answer with the
+ * same result codes, so swapping one for the other changes only the timing.
+ *
+ * Neither pair is the whole story for a secret: wiping the caller's buffers afterwards and
+ * keeping them out of swap is still the caller's part.
  */
-#if !defined(static_assert)
-#define static_assert _Static_assert
-#endif
-
-static_assert(UUID_BINARY_SIZE == 16, "uuid binary size don't match 16 bytes");
-
-void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZE]) {
-  char hex[33];
-  sodium_bin2hex(hex, sizeof(hex), uuid, 16);
-  memcpy(result_buffer, hex, 8);
-  result_buffer[8] = '-';
-  memcpy(result_buffer + 9, hex + 8, 4);
-  result_buffer[13] = '-';
-  memcpy(result_buffer + 14, hex + 12, 4);
-  result_buffer[18] = '-';
-  memcpy(result_buffer + 19, hex + 16, 4);
-  result_buffer[23] = '-';
-  memcpy(result_buffer + 24, hex + 20, 12);
-  result_buffer[36] = '\0';
-}
-
-/*
-hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
-  if (!uuid || !uuid_string) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (strlen(uuid_string) != 36) { return HOSTMEM_ERROR_INVALID_PARAM; }
-
-  char hex[33];
-  memcpy(hex, uuid_string, 8);
-  memcpy(hex + 8, uuid_string + 9, 4);
-  memcpy(hex + 12, uuid_string + 14, 4);
-  memcpy(hex + 16, uuid_string + 19, 4);
-  memcpy(hex + 20, uuid_string + 24, 12);
-  hex[32] = '\0';
-
-  size_t bin_len = 0;
-  if (sodium_hex2bin(uuid, 16, hex, 32, NULL, &bin_len, NULL) != 0) {
-    return HOSTMEM_ERROR_ENCODE_FAILED;
-  }
-  if (bin_len != 16) { return HOSTMEM_ERROR_INVALID_PARAM; }
-  return HOSTMEM_SUCCESS;
-}
-*/
-// faster as version above
-hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string) {
-  if (!uuid || !uuid_string) return HOSTMEM_ERROR_NULL_POINTER;
-  if (strlen(uuid_string) != 36) return HOSTMEM_ERROR_INVALID_PARAM;
-
-  static const uint8_t hex_lookup[256] = {
-      ['0'] = 0,  ['1'] = 1,  ['2'] = 2,  ['3'] = 3,  ['4'] = 4,  ['5'] = 5,
-      ['6'] = 6,  ['7'] = 7,  ['8'] = 8,  ['9'] = 9,  ['a'] = 10, ['b'] = 11,
-      ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15, ['A'] = 10, ['B'] = 11,
-      ['C'] = 12, ['D'] = 13, ['E'] = 14, ['F'] = 15,
-  };
-
-  size_t j = 0;
-  for (size_t i = 0; i < 36; i++) {
-    if (uuid_string[i] == '-') continue;
-    uint8_t hi = hex_lookup[(unsigned char)uuid_string[i]];
-    if (hi == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
-    ++i;
-    uint8_t lo = hex_lookup[(unsigned char)uuid_string[i]];
-    if (lo == 0 && uuid_string[i] != '0') { return HOSTMEM_ERROR_DECODE_FAILED; }
-    if (hi == 0 && lo == 0 && uuid_string[i - 1] != '0') continue;
-    uuid[j++] = (hi << 4) | lo;
-  }
-
-  return HOSTMEM_SUCCESS;
-}
-
-hostmem_result grdu_binary_to_hex(char *result_buffer, const hostmem_memory_block *data) {
+hostmem_result grdu_secret_to_hex(char *result_buffer, const hostmem_memory_block *data) {
   if (!result_buffer || !data || !data->data) { return HOSTMEM_ERROR_NULL_POINTER; }
-  // an empty block is a parameter the caller can fix, not a pointer they forgot
   if (!data->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
-  size_t hex_size = data->size * 2 + 1;
 
-  sodium_bin2hex((char *)result_buffer, hex_size, data->data, data->size);
+  sodium_bin2hex(result_buffer, (size_t)data->size * 2 + 1, data->data, data->size);
   return HOSTMEM_SUCCESS;
 }
 
-hostmem_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex) {
+hostmem_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex) {
   if (!result_buffer || !hex) { return HOSTMEM_ERROR_NULL_POINTER; }
   size_t hex_size = strlen(hex);
   size_t bin_size = hex_size / 2;
-  // two characters make one byte, so an odd length cannot be hex — the division above dropped
-  // the stray character and multiplying back reveals it
   if (bin_size * 2 != hex_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
-  size_t result_bin_size = 0;
-  if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &result_bin_size, NULL)) {
+
+  size_t written = 0;
+  if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &written, NULL)) {
+    // sodium_hex2bin reports a length of zero on failure but leaves whatever it managed to
+    // decode standing in the buffer. sodium_memzero rather than memset: clearing a buffer
+    // nobody reads again is exactly what a compiler is allowed to drop, and that is the one
+    // place it must not.
+    sodium_memzero(result_buffer, bin_size);
     return HOSTMEM_ERROR_DECODE_FAILED;
   }
-  if (result_bin_size != bin_size) { return HOSTMEM_ERROR_INVALID_STATE; }
   return HOSTMEM_SUCCESS;
 }
 

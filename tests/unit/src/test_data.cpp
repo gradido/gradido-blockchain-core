@@ -113,14 +113,25 @@ TEST(TimestampToString, BufferTooSmall) {
   for (size_t i = 0; i < sizeof(buffer); ++i) { ASSERT_EQ(buffer[i], 'x'); }
 }
 
+// promise: buffer_size counts the terminator, the way snprintf counts it. A buffer of exactly
+// the character count is one byte short and is refused; one more than that is the exact fit.
+// This test used to hand over 19 bytes for 19 characters and expect them written, which put the
+// terminator one byte past the end of a stack array -- AddressSanitizer reports it.
 TEST(TimestampToString, BufferExactlyRequired) {
   grdd_timestamp ts = {.seconds = 123456789, .nanos = 0};
-  size_t required = 10; // "123456789.000000000" = 19? Warte: 123456789 = 9 Ziffern, Punkt + 9 = 19.
-  char buffer[19];
-  memset(buffer, 0, sizeof(buffer));
-  size_t written = grdd_timestamp_to_string(buffer, sizeof(buffer), &ts);
-  ASSERT_EQ(written, 19);
-  EXPECT_STREQ(buffer, "123456789.000000000");
+  const char *expected = "123456789.000000000";
+  const size_t characters = strlen(expected); // 9 digits, the dot, 9 nanos
+
+  char exact[20]; // characters + the terminator
+  memset(exact, 'x', sizeof(exact));
+  ASSERT_EQ(grdd_timestamp_to_string(exact, sizeof(exact), &ts), characters);
+  EXPECT_STREQ(exact, expected);
+
+  char one_short[19];
+  memset(one_short, 'x', sizeof(one_short));
+  EXPECT_EQ(grdd_timestamp_to_string(one_short, sizeof(one_short), &ts), characters)
+      << "a buffer with no room for the terminator has to be refused, not filled";
+  for (char c : one_short) { EXPECT_EQ(c, 'x') << "wrote into a buffer it had refused"; }
 }
 
 TEST(TimestampCalculateStringSize, Basic) {

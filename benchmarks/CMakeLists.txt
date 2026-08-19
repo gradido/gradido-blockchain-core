@@ -2,13 +2,15 @@ cmake_minimum_required(VERSION 3.18.2)
 cmake_policy(SET CMP0135 NEW)
 project(GradidoBlockchainCoreBenchmarks C)
 
-if (USE_SODIUM)
-  add_compile_definitions(USE_SODIUM)
-endif()
-
 # one binary per unit
 add_executable(bench_numberToString src/bench_numberToString.c)
-target_link_libraries(bench_numberToString gradido_blockchain_core sodium)
+target_link_libraries(bench_numberToString gradido_blockchain_core)
+# This one needs no crypto of its own, but the library it links carries sodium calls in its
+# converter, so it follows whatever the library was built with rather than naming sodium
+# unconditionally -- without USE_SODIUM there is no such target to name.
+if (USE_SODIUM)
+  target_link_libraries(bench_numberToString sodium)
+endif()
 if(NOT WIN32)
   target_link_libraries(bench_numberToString m)
 endif()

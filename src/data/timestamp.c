@@ -93,7 +93,11 @@ size_t grdd_timestamp_to_string(char *buffer, size_t buffer_size, const grdd_tim
   size_t seconds_size = hostmem_int64_to_string_size(timestamp->seconds);
   size_t nanos_size = hostmem_int64_to_string_size(timestamp->nanos);
   size_t result_size = seconds_size + 1 + 9;
-  if (buffer_size < result_size) { return result_size; }
+  // buffer_size counts the terminator, the way snprintf and hostmem's converters count it, so a
+  // buffer of exactly result_size is one byte short rather than an exact fit -- the writes below
+  // close the run with a '\0'. The return stays the character count, which is what a caller
+  // sizing a buffer adds one to.
+  if (buffer_size < result_size + 1) { return result_size; }
 
   hostmem_int64_to_string_known_string_size(buffer, timestamp->seconds, seconds_size);
   buffer += seconds_size;

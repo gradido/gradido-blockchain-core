@@ -22,7 +22,7 @@ static size_t calculate_memory_size(
       result += HOSTMEM_ALIGN8(body->memos[i].memo.size);
     }
   }
-  if (body->other_community_uuid) { result += UUID_BINARY_SIZE; }
+  if (body->other_community_uuid) { result += HOSTMEM_UUID_BINARY_SIZE; }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
   result += HOSTMEM_ALIGN8(transaction->sig_map_count * sizeof(grdw_signature_pair));
 
@@ -38,7 +38,9 @@ static void copy_transfer(grdr_complete_transaction *tx, const grdw_gradido_tran
   memcpy(tx->transfer.sender_pubkey, transfer_tx->sender.pubkey, SIGN_PUBLIC_KEY_SIZE);
   memcpy(tx->transfer.recipient_pubkey, transfer_tx->recipient, SIGN_PUBLIC_KEY_SIZE);
   tx->transfer.amount = transfer_tx->sender.amount;
-  memcpy(tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, UUID_BINARY_SIZE);
+  memcpy(
+      tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, HOSTMEM_UUID_BINARY_SIZE
+  );
 }
 
 static void copy_creation(grdr_complete_transaction *tx, const grdw_gradido_creation *creation_tx) {
@@ -102,7 +104,7 @@ hostmem_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const struct grdw_transaction_body *body,
     const struct grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[UUID_BINARY_SIZE]
+    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE]
 ) {
   if (!tx || !body || !confirmed_tx) { return HOSTMEM_ERROR_NULL_POINTER; }
   grdr_complete_transaction_release(tx);
@@ -113,7 +115,7 @@ hostmem_result grdm_complete_transaction_from_wire(
   tx->tx_nr = confirmed_tx->id;
   tx->confirmed_at = confirmed_tx->confirmed_at;
   tx->created_at = body->created_at;
-  memcpy(tx->tx_community_uuid, community_uuid, UUID_BINARY_SIZE);
+  memcpy(tx->tx_community_uuid, community_uuid, HOSTMEM_UUID_BINARY_SIZE);
   tx->ledger_anchor = confirmed_tx->ledger_anchor;
 
   // sorted by expected frequency of occurrence
@@ -187,8 +189,8 @@ hostmem_result grdm_complete_transaction_from_wire(
 
   if (body->other_community_uuid) {
     result = hostmem_clone(
-        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid, UUID_BINARY_SIZE,
-        &tx->memory_area
+        (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid,
+        HOSTMEM_UUID_BINARY_SIZE, &tx->memory_area
     );
     if (HOSTMEM_SUCCESS != result) { return result; }
   }

@@ -12,85 +12,8 @@
 
 #ifdef USE_SODIUM
 
-TEST(UuidTest, RoundtripValidUuid) {
-  // A known UUID
-  const uint8_t original[16] = {0x48, 0x06, 0x6a, 0x47, 0xa0, 0x2f, 0x45, 0x96,
-                                0x88, 0x3c, 0x30, 0x2c, 0x2b, 0x1a, 0xa1, 0xe1};
-  const char expected[] = "48066a47-a02f-4596-883c-302c2b1aa1e1";
-
-  // Forward: UUID → String
-  char uuid_string[37];
-  grdu_uuid_to_string(uuid_string, original);
-  EXPECT_STREQ(uuid_string, expected);
-  EXPECT_EQ(strlen(uuid_string), 36); // exactly 36 characters without null terminator
-
-  // Backward: String → UUID
-  uint8_t decoded[16];
-  hostmem_result result = grdu_uuid_from_string(decoded, uuid_string);
-  EXPECT_EQ(result, HOSTMEM_SUCCESS);
-  EXPECT_EQ(memcmp(original, decoded, 16), 0);
-}
-
-TEST(UuidTest, InvalidInputs) {
-  uint8_t uuid[16];
-
-  // Null-Pointer
-  EXPECT_EQ(
-      grdu_uuid_from_string(nullptr, "48066a47-a02f-4596-883c-302c2b1aa1e1"),
-      HOSTMEM_ERROR_NULL_POINTER
-  );
-  EXPECT_EQ(grdu_uuid_from_string(uuid, nullptr), HOSTMEM_ERROR_NULL_POINTER);
-
-  // Wrong length
-  EXPECT_EQ(grdu_uuid_from_string(uuid, "too-short"), HOSTMEM_ERROR_INVALID_PARAM);
-  EXPECT_EQ(
-      grdu_uuid_from_string(uuid, "48066a47-a02f-4596-883c-302c2b1aa1e1-extra"),
-      HOSTMEM_ERROR_INVALID_PARAM
-  );
-
-  // Invalid hex characters
-  EXPECT_EQ(
-      grdu_uuid_from_string(uuid, "XXXX6a47-a02f-4596-883c-302c2b1aa1e1"),
-      HOSTMEM_ERROR_DECODE_FAILED
-  );
-}
-
-TEST(UuidTest, AllZeros) {
-  const uint8_t zeros[16] = {0};
-  char uuid_string[37];
-  grdu_uuid_to_string(uuid_string, zeros);
-  EXPECT_STREQ(uuid_string, "00000000-0000-0000-0000-000000000000");
-
-  uint8_t decoded[16];
-  EXPECT_EQ(grdu_uuid_from_string(decoded, uuid_string), HOSTMEM_SUCCESS);
-  EXPECT_EQ(memcmp(zeros, decoded, 16), 0);
-}
-
-TEST(UuidTest, MultipleRoundtrips) {
-  // Test several random UUIDs
-  const char *test_uuids[] = {
-      "123e4567-e89b-12d3-a456-426614174000",
-      "00000000-0000-0000-0000-000000000000",
-      "ffffffff-ffff-ffff-ffff-ffffffffffff",
-      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  };
-
-  for (const auto &str : test_uuids) {
-    uint8_t decoded[16];
-    EXPECT_EQ(grdu_uuid_from_string(decoded, str), HOSTMEM_SUCCESS);
-
-    char encoded[37];
-    grdu_uuid_to_string(encoded, decoded);
-    EXPECT_STREQ(encoded, str);
-  }
-}
-
-#endif // USE_SODIUM
-
-// INT64_MIN is the one value that cannot be negated in int64_t: `v * -1` is undefined there,
-// and the result only looked right because two's complement wrapping happened to land on it.
-
-#ifdef USE_SODIUM
+// what grdu_secret_* is built on, and what the base64 group still uses
+#include "sodium.h"
 
 // libsodium answers a destination that is too small by calling sodium_misuse(), which aborts
 // the process — so the room has to be checked before the call, not from its return value. The
@@ -129,16 +52,89 @@ TEST(Base64Test, DestinationTooSmallIsReportedInsteadOfFatal) {
 }
 
 // a missing pointer and an empty block are different mistakes and say so
-TEST(Base64Test, HexRejectsNullAndEmptySeparately) {
-  uint8_t payload[4] = {1, 2, 3, 4};
-  char out[16];
-  hostmem_memory_block data{payload, sizeof(payload)};
-  hostmem_memory_block empty{payload, 0};
+// would be a behaviour change, and nobody would make it in a hurry.
+TEST(HexTest, SecretVariantsAnswerExactlyLikeTheFastOnes) {
+  for (unsigned value = 0; value < 256; ++value) {
+    uint8_t payload[33];
+    for (size_t i = 0; i < sizeof(payload); ++i) {
+      payload[i] = static_cast<uint8_t>((value + i * 11u) & 0xFFu);
+    }
+    payload[0] = static_cast<uint8_t>(value);
 
-  EXPECT_EQ(grdu_binary_to_hex(nullptr, &data), HOSTMEM_ERROR_NULL_POINTER);
-  EXPECT_EQ(grdu_binary_to_hex(out, nullptr), HOSTMEM_ERROR_NULL_POINTER);
-  EXPECT_EQ(grdu_binary_to_hex(out, &empty), HOSTMEM_ERROR_INVALID_PARAM);
-  EXPECT_EQ(grdu_binary_to_hex(out, &data), HOSTMEM_SUCCESS);
+    // an odd length as well, so the scalar remainder of the fast version is covered
+    for (size_t length : {size_t{1}, size_t{16}, size_t{32}, sizeof(payload)}) {
+      hostmem_memory_block block{payload, static_cast<uint32_t>(length)};
+
+      char fast[sizeof(payload) * 2 + 1];
+      char secret[sizeof(payload) * 2 + 1];
+      ASSERT_EQ(hostmem_binary_to_hex(fast, &block), grdu_secret_to_hex(secret, &block));
+      ASSERT_STREQ(fast, secret) << "value " << value << " length " << length;
+
+      uint8_t from_fast[sizeof(payload)];
+      uint8_t from_secret[sizeof(payload)];
+      ASSERT_EQ(
+          hostmem_binary_from_hex(from_fast, fast), grdu_secret_from_hex(from_secret, secret)
+      );
+      ASSERT_EQ(memcmp(from_fast, from_secret, length), 0);
+      ASSERT_EQ(memcmp(from_fast, payload, length), 0);
+    }
+  }
+}
+
+// promise: the secret pair refuses the same strings for the same reasons, and leaves nothing of
+// a half decoded secret behind when it does
+TEST(HexTest, SecretVariantsRefuseTheSameStringsAndClearWhatTheyDecoded) {
+  struct {
+    const char *what;
+    const char *input;
+    hostmem_result expected;
+  } const cases[] = {
+      {"odd number of digits", "abc", HOSTMEM_ERROR_INVALID_PARAM},
+      {"not a digit, first position", "zz00", HOSTMEM_ERROR_DECODE_FAILED},
+      {"not a digit, after two good bytes", "00ffz0", HOSTMEM_ERROR_DECODE_FAILED},
+      {"separator between the bytes", "de:ad:be", HOSTMEM_ERROR_DECODE_FAILED},
+  };
+
+  for (const auto &c : cases) {
+    uint8_t fast[16];
+    uint8_t secret[16];
+    memset(fast, 0xCD, sizeof(fast));
+    memset(secret, 0xCD, sizeof(secret));
+
+    EXPECT_EQ(hostmem_binary_from_hex(fast, c.input), c.expected) << c.what;
+    EXPECT_EQ(grdu_secret_from_hex(secret, c.input), c.expected) << c.what;
+
+    const size_t covered = strlen(c.input) / 2;
+    if (c.expected == HOSTMEM_ERROR_DECODE_FAILED) {
+      for (size_t i = 0; i < covered; ++i) {
+        EXPECT_EQ(secret[i], 0) << c.what << ": left a decoded byte at " << i;
+      }
+      EXPECT_EQ(memcmp(fast, secret, covered), 0) << c.what;
+    } else {
+      // A parameter error is refused before anything is written, so what the caller had in the
+      // buffer is still there. Clearing it would mean erasing bytes this call never produced --
+      // and the range to clear is not knowable from a signature that derives its length from the
+      // string. Wiping a buffer that has served its purpose stays with whoever owns it.
+      for (size_t i = 0; i < covered; ++i) {
+        EXPECT_EQ(secret[i], 0xCD) << c.what << ": touched a buffer it had refused, at " << i;
+        EXPECT_EQ(fast[i], 0xCD) << c.what << ": touched a buffer it had refused, at " << i;
+      }
+    }
+    for (size_t i = strlen(c.input) / 2; i < sizeof(secret); ++i) {
+      EXPECT_EQ(secret[i], 0xCD) << c.what << ": wrote past what the string covers";
+    }
+  }
+
+  uint8_t out[4];
+  char text[16];
+  uint8_t payload[2] = {0xde, 0xad};
+  hostmem_memory_block block{payload, sizeof(payload)};
+  hostmem_memory_block empty{payload, 0};
+  EXPECT_EQ(grdu_secret_from_hex(nullptr, "dead"), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdu_secret_from_hex(out, nullptr), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdu_secret_to_hex(nullptr, &block), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdu_secret_to_hex(text, nullptr), HOSTMEM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdu_secret_to_hex(text, &empty), HOSTMEM_ERROR_INVALID_PARAM);
 }
 
 #endif // USE_SODIUM

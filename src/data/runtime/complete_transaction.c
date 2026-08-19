@@ -50,7 +50,7 @@ hostmem_result grdr_complete_transaction_init_from_protobuf(
 
   // zeroed: init inspects the previous state to find an arena it already owns
   hostmem alloc = {0};
-  hostmem_result init_result = hostmem_init_arena_static(&alloc, buffer, buffer_size);
+  hostmem_result init_result = hostmem_init_arena_borrow(&alloc, buffer, buffer_size);
   if (HOSTMEM_SUCCESS != init_result) { return init_result; }
 
   grdw_confirmed_transaction wire_tx;

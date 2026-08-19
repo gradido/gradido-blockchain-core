@@ -158,6 +158,7 @@ TEST(PBToolsTest, TransactionBody_Decode) {
   auto bin = fromBase64(emptyTransactionBodyBase64, strlen(emptyTransactionBodyBase64));
   ASSERT_EQ(hostmem_init_arena(&mem, BUFFER_SIZE), HOSTMEM_SUCCESS);
   grdw_transaction_body_decode(&body, &bin, &mem);
+  free(bin.data);
   hostmem_release(&mem);
 }
 
@@ -759,6 +760,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot) {
   free(tx.body_bytes.data);
   tx.body_bytes.data = nullptr;
   grdw_gradido_transaction_free(&tx, &mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
@@ -773,7 +775,7 @@ TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
   hostmem_mono_timer_reset(&timeUsed);
   auto bin = fromBase64(communityRootTransactionBase64, strlen(communityRootTransactionBase64));
   alignas(8) uint8_t staticBuffer[BUFFER_SIZE * 2];
-  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem, staticBuffer, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
   char buffer[256];
   hostmem_mono_timer_reset(&timeUsed);
   int i = 0;
@@ -801,7 +803,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
 
   grdw_gradido_transaction tx{};
   alignas(8) uint8_t staticBuffer[128]{};
-  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, 128), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem, staticBuffer, 128), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   // tx.body_bytes = fromBase64(communityRootTransactionBodyBase64,
   // strlen(communityRootTransactionBodyBase64));
@@ -828,7 +830,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
   hostmem mem2{};
-  ASSERT_EQ(hostmem_init_arena_static(&mem2, staticBuffer2, 304), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem2, staticBuffer2, 304), HOSTMEM_SUCCESS);
   int i = 0;
   hostmem_mono_timer_reset(&timeUsed);
   for (; i < 1000; ++i) {
@@ -874,6 +876,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_TimeoutDeferredTransfer) {
   free(tx.body_bytes.data);
   tx.body_bytes.data = nullptr;
   grdw_gradido_transaction_free(&tx, &mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
@@ -892,6 +895,7 @@ TEST(PBToolsTest, GradidoTransaction_Decode_TimeoutDeferredTransfer) {
   EXPECT_EQ(tx.pairing_ledger_anchor.type, GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID);
 
   grdw_gradido_transaction_free(&tx, &mem);
+  hostmem_release(&mem);
 }
 
 // ###############  Confirmed Transaction    ############################################
@@ -946,6 +950,7 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   free(tx.transaction.body_bytes.data);
   tx.transaction.body_bytes.data = nullptr;
   grdw_confirmed_transaction_free(&tx, &mem);
+  hostmem_release(&mem);
 }
 
 TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
@@ -972,4 +977,9 @@ TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.transactionValidStart.nanos, createdAt2.nanos);
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.accountID.accountNum, 121);
   EXPECT_EQ(tx.balance_derivation, GRDT_BALANCE_DERIVATION_EXTERN);
+
+  // everything the decode produced sits in the arena; only the base64 bytes came from malloc
+  grdw_confirmed_transaction_free(&tx, &mem);
+  free(base64.data);
+  hostmem_release(&mem);
 }

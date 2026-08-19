@@ -18,11 +18,21 @@ extern "C" {
 /**
  * @defgroup grdu_converter grdu_converter
  * @ingroup utils
- * @brief Binary to text conversions that rest on libsodium.
+ * @brief Binary to text conversions that need a crypto library.
  *
- * The plain number conversions moved to hostmem (@c hostmem/converter.h); what is left
- * here needs a crypto library and stays with the project that already links one. Every
- * function writes into a buffer the caller sized — none of them allocates.
+ * The number, hex and uuid conversions all moved to hostmem (@c hostmem/converter.h). What is
+ * left here is what hostmem cannot carry, because it does not link libsodium: base64, and the
+ * hex pair for material that has to keep quiet about itself. Every function writes into a
+ * buffer the caller sized — none of them allocates.
+ *
+ * Everything in this group needs @c USE_SODIUM, so calling one from a build that does not
+ * define it is a compile error rather than a link error.
+ *
+ * For hex on bytes that are already public — hashes, transaction ids, public keys — reach for
+ * @c hostmem_binary_to_hex / @c hostmem_binary_from_hex instead. They are the faster pair and
+ * are there in every build; the two here buy constant time and cost between two and ten times
+ * the runtime for it. `bench_numberToString` prints both side by side, which is the reason
+ * that comparison lives in this project and not in hostmem.
  *
  * @{
  */
@@ -30,33 +40,53 @@ extern "C" {
 #ifdef USE_SODIUM
 
 /**
- * @param[out] result_buffer expected to be 37 bytes for string uuid format with \0
- */
-void grdu_uuid_to_string(char *result_buffer, const uint8_t uuid[UUID_BINARY_SIZE]);
-
-/**
- * @param [out] uuid expect to be 16 bytes for uuid in binary representation
- * @param [in] uuid_string expect to be exactly 37 (36 + \0) bytes long
- */
-hostmem_result grdu_uuid_from_string(uint8_t *uuid, const char *uuid_string);
-
-/**
- * @brief Write @p data as lowercase hex into a buffer the caller sized.
+ * @brief hostmem_binary_to_hex() for material that has to keep quiet about itself.
  *
- * @param[out] result_buffer Expected to hold data->size * 2 + 1 bytes. Not checkable from
- *                           here — a short buffer aborts inside libsodium.
- * @param[in]  data          Block to encode; not NULL and not empty.
- * @retval HOSTMEM_SUCCESS             Hex written, terminator included.
- * @retval HOSTMEM_ERROR_NULL_POINTER  @p result_buffer, @p data or its data pointer is NULL.
- * @retval HOSTMEM_ERROR_INVALID_PARAM @p data holds no bytes.
+ * Same arguments, same result codes, libsodium underneath. Its bin2hex is written so that no
+ * branch and no memory access follows the value being converted, and it is tested and reviewed
+ * for holding that — which is the part hostmem_binary_to_hex() cannot promise, however it
+ * is written. Roughly twice as slow: about 12 ns against 6 for 32 bytes in a ReleaseFast build,
+ * a ratio `bench_numberToString` reprints on whatever machine asks.
+ *
+ * Reach for this when the bytes are a key, a seed or a passphrase. For hashes, transaction ids,
+ * public keys and anything already public, hostmem_binary_to_hex() is the one to use.
+ *
+ * @see hostmem_binary_to_hex
+ * @note Constant time here covers this conversion only. Wiping the caller's buffers afterwards
+ *       and keeping them out of swap remains the caller's part.
  */
-hostmem_result grdu_binary_to_hex(char *result_buffer, const hostmem_memory_block *data);
+hostmem_result grdu_secret_to_hex(char *result_buffer, const hostmem_memory_block *data);
 
 /**
- * @param result_buffer[out] expected to be strlen(hex) / 2
- * @param hex[in] expected to be null terminated string
+ * @brief hostmem_binary_from_hex() for material that has to keep quiet about itself.
+ *
+ * Same arguments, same result codes, libsodium underneath. The wider of the two gaps: about
+ * 94 ns against 9 for 32 bytes in a ReleaseFast build, because sodium_hex2bin carries a state
+ * machine that cannot be vectorised at all.
+ *
+ * @param[out] result_buffer Expected to hold strlen(hex) / 2 bytes. Those bytes are wiped with
+ *                           sodium_memzero() — not memset(), whose result nobody reads and which
+ *                           a compiler may therefore drop — when the string turns out not to be
+ *                           hex, so a caller that overlooks the result code cannot read half a
+ *                           secret. What the buffer held before this call is not touched on that
+ *                           path either way: only the bytes this call decoded are cleared.
+ * @param[in]  hex           Null terminated string of an even number of hex digits.
+ * @retval HOSTMEM_SUCCESS             strlen(hex) / 2 bytes written.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p result_buffer or @p hex is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p hex has an odd number of characters. Refused before
+ *                                     anything is written, so @p result_buffer is left exactly
+ *                                     as the caller had it — there is nothing of this call's
+ *                                     making in it to hide, and how much of it is even
+ *                                     addressable is not knowable from here.
+ * @retval HOSTMEM_ERROR_DECODE_FAILED @p hex holds a character that is not a hex digit. The
+ *                                     strlen(hex) / 2 bytes are zeroed.
+ *
+ * @see hostmem_binary_from_hex
+ * @note Constant time here covers this conversion only. Wiping the caller's own buffers, this
+ *       one included once it has served its purpose, and keeping them out of swap remains the
+ *       caller's part.
  */
-hostmem_result grdu_binary_from_hex(uint8_t *result_buffer, const char *hex);
+hostmem_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex);
 
 /**
  * for precalculation of neccessary size
