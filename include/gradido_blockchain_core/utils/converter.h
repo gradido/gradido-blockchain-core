@@ -60,15 +60,31 @@ hostmem_result grdu_secret_to_hex(char *result_buffer, const hostmem_memory_bloc
 /**
  * @brief hostmem_binary_from_hex() for material that has to keep quiet about itself.
  *
- * Same arguments, same result codes, libsodium underneath, and the output is wiped with
- * sodium_memzero() rather than memset() when the string does not decode — a clearing whose
- * result nobody reads is the kind a compiler may drop, and here it must not. The wider of the
- * two gaps: about 94 ns against 9 for 32 bytes in a ReleaseFast build, because sodium_hex2bin
- * carries a state machine that cannot be vectorised at all.
+ * Same arguments, same result codes, libsodium underneath. The wider of the two gaps: about
+ * 94 ns against 9 for 32 bytes in a ReleaseFast build, because sodium_hex2bin carries a state
+ * machine that cannot be vectorised at all.
+ *
+ * @param[out] result_buffer Expected to hold strlen(hex) / 2 bytes. Those bytes are wiped with
+ *                           sodium_memzero() — not memset(), whose result nobody reads and which
+ *                           a compiler may therefore drop — when the string turns out not to be
+ *                           hex, so a caller that overlooks the result code cannot read half a
+ *                           secret. What the buffer held before this call is not touched on that
+ *                           path either way: only the bytes this call decoded are cleared.
+ * @param[in]  hex           Null terminated string of an even number of hex digits.
+ * @retval HOSTMEM_SUCCESS             strlen(hex) / 2 bytes written.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p result_buffer or @p hex is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p hex has an odd number of characters. Refused before
+ *                                     anything is written, so @p result_buffer is left exactly
+ *                                     as the caller had it — there is nothing of this call's
+ *                                     making in it to hide, and how much of it is even
+ *                                     addressable is not knowable from here.
+ * @retval HOSTMEM_ERROR_DECODE_FAILED @p hex holds a character that is not a hex digit. The
+ *                                     strlen(hex) / 2 bytes are zeroed.
  *
  * @see hostmem_binary_from_hex
- * @note Constant time here covers this conversion only. Wiping the caller's buffers afterwards
- *       and keeping them out of swap remains the caller's part.
+ * @note Constant time here covers this conversion only. Wiping the caller's own buffers, this
+ *       one included once it has served its purpose, and keeping them out of swap remains the
+ *       caller's part.
  */
 hostmem_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex);
 

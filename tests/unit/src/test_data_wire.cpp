@@ -71,3 +71,29 @@ TEST(HieroTransactionIdTest, BufferSizeCountsTheTerminator) {
   EXPECT_EQ(grdw_hiero_transaction_id_to_string(one_short, characters, &transactionId), characters);
   for (char c : one_short) { EXPECT_EQ(c, 'x') << "wrote into a buffer it had refused"; }
 }
+
+// promise: the size calculation and the writer agree about a value that cannot be printed. Nanos
+// outside 0..999999999 are what a wire type may carry and a timestamp may not, and the pair used
+// to disagree there -- the calculation added the account id's length to the timestamp's 0 and
+// returned a figure that measured nothing, while the writer refused outright. A caller sizing a
+// buffer from the first and then calling the second would have been told two different things.
+TEST(HieroTransactionIdTest, UnprintableValidStartIsZeroFromBothSides) {
+  for (int32_t nanos : {-1, 1000000000, INT32_MIN, INT32_MAX}) {
+    grdw_hiero_transaction_id transactionId = {
+        .transactionValidStart = {.seconds = 171627121, .nanos = nanos},
+        .accountID = {.shardNum = 0, .realmNum = 0, .accountNum = 1233}
+    };
+
+    EXPECT_EQ(grdw_hiero_transaction_id_calculate_string_size(&transactionId), 0u)
+        << "nanos " << nanos;
+
+    char buffer[64];
+    memset(buffer, 'x', sizeof(buffer));
+    EXPECT_EQ(grdw_hiero_transaction_id_to_string(buffer, sizeof(buffer), &transactionId), 0u)
+        << "nanos " << nanos;
+    for (char c : buffer) { EXPECT_EQ(c, 'x') << "nanos " << nanos << ": wrote anyway"; }
+  }
+
+  EXPECT_EQ(grdw_hiero_transaction_id_calculate_string_size(nullptr), 0u);
+  EXPECT_EQ(grdw_hiero_account_id_calculate_string_size(nullptr), 0u);
+}

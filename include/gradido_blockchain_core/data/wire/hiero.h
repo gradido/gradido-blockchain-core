@@ -75,6 +75,14 @@ const grdd_timestamp *grdw_hiero_transaction_id_get_transaction_valid_start(
 const grdw_hiero_account_id *grdw_hiero_transaction_id_get_account_id(
     const grdw_hiero_transaction_id *hiero_transaction_id
 );
+/**
+ * @brief Characters grdw_hiero_transaction_id_to_string() would write, terminator not counted.
+ *
+ * @return The character count, or 0 when @p hiero_transaction_id is NULL or its valid start
+ *         carries nanos outside 0..999999999 -- the same 0 that
+ *         grdw_hiero_transaction_id_to_string() answers with for such a value, so sizing a
+ *         buffer from this figure and then writing into it cannot disagree.
+ */
 size_t grdw_hiero_transaction_id_calculate_string_size(
     const grdw_hiero_transaction_id *hiero_transaction_id
 );

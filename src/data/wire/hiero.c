@@ -67,8 +67,18 @@ size_t grdw_hiero_transaction_id_calculate_string_size(
     const grdw_hiero_transaction_id *hiero_transaction_id
 ) {
   if (!hiero_transaction_id) { return 0; }
-  return grdw_hiero_account_id_calculate_string_size(&hiero_transaction_id->accountID) +
-         grdd_timestamp_calculate_string_size(&hiero_transaction_id->transactionValidStart) + 1;
+
+  // 0 from the timestamp means it cannot be printed at all, and adding it to the account id's
+  // length would answer with a number that measures nothing -- a caller would size a buffer from
+  // it and then meet the 0 that grdw_hiero_transaction_id_to_string() answers with. The two say
+  // the same thing about the same value.
+  size_t timestamp_size =
+      grdd_timestamp_calculate_string_size(&hiero_transaction_id->transactionValidStart);
+  if (!timestamp_size) { return 0; }
+
+  // the '@' between the two parts
+  return grdw_hiero_account_id_calculate_string_size(&hiero_transaction_id->accountID) + 1 +
+         timestamp_size;
 }
 
 size_t grdw_hiero_transaction_id_to_string(

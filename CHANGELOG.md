@@ -78,6 +78,11 @@ the prefix; the signatures and result codes did not change.
   them landed in the byte the account id had used for its terminator. It now measures the whole
   line up front. It also used to leave the buffer without a terminator when the timestamp could
   not be printed, and returns 0 for that case instead.
+- `grdw_hiero_transaction_id_calculate_string_size()` disagreed with the writer about a valid
+  start whose nanos fall outside 0..999999999 -- something a wire type may carry and a timestamp
+  may not. It added the account id's length to the timestamp's 0 and returned a figure that
+  measured nothing, while `grdw_hiero_transaction_id_to_string()` refused the same value. Both
+  answer 0 now, so sizing a buffer from the one and writing with the other cannot disagree.
 - **A heap buffer overflow in the uuid parser.** The version in 0.15.2 counted separators instead
   of checking their positions, and every missing one turned two more characters into an output
   byte: a 36 character string of pure hex wrote 18 bytes into the 16 the caller owns. A string of

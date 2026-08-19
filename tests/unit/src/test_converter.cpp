@@ -104,12 +104,21 @@ TEST(HexTest, SecretVariantsRefuseTheSameStringsAndClearWhatTheyDecoded) {
     EXPECT_EQ(hostmem_binary_from_hex(fast, c.input), c.expected) << c.what;
     EXPECT_EQ(grdu_secret_from_hex(secret, c.input), c.expected) << c.what;
 
+    const size_t covered = strlen(c.input) / 2;
     if (c.expected == HOSTMEM_ERROR_DECODE_FAILED) {
-      const size_t covered = strlen(c.input) / 2;
       for (size_t i = 0; i < covered; ++i) {
         EXPECT_EQ(secret[i], 0) << c.what << ": left a decoded byte at " << i;
       }
       EXPECT_EQ(memcmp(fast, secret, covered), 0) << c.what;
+    } else {
+      // A parameter error is refused before anything is written, so what the caller had in the
+      // buffer is still there. Clearing it would mean erasing bytes this call never produced --
+      // and the range to clear is not knowable from a signature that derives its length from the
+      // string. Wiping a buffer that has served its purpose stays with whoever owns it.
+      for (size_t i = 0; i < covered; ++i) {
+        EXPECT_EQ(secret[i], 0xCD) << c.what << ": touched a buffer it had refused, at " << i;
+        EXPECT_EQ(fast[i], 0xCD) << c.what << ": touched a buffer it had refused, at " << i;
+      }
     }
     for (size_t i = strlen(c.input) / 2; i < sizeof(secret); ++i) {
       EXPECT_EQ(secret[i], 0xCD) << c.what << ": wrote past what the string covers";
