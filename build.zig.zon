@@ -17,8 +17,8 @@
             .hash = "zig_compile_commands-0.0.1-OZg5-e_JAAAGg1WHAePtq4l4Uvjs34BexnFFCZk63EaG",
         },
         .hostmem = .{
-            .url = "https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.2.0.tar.gz",
-            .hash = "hostmem-0.2.0-frufwigKBgCXcI3GPC8JWo8_plOh_kbpH1IkPXKbXrv4",
+            .url = "https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.3.1.tar.gz",
+            .hash = "hostmem-0.3.1-frufwryACAAb1BArESCmO7cHer4MprHs1e9F3g9vPPWG",
         },
     },
     .paths = .{""},

@@ -773,7 +773,7 @@ TEST(PBToolsTest, GradidoTransaction_Decode_CommunityRoot_1000X) {
   hostmem_mono_timer_reset(&timeUsed);
   auto bin = fromBase64(communityRootTransactionBase64, strlen(communityRootTransactionBase64));
   alignas(8) uint8_t staticBuffer[BUFFER_SIZE * 2];
-  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem, staticBuffer, BUFFER_SIZE * 2), HOSTMEM_SUCCESS);
   char buffer[256];
   hostmem_mono_timer_reset(&timeUsed);
   int i = 0;
@@ -801,7 +801,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
 
   grdw_gradido_transaction tx{};
   alignas(8) uint8_t staticBuffer[128]{};
-  ASSERT_EQ(hostmem_init_arena_static(&mem, staticBuffer, 128), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem, staticBuffer, 128), HOSTMEM_SUCCESS);
   grdw_gradido_transaction_init(&tx);
   // tx.body_bytes = fromBase64(communityRootTransactionBodyBase64,
   // strlen(communityRootTransactionBodyBase64));
@@ -828,7 +828,7 @@ TEST(PBToolsTest, GradidoTransaction_Encode_CommunityRoot_1000X) {
   hostmem_memory_block bufferPtr = {.data = buffer, .size = 256};
   int finalSize = 0;
   hostmem mem2{};
-  ASSERT_EQ(hostmem_init_arena_static(&mem2, staticBuffer2, 304), HOSTMEM_SUCCESS);
+  ASSERT_EQ(hostmem_init_arena_borrow(&mem2, staticBuffer2, 304), HOSTMEM_SUCCESS);
   int i = 0;
   hostmem_mono_timer_reset(&timeUsed);
   for (; i < 1000; ++i) {
