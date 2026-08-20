@@ -1,3 +1,6 @@
 [submodule "gradido_protocol"]
 	path = gradido_protocol
 	url = https://github.com/gradido/gradido_protocol.git
+[submodule "third_party/yyjson"]
+	path = third_party/yyjson
+	url = https://github.com/ibireme/yyjson.git

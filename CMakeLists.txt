@@ -123,7 +123,10 @@ endif()
 FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
 FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
 FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
-set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128})
+# yyjson is a submodule of the upstream repository, which ships its tests, fuzzers and
+# tools beside the library. Only src/ is named here; the rest never enters the build.
+FILE(GLOB YYJSON "third_party/yyjson/src/*.c" "third_party/yyjson/src/*.h")
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128} ${YYJSON})
 
 if(MSVC)
 if (USE_SODIUM)
@@ -141,6 +144,7 @@ endif()
     source_group("third_party/fp256" FILES ${FP256})
     source_group("third_party/pbtools" FILES ${PBTOOLS})
     source_group("third_party/r128" FILES ${R128})
+    source_group("third_party/yyjson" FILES ${YYJSON})
 endif()
 
 include_directories(
@@ -149,6 +153,7 @@ include_directories(
     include/gradido_blockchain_core/data/proto/gradido
     third_party
     third_party/pbtools
+    third_party/yyjson/src
 )
 
 add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC} ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC})
