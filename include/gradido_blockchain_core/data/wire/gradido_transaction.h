@@ -2,8 +2,10 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_GRADIDO_TRANSACTION_H
 
 #include "basic_types.h"
+#include "gradido_blockchain_core/data/wire/pb_workspace.h"
 #include "gradido_blockchain_core/result.h"
 #include "hostmem/memory_block.h"
+#include "hostmem/multi_arena.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -58,7 +60,7 @@ void grdw_gradido_transaction_init(grdw_gradido_transaction *tx);
  *                              hasn't enough space.
  */
 hostmem_result grdw_gradido_transaction_reserve_sig_map(
-    grdw_gradido_transaction *tx, uint8_t sig_map_count, hostmem *allocator
+    grdw_gradido_transaction *tx, uint8_t sig_map_count, hostmem_multi_arena *allocator
 );
 
 /**
@@ -94,7 +96,10 @@ hostmem_result grdw_gradido_transaction_copy_sig_map(
  *                      not freed individually but as a whole.
  */
 hostmem_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const hostmem_memory_block *binary_src, hostmem *allocator
+    grdw_gradido_transaction *tx,
+    const hostmem_memory_block *binary_src,
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -117,7 +122,7 @@ hostmem_result grdw_gradido_transaction_encode(
     hostmem_memory_block *binary_dst,
     int *final_size,
     const grdw_gradido_transaction *tx,
-    hostmem *allocator
+    const hostmem_memory_block *workspace
 );
 
 /**
@@ -129,7 +134,7 @@ hostmem_result grdw_gradido_transaction_encode(
  * @param[in/out] tx        Gradido transaction to free.
  * @param[in]     allocator Memory allocator used for allocating memory.
  */
-void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, hostmem *allocator);
+void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, hostmem_multi_arena *allocator);
 
 /** @} */
 

@@ -3,10 +3,12 @@
 
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
+#include "gradido_blockchain_core/data/wire/pb_workspace.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_transaction.h"
 #include "hostmem/memory_block.h"
+#include "hostmem/multi_arena.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -73,7 +75,7 @@ void grdw_confirmed_transaction_init(grdw_confirmed_transaction *tx);
  * space
  */
 hostmem_result grdw_confirmed_transaction_reserve_account_balances(
-    grdw_confirmed_transaction *tx, uint8_t account_balances_count, hostmem *allocator
+    grdw_confirmed_transaction *tx, uint8_t account_balances_count, hostmem_multi_arena *allocator
 );
 
 /**
@@ -110,7 +112,10 @@ hostmem_result grdw_confirmed_transaction_copy_account_balance(
  * @whisper             Settlement takes shape
  */
 hostmem_result grdw_confirmed_transaction_decode(
-    grdw_confirmed_transaction *tx, const hostmem_memory_block *binary_src, hostmem *allocator
+    grdw_confirmed_transaction *tx,
+    const hostmem_memory_block *binary_src,
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -134,7 +139,7 @@ hostmem_result grdw_confirmed_transaction_encode(
     hostmem_memory_block *binary_dst,
     int *final_size,
     const grdw_confirmed_transaction *tx,
-    hostmem *allocator
+    const hostmem_memory_block *workspace
 );
 
 /**
@@ -147,7 +152,9 @@ hostmem_result grdw_confirmed_transaction_encode(
  * @param[in/out] tx        Confirmed transaction to free.
  * @param[in]     allocator Memory allocator used for freeing.
  */
-void grdw_confirmed_transaction_free(grdw_confirmed_transaction *tx, hostmem *allocator);
+void grdw_confirmed_transaction_free(
+    grdw_confirmed_transaction *tx, hostmem_multi_arena *allocator
+);
 
 /** @} */
 

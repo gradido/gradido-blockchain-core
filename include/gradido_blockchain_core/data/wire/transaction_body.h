@@ -3,10 +3,12 @@
 
 #include "basic_types.h"
 
+#include "gradido_blockchain_core/data/wire/pb_workspace.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
 #include "hostmem/memory_block.h"
+#include "hostmem/multi_arena.h"
 #include "specific_transactions.h"
 
 /** @defgroup wire Wire Format Serialization
@@ -97,7 +99,7 @@ void grdw_transaction_body_init(grdw_transaction_body *body);
  * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  the allocator has no room for the array.
  */
 hostmem_result grdw_transaction_body_reserve_memos(
-    grdw_transaction_body *body, size_t memos_count, hostmem *allocator
+    grdw_transaction_body *body, size_t memos_count, hostmem_multi_arena *allocator
 );
 
 /**
@@ -132,7 +134,10 @@ hostmem_result grdw_transaction_body_move_memo(
  *                          HOSTMEM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
  */
 hostmem_result grdw_transaction_body_copy_memo(
-    grdw_transaction_body *body, const grdw_encrypted_memo *memo, uint8_t index, hostmem *allocator
+    grdw_transaction_body *body,
+    const grdw_encrypted_memo *memo,
+    uint8_t index,
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -152,7 +157,10 @@ hostmem_result grdw_transaction_body_copy_memo(
  * @whisper                From chaos comes form
  */
 hostmem_result grdw_transaction_body_decode(
-    grdw_transaction_body *body, const hostmem_memory_block *binary_src, hostmem *allocator
+    grdw_transaction_body *body,
+    const hostmem_memory_block *binary_src,
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -176,7 +184,7 @@ hostmem_result grdw_transaction_body_encode(
     hostmem_memory_block *binary_dst,
     int *final_size,
     const grdw_transaction_body *body,
-    hostmem *allocator
+    const hostmem_memory_block *workspace
 );
 
 /**
@@ -189,7 +197,7 @@ hostmem_result grdw_transaction_body_encode(
  * @param[in/out] body      Transaction body to free.
  * @param[in]     allocator Memory allocator used for allocating memory.
  */
-void grdw_transaction_body_free(grdw_transaction_body *body, hostmem *allocator);
+void grdw_transaction_body_free(grdw_transaction_body *body, hostmem_multi_arena *allocator);
 
 /** @} */
 

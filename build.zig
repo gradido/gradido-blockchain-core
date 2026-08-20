@@ -3,13 +3,15 @@ const zcc = @import("compile_commands");
 
 /// Recursively add .c files from a directory.
 ///
-/// @p skip_dirs names subdirectories of @p dir_path that the walk leaves alone — for a
-/// vendored library that ships its own tests and tools beside the source it wants built.
+/// @p skip names what the walk leaves alone, relative to @p dir_path: a subdirectory, for a
+/// vendored library that ships its own tests and tools beside the source it wants built, or a
+/// single file, for a translation unit fragment that is included by others rather than compiled
+/// on its own.
 fn addDirSources(
     lib: *std.Build.Step.Compile,
     b: *std.Build,
     dir_path: []const u8,
-    skip_dirs: []const []const u8,
+    skip: []const []const u8,
 ) void {
     var dir = b.build_root.handle.openDir(dir_path, .{ .iterate = true }) catch |err| {
         std.debug.panic("Failed to open directory '{s}': {s}", .{ dir_path, @errorName(err) });
@@ -23,7 +25,8 @@ fn addDirSources(
 
     outer: while (walker.next() catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".c")) {
-            for (skip_dirs) |skipped| {
+            for (skip) |skipped| {
+                if (std.mem.eql(u8, entry.path, skipped)) continue :outer;
                 if (std.mem.startsWith(u8, entry.path, b.fmt("{s}/", .{skipped}))) continue :outer;
             }
             const full_path = b.fmt("{s}/{s}", .{ dir_path, entry.path });
@@ -188,7 +191,10 @@ pub fn build(b: *std.Build) void {
     core_lib.addIncludePath(b.path("third_party/pbtools"));
     core_lib.addIncludePath(b.path("third_party/yyjson/src"));
 
-    addDirSources(core_lib, b, "src", &.{});
+    // json_writer.c is a translation unit fragment: the two json mappings include it whole, so
+    // compiling it here as well would build an object of unreachable statics. See its file
+    // comment for why it is not a header.
+    addDirSources(core_lib, b, "src", &.{"mapping/json_writer.c"});
     // yyjson is a submodule of the upstream repository, which ships its tests, fuzzers and
     // tools beside the library. The walk skips it whole and its one source is named here,
     // so a recursive sweep cannot pick up a second main() or a fuzzer entry point.

@@ -1,7 +1,10 @@
 #include "bench_report.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
+#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
+#include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/mapping/json_from_runtime.h"
+#include "gradido_blockchain_core/mapping/json_from_wire.h"
 #include "hostmem/memory.h"
 #include "hostmem/mono_timer.h"
 #include "hostmem/multi_arena.h"
@@ -45,6 +48,9 @@
 #define LARGE_MEMO_SIZE 256
 #define LARGE_BODY_SIZE 4096
 
+/** @brief What the decoding rows hand pbtools; generous for the body they decode. */
+#define PB_WORKSPACE_SIZE 8192u
+
 /** @brief Compact text size of the typical transfer, as the size rows below report it. */
 #define TYPICAL_TEXT_SIZE 1731
 
@@ -62,6 +68,9 @@ static grdw_signature_pair large_signatures[LARGE_SIGNATURES];
 static uint8_t large_memo_bytes[LARGE_MEMO_SIZE];
 static grdw_encrypted_memo large_memos[2];
 static uint8_t large_body_bytes[LARGE_BODY_SIZE];
+
+static grdw_transaction_body wire_body;
+static grdw_confirmed_transaction wire_confirmed;
 
 static grdr_complete_transaction tx_minimal;
 static grdr_complete_transaction tx_typical;
@@ -147,6 +156,46 @@ static void prepare_transactions() {
   tx_large.encrypted_memos_count = 2;
   tx_large.body_bytes.data = large_body_bytes;
   tx_large.body_bytes.size = LARGE_BODY_SIZE;
+
+  // the wire pair carries the same payload as the typical runtime transfer, so the two views
+  // are compared on the same data rather than on two different transactions
+  grdw_transaction_body_init(&wire_body);
+  wire_body.created_at.seconds = 1700000000;
+  wire_body.created_at.nanos = 2912;
+  wire_body.transaction_type = GRDT_TRANSACTION_TRANSFER;
+  wire_body.type = GRDT_CROSS_GROUP_LOCAL;
+  ramp(wire_body.transfer.sender.pubkey, SIGN_PUBLIC_KEY_SIZE, 0x10);
+  wire_body.transfer.sender.amount = 12345;
+  memcpy(wire_body.transfer.sender.community_uuid, community_uuid, HOSTMEM_UUID_BINARY_SIZE);
+  ramp(wire_body.transfer.recipient, SIGN_PUBLIC_KEY_SIZE, 0x40);
+  wire_body.memos = typical_memos;
+  wire_body.memos_count = 1;
+
+  grdw_confirmed_transaction_init(&wire_confirmed);
+  wire_confirmed.id = 121;
+  wire_confirmed.confirmed_at.seconds = 1700000060;
+  memcpy(wire_confirmed.running_hash, tx_typical.tx_running_hash, GENERIC_HASH_SIZE);
+  wire_confirmed.ledger_anchor.type = GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID;
+  wire_confirmed.ledger_anchor.id = 4711;
+  wire_confirmed.balance_derivation = GRDT_BALANCE_DERIVATION_NODE;
+  wire_confirmed.account_balances = typical_balances;
+  wire_confirmed.account_balances_count = TYPICAL_BALANCES;
+  wire_confirmed.transaction.sig_map = typical_signatures;
+  wire_confirmed.transaction.sig_map_count = TYPICAL_SIGNATURES;
+  // a real encoded body: the decoding rows below have to decode something, and encoding it here
+  // keeps the benchmark honest about what a body of this shape actually costs
+  static uint8_t encoded_body[512];
+  _Alignas(8) static uint8_t encode_workspace[8192];
+  {
+    hostmem_memory_block destination = {encoded_body, sizeof(encoded_body)};
+    hostmem_memory_block workspace = {encode_workspace, sizeof(encode_workspace)};
+    int final_size = 0;
+    if (HOSTMEM_SUCCESS ==
+        grdw_transaction_body_encode(&destination, &final_size, &wire_body, &workspace)) {
+      wire_confirmed.transaction.body_bytes.data = encoded_body;
+      wire_confirmed.transaction.body_bytes.size = (uint32_t)final_size;
+    }
+  }
 }
 
 // ****************** the chains ************************************************************
@@ -179,6 +228,78 @@ static void render_repeatedly(
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
     if (HOSTMEM_SUCCESS != grdm_complete_transaction_to_json(&json, tx, format, &work, &result)) {
+      printf("  render failed, benchmark aborted\n");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+/** @brief The wire counterparts, run through the same reset cycle as the rows above. */
+static void bench_wire_body(int step_count) {
+  hostmem_memory_block json = {0};
+  for (int i = 0; i < step_count; ++i) {
+    if (HOSTMEM_SUCCESS !=
+        grdm_transaction_body_to_json(&json, &wire_body, GRDM_JSON_COMPACT, &work, &result)) {
+      printf("  render failed, benchmark aborted\n");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+static void bench_wire_gradido(int step_count) {
+  hostmem_memory_block json = {0};
+  for (int i = 0; i < step_count; ++i) {
+    if (HOSTMEM_SUCCESS != grdm_gradido_transaction_to_json(
+                               &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, &work, &result
+                           )) {
+      printf("  render failed, benchmark aborted\n");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+static void bench_wire_gradido_decoded(int step_count) {
+  hostmem_memory_block json = {0};
+  for (int i = 0; i < step_count; ++i) {
+    if (HOSTMEM_SUCCESS !=
+        grdm_gradido_transaction_with_body_to_json(
+            &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
+        )) {
+      printf("  render failed, benchmark aborted\n");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+static void bench_wire_confirmed_decoded(int step_count) {
+  hostmem_memory_block json = {0};
+  for (int i = 0; i < step_count; ++i) {
+    if (HOSTMEM_SUCCESS !=
+        grdm_confirmed_transaction_with_body_to_json(
+            &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
+        )) {
+      printf("  render failed, benchmark aborted\n");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+static void bench_wire_confirmed(int step_count) {
+  hostmem_memory_block json = {0};
+  for (int i = 0; i < step_count; ++i) {
+    if (HOSTMEM_SUCCESS != grdm_confirmed_transaction_to_json(
+                               &json, &wire_confirmed, GRDM_JSON_COMPACT, &work, &result
+                           )) {
       printf("  render failed, benchmark aborted\n");
       return;
     }
@@ -326,6 +447,36 @@ static void report_sizes() {
       "%-*s %12u  %10u\n", BENCH_NAME_WIDTH, "  large, 4 KB body_bytes",
       measure_size(&tx_large, GRDM_JSON_COMPACT), measure_size(&tx_large, GRDM_JSON_PRETTY)
   );
+
+  hostmem_memory_block json = {0};
+  if (HOSTMEM_SUCCESS ==
+      grdm_transaction_body_to_json(&json, &wire_body, GRDM_JSON_COMPACT, &work, &result)) {
+    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire transaction body", json.size);
+  }
+  hostmem_multi_arena_reset(&work);
+  hostmem_multi_arena_reset(&result);
+  if (HOSTMEM_SUCCESS == grdm_gradido_transaction_to_json(
+                             &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, &work, &result
+                         )) {
+    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire gradido transaction", json.size);
+  }
+  hostmem_multi_arena_reset(&work);
+  hostmem_multi_arena_reset(&result);
+  if (HOSTMEM_SUCCESS == grdm_confirmed_transaction_to_json(
+                             &json, &wire_confirmed, GRDM_JSON_COMPACT, &work, &result
+                         )) {
+    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire confirmed transaction", json.size);
+  }
+  hostmem_multi_arena_reset(&work);
+  hostmem_multi_arena_reset(&result);
+  if (HOSTMEM_SUCCESS ==
+      grdm_confirmed_transaction_with_body_to_json(
+          &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
+      )) {
+    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  ... with the body decoded", json.size);
+  }
+  hostmem_multi_arena_reset(&work);
+  hostmem_multi_arena_reset(&result);
 }
 
 int main(void) {
@@ -353,6 +504,20 @@ int main(void) {
   bench_step(bench_minimal_pretty, STEP_COUNT, "  minimal, no arrays", "transaction");
   bench_step(bench_typical_pretty, STEP_COUNT, "  typical transfer", "transaction");
   bench_step(bench_large_pretty, LARGE_STEP_COUNT, "  large, 4 KB body_bytes", "transaction");
+
+  bench_section("wire view, compact");
+  bench_step(bench_wire_body, STEP_COUNT, "  transaction body", "body");
+  bench_step(bench_wire_gradido, STEP_COUNT, "  gradido transaction, body as hex", "transaction");
+  bench_step(
+      bench_wire_gradido_decoded, STEP_COUNT, "  gradido transaction, body decoded", "transaction"
+  );
+  bench_step(
+      bench_wire_confirmed, STEP_COUNT, "  confirmed transaction, body as hex", "transaction"
+  );
+  bench_step(
+      bench_wire_confirmed_decoded, STEP_COUNT, "  confirmed transaction, body decoded",
+      "transaction"
+  );
 
   bench_section("chain state, typical transfer compact");
   bench_step(bench_typical_compact, STEP_COUNT, "  reset between calls", "transaction");

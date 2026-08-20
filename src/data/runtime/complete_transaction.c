@@ -6,6 +6,7 @@
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
 #include "hostmem/memory.h"
+#include "hostmem/multi_arena.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -42,28 +43,26 @@ hostmem_result grdr_complete_transaction_init_from_protobuf(
     const uint8_t *serialized_data,
     uint32_t serialized_len,
     const uint8_t community_uuid[16],
-    uint8_t *buffer,
-    uint32_t buffer_size
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *scratch
 ) {
-  if (!tx || !serialized_data || !community_uuid || !buffer) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (!serialized_len || !buffer_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
-
-  // zeroed: init inspects the previous state to find an arena it already owns
-  hostmem alloc = {0};
-  hostmem_result init_result = hostmem_init_arena_borrow(&alloc, buffer, buffer_size);
-  if (HOSTMEM_SUCCESS != init_result) { return init_result; }
+  if (!tx || !serialized_data || !community_uuid || !scratch) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!serialized_len) { return HOSTMEM_ERROR_INVALID_PARAM; }
 
   grdw_confirmed_transaction wire_tx;
   grdw_confirmed_transaction_init(&wire_tx);
 
   hostmem_memory_block input_block = {(uint8_t *)serialized_data, serialized_len};
-  int result = grdw_confirmed_transaction_decode(&wire_tx, &input_block, &alloc);
-  if (result != HOSTMEM_SUCCESS) { return result; }
+  hostmem_result result =
+      grdw_confirmed_transaction_decode(&wire_tx, &input_block, workspace, scratch);
+  if (HOSTMEM_SUCCESS != result) { return result; }
 
+  // the same stretch again: the confirmed transaction copied what it keeps into the chain
+  // above, so nothing here still points into the workspace
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
-  result = grdw_transaction_body_decode(&body, &wire_tx.transaction.body_bytes, &alloc);
-  if (result != HOSTMEM_SUCCESS) { return result; }
+  result = grdw_transaction_body_decode(&body, &wire_tx.transaction.body_bytes, workspace, scratch);
+  if (HOSTMEM_SUCCESS != result) { return result; }
 
   grdr_complete_transaction_release(tx);
   return grdm_complete_transaction_from_wire(tx, &body, &wire_tx, community_uuid);

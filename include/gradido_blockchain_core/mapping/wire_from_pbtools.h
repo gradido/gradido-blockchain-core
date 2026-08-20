@@ -3,6 +3,7 @@
 
 // make sure, that generated protobuf enum is identical with grdw enum
 #include "gradido_blockchain_core/result.h"
+#include "hostmem/multi_arena.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +42,7 @@ typedef struct hostmem hostmem;
 hostmem_result grdm_transaction_body_from_pbtools(
     grdw_transaction_body *transaction_body,
     const struct proto_gradido_transaction_body_t *pb_transaction_body,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -59,7 +60,7 @@ hostmem_result grdm_transaction_body_from_pbtools(
 hostmem_result grdm_gradido_transaction_from_pb(
     grdw_gradido_transaction *tx,
     const struct proto_gradido_gradido_transaction_t *pbtx,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -77,7 +78,7 @@ hostmem_result grdm_gradido_transaction_from_pb(
 hostmem_result grdm_confirmed_transaction_from_pb(
     grdw_confirmed_transaction *confirmed_tx,
     const struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 );
 
 /** @} */

@@ -1,6 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MAPPING_JSON_FROM_RUNTIME_H
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_JSON_FROM_RUNTIME_H
 
+#include "gradido_blockchain_core/mapping/json_format.h"
 #include "gradido_blockchain_core/result.h"
 #include "hostmem/memory_block.h"
 
@@ -44,18 +45,6 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
 // forward declaration from hostmem; the definition lives in "hostmem/multi_arena.h" and is
 // needed only by callers that open a chain, not by this header, which passes it on by pointer
 typedef struct hostmem_multi_arena hostmem_multi_arena;
-
-/**
- * @brief Shape of the rendered text.
- *
- * @whisper The same words, set either close together or spread out
- */
-typedef enum grdm_json_format {
-  //! No whitespace between tokens -- the form to store or to send.
-  GRDM_JSON_COMPACT = 0,
-  //! Four space indent, one member per line -- the form to read.
-  GRDM_JSON_PRETTY
-} grdm_json_format;
 
 /**
  * @brief Render a complete runtime transaction as JSON text.

@@ -35,6 +35,7 @@
 #include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/utils/version.h"
 #include "hostmem/memory.h"
+#include "hostmem/multi_arena.h"
 
 static hostmem_result community_uuid_from_pbtools(
     uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE], const struct pbtools_bytes_t *bytes
@@ -51,11 +52,14 @@ static hostmem_result community_uuid_from_pbtools(
 }
 
 static hostmem_result memory_block_from_pbtools(
-    hostmem_memory_block *dst, const struct pbtools_bytes_t *bytes, hostmem *allocator
+    hostmem_memory_block *dst, const struct pbtools_bytes_t *bytes, hostmem_multi_arena *allocator
 ) {
   if (!dst || !bytes || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (!bytes->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
-  hostmem_result result = hostmem_memory_block_alloc(dst, bytes->size, allocator);
+  // hostmem ships its memory_block helpers for a single arena only; on a chain the two steps
+  // are written out
+  hostmem_result result = hostmem_multi_arena_alloc(&dst->data, bytes->size, allocator);
+  dst->size = bytes->size;
   if (HOSTMEM_SUCCESS != result) { return result; }
 
   memcpy(dst->data, bytes->buf_p, bytes->size);
@@ -80,7 +84,7 @@ static hostmem_result account_balance_from_pbtools(
 static hostmem_result encrypted_memo_from_pbtools(
     grdw_encrypted_memo *encrypted_memo,
     const struct proto_gradido_encrypted_memo_t *pb_encrypted_memo,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 ) {
   if (!encrypted_memo || !pb_encrypted_memo || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   encrypted_memo->type = (grdt_memo_key)pb_encrypted_memo->type;
@@ -322,7 +326,7 @@ static hostmem_result register_address_from_pbtools(
 hostmem_result grdm_transaction_body_from_pbtools(
     grdw_transaction_body *transaction_body,
     const struct proto_gradido_transaction_body_t *pb_transaction_body,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 ) {
   if (!transaction_body || !pb_transaction_body || !allocator) {
     return HOSTMEM_ERROR_NULL_POINTER;
@@ -351,8 +355,9 @@ hostmem_result grdm_transaction_body_from_pbtools(
     }
   }
   if (pb_transaction_body->other_community_uuid.size) {
-    result =
-        hostmem_alloc(&transaction_body->other_community_uuid, HOSTMEM_UUID_BINARY_SIZE, allocator);
+    result = hostmem_multi_arena_alloc(
+        &transaction_body->other_community_uuid, HOSTMEM_UUID_BINARY_SIZE, allocator
+    );
     if (HOSTMEM_SUCCESS != result) { return result; }
     result = community_uuid_from_pbtools(
         transaction_body->other_community_uuid, &pb_transaction_body->other_community_uuid
@@ -418,7 +423,7 @@ hostmem_result grdm_transaction_body_from_pbtools(
 hostmem_result grdm_gradido_transaction_from_pb(
     grdw_gradido_transaction *tx,
     const struct proto_gradido_gradido_transaction_t *pbtx,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 ) {
   if (!tx || !pbtx) { return HOSTMEM_ERROR_NULL_POINTER; }
   hostmem_result result = HOSTMEM_ERROR_NOT_INITIALIZED;
@@ -450,7 +455,7 @@ hostmem_result grdm_gradido_transaction_from_pb(
 hostmem_result grdm_confirmed_transaction_from_pb(
     grdw_confirmed_transaction *confirmed_tx,
     const struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
-    hostmem *allocator
+    hostmem_multi_arena *allocator
 ) {
   if (!confirmed_tx || !pb_confirmed_tx || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
   if (GRDU_GRADIDO_PROTOCOL_VERSION != pb_confirmed_tx->version_number) {

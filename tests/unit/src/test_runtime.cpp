@@ -12,6 +12,7 @@
 #include "gradido_blockchain_core/utils/version.h"
 #include "hostmem/memory.h"
 #include "hostmem/mono_timer.h"
+#include "hostmem/multi_arena.h"
 #include "key_pairs.h"
 
 #include "memory_limit.h"
@@ -47,7 +48,8 @@ static hostmem_memory_block fromBase64(
       buffer, binSize, base64String, size, nullptr, &resultBinSize, &firstInvalidByte, variant
   );
   if (0 != convertResult) {
-    printf("invalid base64: error at: %lld\n", firstInvalidByte - base64String);
+    // %td, not %lld: the difference of two pointers is ptrdiff_t, which is long here
+    printf("invalid base64: error at: %td\n", firstInvalidByte - base64String);
   }
   if (resultBinSize < binSize) {
     result.data = (uint8_t *)malloc(resultBinSize);
@@ -62,19 +64,24 @@ static hostmem_memory_block fromBase64(
 }
 
 TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
-  hostmem mem{};
-  ASSERT_EQ(hostmem_init_arena(&mem, 2048), HOSTMEM_SUCCESS);
+  hostmem_multi_arena mem{};
+  ASSERT_EQ(hostmem_multi_arena_init(&mem, 2048, 0, nullptr), HOSTMEM_SUCCESS);
 
   grdw_confirmed_transaction confirmed_tx;
   grdw_confirmed_transaction_init(&confirmed_tx);
   auto base64 = fromBase64(
       confirmedCommunityRootTransactionBase64, strlen(confirmedCommunityRootTransactionBase64)
   );
-  ASSERT_EQ(grdw_confirmed_transaction_decode(&confirmed_tx, &base64, &mem), HOSTMEM_SUCCESS);
+  // the caller sizes the stretch pbtools works in, and hands the same one to both decodes
+  alignas(8) uint8_t workspaceBytes[8192];
+  hostmem_memory_block workspace = {workspaceBytes, sizeof(workspaceBytes)};
+  ASSERT_EQ(
+      grdw_confirmed_transaction_decode(&confirmed_tx, &base64, &workspace, &mem), HOSTMEM_SUCCESS
+  );
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   ASSERT_EQ(
-      grdw_transaction_body_decode(&body, &confirmed_tx.transaction.body_bytes, &mem),
+      grdw_transaction_body_decode(&body, &confirmed_tx.transaction.body_bytes, &workspace, &mem),
       HOSTMEM_SUCCESS
   );
   grdr_complete_transaction tx;
@@ -88,5 +95,5 @@ TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
   // fromBase64 hands back malloc'd bytes -- three owners, three releases
   grdr_complete_transaction_release(&tx);
   free(base64.data);
-  hostmem_release(&mem);
+  hostmem_multi_arena_release(&mem);
 }
