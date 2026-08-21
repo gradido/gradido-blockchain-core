@@ -93,10 +93,13 @@ FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_block
 FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
-# json_writer.c is a translation unit fragment: the two json mappings include it whole, so
-# compiling it here as well would build an object of unreachable statics. See its file comment
-# for why it is not a header.
-list(REMOVE_ITEM MAPPING "${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/json_writer.c")
+# Translation unit fragments: the json mappings include these whole, so compiling them here as
+# well would build objects of unreachable statics. See their file comments for why they are .c
+# files and not headers.
+list(REMOVE_ITEM MAPPING
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/json_writer.c"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/json_arena_alc.c"
+)
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB TYPES "src/types/*.c" "include/gradido_blockchain_core/types/*.h")
 FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")

@@ -8,6 +8,7 @@
 #include "gradido_blockchain_core/mapping/json_from_runtime.h"
 #include "gradido_blockchain_core/mapping/json_from_wire.h"
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
+#include "gradido_blockchain_core/mapping/wire_from_json.h"
 #include "hostmem/memory.h"
 #include "hostmem/multi_arena.h"
 
@@ -1359,4 +1360,410 @@ TEST(JsonBodyDetailTest, TheDecodeDrawsFromTheWorkChain) {
   const uint64_t large = usedForWorkspace(kPbWorkspace * 4);
   EXPECT_GE(large - small, (uint64_t)kPbWorkspace * 3)
       << "the extra bytes have to show up in the work chain, which is where they are taken from";
+}
+
+// ==========================================================================================
+//  The way back: wire -> json -> wire
+// ==========================================================================================
+
+namespace {
+
+//! Render, read back, and hand over both so a test can compare field by field.
+struct RoundTrip {
+  Chains chains;
+  hostmem_multi_arena kept{};
+  hostmem_memory_block json{};
+  grdm_json_error error{};
+
+  RoundTrip() {
+    EXPECT_EQ(hostmem_multi_arena_init(&kept, 4096, 0, nullptr), HOSTMEM_SUCCESS);
+  }
+  ~RoundTrip() {
+    hostmem_multi_arena_release(&kept);
+  }
+};
+
+//! The two blocks hold the same bytes, or both hold none.
+::testing::AssertionResult blocksEqual(
+    const char *what, const hostmem_memory_block &a, const hostmem_memory_block &b
+) {
+  if (a.size != b.size) {
+    return ::testing::AssertionFailure() << what << ": size " << a.size << " vs " << b.size;
+  }
+  if (a.size && memcmp(a.data, b.data, a.size) != 0) {
+    return ::testing::AssertionFailure() << what << ": bytes differ";
+  }
+  return ::testing::AssertionSuccess();
+}
+
+} // namespace
+
+TEST(WireFromJsonTest, TransactionBodyMakesTheRoundTrip) {
+  RoundTrip round;
+  uint8_t memoBytes[4] = {0xde, 0xad, 0xbe, 0xef};
+  grdw_encrypted_memo memo{};
+  memo.type = GRDT_MEMO_KEY_SHARED_SECRET;
+  memo.memo = {memoBytes, sizeof(memoBytes)};
+  grdw_transaction_body sent = makeTransferBody(&memo);
+
+  ASSERT_EQ(
+      grdm_transaction_body_to_json(
+          &round.json, &sent, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+
+  grdw_transaction_body back;
+  grdw_transaction_body_init(&back);
+  ASSERT_EQ(
+      grdm_transaction_body_from_json(
+          &back, (const char *)round.json.data, round.json.size, &round.error, &round.chains.work,
+          &round.kept
+      ),
+      HOSTMEM_SUCCESS
+  ) << (round.error.member ? round.error.member : "?")
+    << ": " << (round.error.reason ? round.error.reason : "?");
+
+  EXPECT_EQ(back.transaction_type, sent.transaction_type);
+  EXPECT_EQ(back.type, sent.type);
+  EXPECT_EQ(back.created_at.seconds, sent.created_at.seconds);
+  EXPECT_EQ(back.created_at.nanos, sent.created_at.nanos);
+  EXPECT_EQ(back.transfer.sender.amount, sent.transfer.sender.amount);
+  EXPECT_EQ(
+      memcmp(back.transfer.sender.pubkey, sent.transfer.sender.pubkey, SIGN_PUBLIC_KEY_SIZE), 0
+  );
+  EXPECT_EQ(
+      memcmp(
+          back.transfer.sender.community_uuid, sent.transfer.sender.community_uuid,
+          HOSTMEM_UUID_BINARY_SIZE
+      ),
+      0
+  );
+  EXPECT_EQ(memcmp(back.transfer.recipient, sent.transfer.recipient, SIGN_PUBLIC_KEY_SIZE), 0);
+  ASSERT_EQ(back.memos_count, sent.memos_count);
+  EXPECT_EQ(back.memos[0].type, sent.memos[0].type);
+  EXPECT_TRUE(blocksEqual("memo", back.memos[0].memo, sent.memos[0].memo));
+  // a local body names no other community, and does not grow one on the way back
+  EXPECT_TRUE(back.other_community_uuid == nullptr);
+}
+
+/**
+ * @brief Rendering what came back gives the same text again.
+ *
+ * The strongest statement the two directions can make together, and cheaper to check than
+ * comparing structures field by field: if any member were dropped, reordered or reinterpreted,
+ * the second rendering would say so.
+ */
+TEST(WireFromJsonTest, ConfirmedTransactionRendersToTheSameTextTwice) {
+  RoundTrip round;
+  uint8_t bodyBytes[6] = {0x0a, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f};
+  grdw_account_balance balance{};
+  ramp(balance.pubkey, SIGN_PUBLIC_KEY_SIZE, 0x40);
+  balance.balance = 987650000;
+  memcpy(balance.community_uuid, kCommunityUuid, HOSTMEM_UUID_BINARY_SIZE);
+  grdw_signature_pair signature{};
+  ramp(signature.public_key, SIGN_PUBLIC_KEY_SIZE, 0x10);
+  ramp(signature.signature, SIGN_SIGNATURE_SIZE, 0x01);
+
+  grdw_confirmed_transaction sent =
+      makeConfirmed(&balance, &signature, {bodyBytes, sizeof(bodyBytes)});
+  sent.ledger_anchor.type = GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID;
+  sent.ledger_anchor.hiero_transaction_id.transactionValidStart = {
+      .seconds = 171627121, .nanos = 2912
+  };
+  sent.ledger_anchor.hiero_transaction_id.accountID = {
+      .shardNum = 1, .realmNum = 2, .accountNum = 1233
+  };
+  sent.transaction.pairing_ledger_anchor.type = GRDT_LEDGER_ANCHOR_NODE_TRIGGER_TRANSACTION_ID;
+  sent.transaction.pairing_ledger_anchor.id = 99;
+
+  ASSERT_EQ(
+      grdm_confirmed_transaction_to_json(
+          &round.json, &sent, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+  const std::string first((const char *)round.json.data, round.json.size);
+
+  grdw_confirmed_transaction back;
+  grdw_confirmed_transaction_init(&back);
+  ASSERT_EQ(
+      grdm_confirmed_transaction_from_json(
+          &back, first.c_str(), first.size(), &round.error, &round.chains.work, &round.kept
+      ),
+      HOSTMEM_SUCCESS
+  ) << (round.error.member ? round.error.member : "?")
+    << ": " << (round.error.reason ? round.error.reason : "?");
+
+  hostmem_multi_arena_reset(&round.chains.work);
+  hostmem_multi_arena_reset(&round.chains.result);
+  hostmem_memory_block second{};
+  ASSERT_EQ(
+      grdm_confirmed_transaction_to_json(
+          &second, &back, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+  EXPECT_EQ(first, std::string((const char *)second.data, second.size));
+}
+
+/** @brief The same for a body, across every payload type the union carries. */
+TEST(WireFromJsonTest, EveryPayloadTypeMakesTheRoundTrip) {
+  const grdt_transaction types[] = {
+      GRDT_TRANSACTION_TRANSFER,
+      GRDT_TRANSACTION_CREATION,
+      GRDT_TRANSACTION_COMMUNITY_FRIENDS_UPDATE,
+      GRDT_TRANSACTION_REGISTER_ADDRESS,
+      GRDT_TRANSACTION_DEFERRED_TRANSFER,
+      GRDT_TRANSACTION_COMMUNITY_ROOT,
+      GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER,
+      GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER,
+  };
+
+  for (grdt_transaction type : types) {
+    RoundTrip round;
+    grdw_transaction_body sent;
+    grdw_transaction_body_init(&sent);
+    sent.transaction_type = type;
+    sent.created_at = {.seconds = 1700000000, .nanos = 2912};
+    // a distinct value per branch, so a payload read from the wrong member shows up
+    switch (type) {
+    case GRDT_TRANSACTION_TRANSFER:
+      sent.transfer.sender.amount = 11111;
+      break;
+    case GRDT_TRANSACTION_CREATION:
+      sent.creation.recipient.amount = 22222;
+      sent.creation.target_date.seconds = 1700000000;
+      break;
+    case GRDT_TRANSACTION_COMMUNITY_FRIENDS_UPDATE:
+      sent.community_friends_update.color_fusion = true;
+      break;
+    case GRDT_TRANSACTION_REGISTER_ADDRESS:
+      sent.register_address.derivation_index = 7;
+      sent.register_address.address_type = GRDT_ADDRESS_COMMUNITY_HUMAN;
+      break;
+    case GRDT_TRANSACTION_DEFERRED_TRANSFER:
+      sent.deferred_transfer.timeout_duration = 3600;
+      break;
+    case GRDT_TRANSACTION_COMMUNITY_ROOT:
+      ramp(sent.community_root.gmw_pubkey, SIGN_PUBLIC_KEY_SIZE, 0x50);
+      break;
+    case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER:
+      sent.redeem_deferred_transfer.deferred_transfer_transaction_nr = 42;
+      break;
+    default:
+      sent.timeout_deferred_transfer.deferred_transfer_transaction_nr = 43;
+      break;
+    }
+
+    const char *name = grdt_transaction_to_string(type);
+    ASSERT_EQ(
+        grdm_transaction_body_to_json(
+            &round.json, &sent, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+        ),
+        HOSTMEM_SUCCESS
+    ) << name;
+    const std::string first((const char *)round.json.data, round.json.size);
+
+    grdw_transaction_body back;
+    grdw_transaction_body_init(&back);
+    ASSERT_EQ(
+        grdm_transaction_body_from_json(
+            &back, first.c_str(), first.size(), &round.error, &round.chains.work, &round.kept
+        ),
+        HOSTMEM_SUCCESS
+    ) << name
+      << " -> " << (round.error.member ? round.error.member : "?") << ": "
+      << (round.error.reason ? round.error.reason : "?");
+
+    hostmem_multi_arena_reset(&round.chains.work);
+    hostmem_multi_arena_reset(&round.chains.result);
+    hostmem_memory_block second{};
+    ASSERT_EQ(
+        grdm_transaction_body_to_json(
+            &second, &back, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+        ),
+        HOSTMEM_SUCCESS
+    ) << name;
+    EXPECT_EQ(first, std::string((const char *)second.data, second.size)) << name;
+  }
+}
+
+/**
+ * @brief Every way a document can be wrong, and the member it is wrong at.
+ *
+ * A reader of untrusted text is judged by its refusals more than by its successes, and a refusal
+ * that only says "no" sends the caller looking through the whole document. Each case here breaks
+ * one thing in a text that was otherwise valid and insists the reader points at it.
+ */
+TEST(WireFromJsonTest, BadDocumentsAreRefusedAtTheMemberAtFault) {
+  struct Case {
+    const char *what;
+    std::string json;
+    const char *member; // nullptr: not about a member
+  };
+
+  // a valid body to break in one place at a time
+  RoundTrip base;
+  grdw_transaction_body sent;
+  grdw_transaction_body_init(&sent);
+  sent.transaction_type = GRDT_TRANSACTION_TRANSFER;
+  sent.created_at = {.seconds = 1700000000, .nanos = 2912};
+  sent.transfer.sender.amount = 12345;
+  ASSERT_EQ(
+      grdm_transaction_body_to_json(
+          &base.json, &sent, GRDM_JSON_COMPACT, &base.chains.work, &base.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+  const std::string valid((const char *)base.json.data, base.json.size);
+
+  auto replace = [&](const std::string &from, const std::string &to) {
+    std::string out = valid;
+    const size_t at = out.find(from);
+    EXPECT_NE(at, std::string::npos) << "fixture no longer contains: " << from;
+    return out.replace(at, from.size(), to);
+  };
+
+  const Case cases[] = {
+      {"not JSON at all", "{\"transaction_type\":", nullptr},
+      {"root is not an object", "[1,2,3]", nullptr},
+      {"missing member", replace("\"created_at\"", "\"created_ätt\""), "created_at"},
+      {"enum name that does not exist",
+       replace("GRDT_TRANSACTION_TRANSFER", "GRDT_TRANSACTION_NONSENSE"), "transaction_type"},
+      {"transaction type that names no payload",
+       replace("GRDT_TRANSACTION_TRANSFER", "GRDT_TRANSACTION_NONE"), "transaction_type"},
+      {"timestamp with too few nanosecond digits",
+       replace("1700000000.000002912", "1700000000.12345"), "created_at"},
+      // the writing side pads to exactly nine, so a longer run is a different number wearing the
+      // same shape -- and reading only its first nine digits would change the value in silence
+      {"timestamp with too many nanosecond digits",
+       replace("1700000000.000002912", "1700000000.000002912123"), "created_at"},
+      {"timestamp that is not a number at all", replace("1700000000.000002912", "yesterday"),
+       "created_at"},
+      {"hex of the wrong length",
+       replace(
+           "\"pubkey\":\"0000000000000000000000000000000000000000000000000000000000000000\"",
+           "\"pubkey\":\"00ff\""
+       ),
+       "pubkey"},
+      {"hex with a character that is not a digit",
+       replace(
+           "\"pubkey\":\"0000000000000000000000000000000000000000000000000000000000000000\"",
+           "\"pubkey\":\"zz00000000000000000000000000000000000000000000000000000000000000\""
+       ),
+       "pubkey"},
+      {"uuid that is not the canonical form",
+       replace(
+           "\"community_uuid\":\"00000000-0000-0000-0000-000000000000\"",
+           "\"community_uuid\":\"not-a-uuid\""
+       ),
+       "community_uuid"},
+      {"amount that is not a decimal number", replace("\"1.2345\"", "\"one and a bit\""), "amount"},
+      {"a string where a number belongs", replace("\"memos\":[]", "\"memos\":42"), "memos"},
+  };
+
+  for (const Case &testCase : cases) {
+    RoundTrip round;
+    grdw_transaction_body back;
+    grdw_transaction_body_init(&back);
+    grdm_json_error error{};
+    EXPECT_EQ(
+        grdm_transaction_body_from_json(
+            &back, testCase.json.c_str(), testCase.json.size(), &error, &round.chains.work,
+            &round.kept
+        ),
+        HOSTMEM_ERROR_DECODE_FAILED
+    ) << testCase.what;
+    EXPECT_TRUE(error.reason != nullptr) << testCase.what << ": no reason given";
+    if (testCase.member) {
+      ASSERT_TRUE(error.member != nullptr) << testCase.what << ": no member named";
+      EXPECT_STREQ(error.member, testCase.member) << testCase.what;
+    }
+    // a refused read leaves the output empty rather than half filled
+    EXPECT_EQ(back.transaction_type, GRDT_TRANSACTION_NONE) << testCase.what;
+    EXPECT_TRUE(back.memos == nullptr) << testCase.what;
+  }
+}
+
+/**
+ * @brief The decoded body is not a way back, and the reader says so instead of guessing.
+ *
+ * grdm_gradido_transaction_with_body_to_json() renders `body` in place of `body_bytes`, and the
+ * exact signed octets are not recoverable from it. Reading such a document has to fail at
+ * `body_bytes` rather than quietly produce a transaction with no body.
+ */
+TEST(WireFromJsonTest, ADecodedBodyIsRefusedAsAWayBack) {
+  RoundTrip round;
+  EncodedBody encoded;
+  grdw_gradido_transaction sent;
+  grdw_gradido_transaction_init(&sent);
+  sent.body_bytes = encoded.bytes;
+
+  ASSERT_EQ(
+      grdm_gradido_transaction_with_body_to_json(
+          &round.json, &sent, GRDM_JSON_COMPACT, kPbWorkspace, &round.chains.work,
+          &round.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+  const std::string withBody((const char *)round.json.data, round.json.size);
+  ASSERT_NE(withBody.find("\"body\""), std::string::npos);
+  ASSERT_EQ(withBody.find("\"body_bytes\""), std::string::npos);
+
+  grdw_gradido_transaction back;
+  grdw_gradido_transaction_init(&back);
+  grdm_json_error error{};
+  EXPECT_EQ(
+      grdm_gradido_transaction_from_json(
+          &back, withBody.c_str(), withBody.size(), &error, &round.chains.work, &round.kept
+      ),
+      HOSTMEM_ERROR_DECODE_FAILED
+  );
+  ASSERT_TRUE(error.member != nullptr);
+  EXPECT_STREQ(error.member, "body_bytes");
+
+  // the same transaction rendered the other way does come back
+  hostmem_multi_arena_reset(&round.chains.work);
+  hostmem_multi_arena_reset(&round.chains.result);
+  hostmem_memory_block hexJson{};
+  ASSERT_EQ(
+      grdm_gradido_transaction_to_json(
+          &hexJson, &sent, GRDM_JSON_COMPACT, &round.chains.work, &round.chains.result
+      ),
+      HOSTMEM_SUCCESS
+  );
+  grdw_gradido_transaction_init(&back);
+  ASSERT_EQ(
+      grdm_gradido_transaction_from_json(
+          &back, (const char *)hexJson.data, hexJson.size, &error, &round.chains.work, &round.kept
+      ),
+      HOSTMEM_SUCCESS
+  );
+  EXPECT_TRUE(blocksEqual("body_bytes", back.body_bytes, sent.body_bytes));
+}
+
+TEST(WireFromJsonTest, NullArgumentsAreRefused) {
+  RoundTrip round;
+  grdw_transaction_body back;
+  grdw_transaction_body_init(&back);
+  const char *json = "{}";
+
+  EXPECT_EQ(
+      grdm_transaction_body_from_json(nullptr, json, 2, nullptr, &round.chains.work, &round.kept),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdm_transaction_body_from_json(&back, nullptr, 2, nullptr, &round.chains.work, &round.kept),
+      HOSTMEM_ERROR_NULL_POINTER
+  );
+  EXPECT_EQ(
+      grdm_transaction_body_from_json(&back, json, 0, nullptr, &round.chains.work, &round.kept),
+      HOSTMEM_ERROR_INVALID_PARAM
+  );
+  // the error slot is optional, and leaving it out must not change the verdict
+  EXPECT_EQ(
+      grdm_transaction_body_from_json(&back, json, 2, nullptr, &round.chains.work, &round.kept),
+      HOSTMEM_ERROR_DECODE_FAILED
+  );
 }

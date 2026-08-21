@@ -5,10 +5,12 @@
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/mapping/json_from_runtime.h"
 #include "gradido_blockchain_core/mapping/json_from_wire.h"
+#include "gradido_blockchain_core/mapping/wire_from_json.h"
 #include "hostmem/memory.h"
 #include "hostmem/mono_timer.h"
 #include "hostmem/multi_arena.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -34,8 +36,14 @@
  * as well. A Debug run says nothing about this code.
  */
 
+/*
+ * One step count for every row. The large rows used to run a tenth of the others because they
+ * cost about three times as much per transaction, but two rows at a different step count make
+ * the table misread at a glance -- the total time column looked like the large shape was the
+ * cheap one -- and it left the closing "per step" line true of only sixteen of the eighteen
+ * rows. Paying the extra wall clock is the cheaper of the two.
+ */
 #define STEP_COUNT 50000
-#define LARGE_STEP_COUNT 5000
 
 // ****************** the transactions under test *******************************************
 
@@ -48,11 +56,40 @@
 #define LARGE_MEMO_SIZE 256
 #define LARGE_BODY_SIZE 4096
 
-/** @brief What the decoding rows hand pbtools; generous for the body they decode. */
+/**
+ * @brief Bytes of scratch the decoding rows hand pbtools, in a caller-owned static buffer.
+ *
+ * The encoded body those rows decode is under 512 bytes (see encoded_body below), so this
+ * leaves pbtools more than an order of magnitude of headroom over the largest workspace that
+ * body can ask for. Too small a value would make the decode fail and abort the row instead of
+ * measuring it, so it is not tuned down to the minimum.
+ */
 #define PB_WORKSPACE_SIZE 8192u
 
 /** @brief Compact text size of the typical transfer, as the size rows below report it. */
 #define TYPICAL_TEXT_SIZE 1731
+
+/*
+ * Whether anything in this run failed. Every abort path sets it and main() returns it as the
+ * process exit status, so a run that produced a partial table cannot be mistaken for a complete
+ * one by whatever invoked the binary. The rows still print what they managed -- a row silently
+ * missing from the table is easy to read past, and the printed abort line says which one broke.
+ */
+static int bench_failure;
+
+/**
+ * @brief Name a failure, print it under the row it belongs to, and fail the run.
+ *
+ * @param what  what could not be done, e.g. "render" -- it opens the printed line.
+ *
+ * Every failure path in this file goes through here rather than printing on its own, so none
+ * of them can report the trouble and still leave the exit status at 0. Callers return early
+ * afterwards; this function only records, it does not unwind anything.
+ */
+static void bench_fail(const char *what) {
+  printf("  %s failed, benchmark aborted\n", what);
+  bench_failure = 1;
+}
 
 static const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03,
                                                                  0x75, 0xc0, 0x94, 0x1e, 0xf3, 0x5c,
@@ -72,15 +109,56 @@ static uint8_t large_body_bytes[LARGE_BODY_SIZE];
 static grdw_transaction_body wire_body;
 static grdw_confirmed_transaction wire_confirmed;
 
+//! The rendered text the reading rows below parse; filled once, in prepare_transactions().
+static char wire_body_json[4096];
+static size_t wire_body_json_size;
+static char wire_confirmed_json[4096];
+static size_t wire_confirmed_json_size;
+
 static grdr_complete_transaction tx_minimal;
 static grdr_complete_transaction tx_typical;
 static grdr_complete_transaction tx_large;
 
-//! Fill with a ramp: cheap, deterministic, and every byte differs from its neighbour.
+/**
+ * @brief Fill @p data with @p size consecutive byte values, beginning at @p first.
+ *
+ * @param data   destination buffer; must be writable for at least @p size bytes. Only read as
+ *               a destination -- its previous contents are overwritten, never inspected.
+ * @param size   number of bytes to write. 0 writes nothing and dereferences nothing, so a null
+ *               @p data is only valid together with a zero @p size.
+ * @param first  the value written to `data[0]`.
+ *
+ * `data[i]` is `(uint8_t)(first + i)`. The addition happens in `int` after the usual integer
+ * promotions and is narrowed by the explicit cast, so the sequence wraps modulo 256 every 256
+ * bytes with defined behaviour and no overflow at any @p size, including sizes past `SIZE_MAX
+ * - first` worth of steps -- the wrap is the intent, not an edge case.
+ *
+ * The result depends on nothing but the arguments: no clock, no allocation, no global state.
+ * That is what makes the fixtures below identical on every run, so figures from two runs are
+ * comparable. Neighbouring bytes always differ, which keeps the hex writer off any run-length
+ * or all-equal shortcut. One store per byte; the function returns nothing and cannot fail.
+ *
+ * Called from prepare_transactions() only, never from inside a measured loop.
+ */
 static void ramp(uint8_t *data, size_t size, uint8_t first) {
   for (size_t i = 0; i < size; ++i) { data[i] = (uint8_t)(first + i); }
 }
 
+/**
+ * @brief Fill @p tx with the transfer the "typical" and "large" rows are measured on.
+ *
+ * @param tx  a writable transaction, not null. It is passed through
+ *            grdr_complete_transaction_init() first, so any previous contents are discarded.
+ *            The array members (balances, signatures, memos, body_bytes) are left empty here;
+ *            the caller attaches them, which is what separates the typical shape from the
+ *            large one.
+ *
+ * Every field is a literal, so the rendered text is byte-for-byte the same on every run.
+ * `transfer.amount` is a grdd_unit: fixed point scaled by 10^4, so 12345 is 1.2345 GDD, not
+ * 12345 GDD. The value is chosen to render four significant digits either side of the decimal
+ * point rather than for its size. Returns nothing and cannot fail; grdr_complete_transaction
+ * holds no owned memory at this point, so there is nothing to allocate and nothing to release.
+ */
 static void prepare_transfer(grdr_complete_transaction *tx) {
   grdr_complete_transaction_init(tx);
   tx->tx_nr = 121;
@@ -99,6 +177,21 @@ static void prepare_transfer(grdr_complete_transaction *tx) {
   ramp(tx->tx_running_hash, GENERIC_HASH_SIZE, 0x80);
 }
 
+/**
+ * @brief Fill the first @p count entries of @p balances with distinct, fixed balances.
+ *
+ * @param balances  array of at least @p count writable entries; may be null only when @p count
+ *                  is 0, which writes nothing.
+ * @param count     entries to fill. The callers pass TYPICAL_BALANCES and LARGE_BALANCES, both
+ *                  well under 256, so the `(uint8_t)(0x40 + i)` ramp seed stays distinct per
+ *                  entry; beyond 256 entries the seeds would repeat and entries would share
+ *                  their pubkey bytes -- which would still render, just with less distinct
+ *                  input than intended.
+ *
+ * `balance` is a grdd_unit, fixed point scaled by 10^4: 987650000 is 98765.0000 GDD. It is the
+ * same in every entry on purpose -- what scales the row is the entry count, not the digits.
+ * Deterministic, allocates nothing, returns nothing, cannot fail.
+ */
 static void prepare_balances(grdw_account_balance *balances, size_t count) {
   for (size_t i = 0; i < count; ++i) {
     ramp(balances[i].pubkey, SIGN_PUBLIC_KEY_SIZE, (uint8_t)(0x40 + i));
@@ -107,6 +200,19 @@ static void prepare_balances(grdw_account_balance *balances, size_t count) {
   }
 }
 
+/**
+ * @brief Fill the first @p count entries of @p signatures with distinct key/signature bytes.
+ *
+ * @param signatures  array of at least @p count writable entries; may be null only when
+ *                    @p count is 0, which writes nothing.
+ * @param count       entries to fill. As in prepare_balances(), the per-entry ramp seeds are
+ *                    narrowed to uint8_t and so stay distinct only for the first 256 entries;
+ *                    the callers pass TYPICAL_SIGNATURES and LARGE_SIGNATURES.
+ *
+ * The bytes are not a valid signature over anything -- the mapping hex-encodes them without
+ * verifying, so what matters is their length and that they differ from each other.
+ * Deterministic, allocates nothing, returns nothing, cannot fail.
+ */
 static void prepare_signatures(grdw_signature_pair *signatures, size_t count) {
   for (size_t i = 0; i < count; ++i) {
     ramp(signatures[i].public_key, SIGN_PUBLIC_KEY_SIZE, (uint8_t)(0x10 + i));
@@ -114,6 +220,27 @@ static void prepare_signatures(grdw_signature_pair *signatures, size_t count) {
   }
 }
 
+/**
+ * @brief Build every fixture the rows below run on, into the file-scope statics.
+ *
+ * Fills tx_minimal, tx_typical, tx_large, wire_body and wire_confirmed, and points their array
+ * members at the static buffers above -- nothing is heap allocated and nothing needs releasing.
+ * The transactions borrow those buffers rather than copying them, so the buffers must outlive
+ * every render, which file scope guarantees.
+ *
+ * All amounts are grdd_unit fixed point scaled by 10^4 (10000000 is 1000 GDD, 12345 is 1.2345
+ * GDD). Sizes come from the TYPICAL_* and LARGE_* macros; raising one of those is the intended
+ * way to scale a fixture, and the only bound is the static buffers those macros also size --
+ * except wire_body_json and wire_confirmed_json, which are fixed at 4096 bytes and are filled
+ * later, by report_sizes().
+ *
+ * Takes no arguments, returns nothing, and is called once from main() before the timer rows.
+ * One step can fail: if encoding the body into `encoded_body` fails -- it needs the body under
+ * 512 bytes and the workspace sufficient -- wire_confirmed.transaction.body_bytes stays empty
+ * and the body-decoding rows would price a transaction with no body, so the failure goes
+ * through bench_fail() and the run ends with a nonzero status. The rows still run, since a
+ * table with one wrong row plus a named failure says more than no table at all.
+ */
 static void prepare_transactions() {
   // a creation with no arrays at all: the floor of what the mapping has to write
   grdr_complete_transaction_init(&tx_minimal);
@@ -194,6 +321,9 @@ static void prepare_transactions() {
         grdw_transaction_body_encode(&destination, &final_size, &wire_body, &workspace)) {
       wire_confirmed.transaction.body_bytes.data = encoded_body;
       wire_confirmed.transaction.body_bytes.size = (uint32_t)final_size;
+    } else {
+      // without a body the decoding rows below would quietly price a transaction that has none
+      bench_fail("body encode");
     }
   }
 }
@@ -221,6 +351,19 @@ _Alignas(8) static uint8_t borrowed_bookkeeping[4096];
  *
  * A failed render stops the run rather than being counted -- a row averaged over calls that
  * did nothing would read as a fast one.
+ *
+ * @param tx          the transaction to render; must outlive the call, along with everything
+ *                    its array members point at.
+ * @param format      GRDM_JSON_COMPACT or GRDM_JSON_PRETTY.
+ * @param step_count  renders to perform. Values <= 0 perform none and leave both chains
+ *                    untouched, which bench_step() reports as a zero per step figure.
+ *
+ * Returns nothing -- bench_step() takes a void(int) and has no status to pass on -- so a
+ * failure goes through bench_fail() instead: the abort line names it, the row's total drops far
+ * below its neighbours, and main() ends the process with a nonzero status so a runner sees the
+ * partial table for what it is. Both chains are left reset on the normal path;
+ * on the abort path the failing render's allocations are still in them, and the next row's
+ * first reset clears them.
  */
 static void render_repeatedly(
     const grdr_complete_transaction *tx, grdm_json_format format, int step_count
@@ -228,7 +371,7 @@ static void render_repeatedly(
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
     if (HOSTMEM_SUCCESS != grdm_complete_transaction_to_json(&json, tx, format, &work, &result)) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -236,13 +379,34 @@ static void render_repeatedly(
   }
 }
 
-/** @brief The wire counterparts, run through the same reset cycle as the rows above. */
+/*
+ * The rows below all match the void(int) shape bench_step() calls, and all share one contract:
+ *
+ *   @param step_count  operations to perform. Values <= 0 perform none, which bench_step()
+ *                      reports as a zero per step figure rather than dividing by zero. The
+ *                      upper bound is what the run should take: the work is O(step_count),
+ *                      the loop counter is `int`, and STEP_COUNT -- which every row passes --
+ *                      is far below INT_MAX, so the counter cannot overflow at the sizes used
+ *                      here.
+ *
+ * None of them return a value: bench_step() takes a void(int). A failed call calls bench_fail()
+ * and returns early, so the row is reported over fewer operations than its step count claims --
+ * visible as a total well under the neighbouring rows, preceded by the abort line, and carried
+ * out of main() as a nonzero exit status. They all render into the shared `work` and `result`
+ * chains and reset both after each pass, so they leave no state behind for the next row except
+ * on that abort path.
+ *
+ * Each takes its input from the file-scope fixtures rather than from arguments, which is what
+ * lets them share the one signature bench_step() accepts.
+ */
+
+/** @brief The wire transaction body, run through the same reset cycle as the rows above. */
 static void bench_wire_body(int step_count) {
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
     if (HOSTMEM_SUCCESS !=
         grdm_transaction_body_to_json(&json, &wire_body, GRDM_JSON_COMPACT, &work, &result)) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -250,13 +414,14 @@ static void bench_wire_body(int step_count) {
   }
 }
 
+/** @brief A gradido transaction, its body left as the hex string it arrives as. */
 static void bench_wire_gradido(int step_count) {
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
     if (HOSTMEM_SUCCESS != grdm_gradido_transaction_to_json(
                                &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, &work, &result
                            )) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -264,6 +429,12 @@ static void bench_wire_gradido(int step_count) {
   }
 }
 
+/**
+ * @brief The same gradido transaction, with the body decoded into fields first.
+ *
+ * The difference against bench_wire_gradido() is what the pbtools decode plus the larger
+ * output cost; PB_WORKSPACE_SIZE bounds the scratch that decode may use.
+ */
 static void bench_wire_gradido_decoded(int step_count) {
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
@@ -271,7 +442,7 @@ static void bench_wire_gradido_decoded(int step_count) {
         grdm_gradido_transaction_with_body_to_json(
             &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
         )) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -279,6 +450,7 @@ static void bench_wire_gradido_decoded(int step_count) {
   }
 }
 
+/** @brief The confirmed transaction with its body decoded, against the row below. */
 static void bench_wire_confirmed_decoded(int step_count) {
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
@@ -286,7 +458,7 @@ static void bench_wire_confirmed_decoded(int step_count) {
         grdm_confirmed_transaction_with_body_to_json(
             &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
         )) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -294,13 +466,14 @@ static void bench_wire_confirmed_decoded(int step_count) {
   }
 }
 
+/** @brief The confirmed transaction, body left as hex: the full wire view of tx_typical. */
 static void bench_wire_confirmed(int step_count) {
   hostmem_memory_block json = {0};
   for (int i = 0; i < step_count; ++i) {
     if (HOSTMEM_SUCCESS != grdm_confirmed_transaction_to_json(
                                &json, &wire_confirmed, GRDM_JSON_COMPACT, &work, &result
                            )) {
-      printf("  render failed, benchmark aborted\n");
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&work);
@@ -308,6 +481,50 @@ static void bench_wire_confirmed(int step_count) {
   }
 }
 
+/**
+ * @brief The way back: parse the text the writing rows produced.
+ *
+ * Reads wire_body_json, which report_sizes() filled from an actual render, so the row prices
+ * the parse of exactly the text this library writes rather than of a hand-made sample. If
+ * report_sizes() never ran, that buffer is empty and every pass fails on the first call.
+ */
+static void bench_read_wire_body(int step_count) {
+  for (int i = 0; i < step_count; ++i) {
+    grdw_transaction_body body;
+    grdw_transaction_body_init(&body);
+    if (HOSTMEM_SUCCESS != grdm_transaction_body_from_json(
+                               &body, wire_body_json, wire_body_json_size, NULL, &work, &result
+                           )) {
+      bench_fail("read");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+/** @brief The same, for the confirmed transaction; reads wire_confirmed_json. */
+static void bench_read_wire_confirmed(int step_count) {
+  for (int i = 0; i < step_count; ++i) {
+    grdw_confirmed_transaction tx;
+    grdw_confirmed_transaction_init(&tx);
+    if (HOSTMEM_SUCCESS !=
+        grdm_confirmed_transaction_from_json(
+            &tx, wire_confirmed_json, wire_confirmed_json_size, NULL, &work, &result
+        )) {
+      bench_fail("read");
+      return;
+    }
+    hostmem_multi_arena_reset(&work);
+    hostmem_multi_arena_reset(&result);
+  }
+}
+
+/*
+ * Six wrappers, one per (shape, format) pair. They exist only to bind a fixture and a format
+ * to the void(int) signature bench_step() takes; @p n is render_repeatedly()'s step_count and
+ * carries its contract unchanged.
+ */
 static void bench_minimal_compact(int n) {
   render_repeatedly(&tx_minimal, GRDM_JSON_COMPACT, n);
 }
@@ -333,6 +550,12 @@ static void bench_large_pretty(int n) {
  * Every render then has to open its arenas from the host, which is the one thing the reset
  * cycle above avoids. The gap between this row and "reset between calls" is what the arenas
  * are worth once they are there.
+ *
+ * Uses local chains rather than the shared ones, so it leaves `work` and `result` untouched.
+ * Each pass releases what it opened, the abort path included: the `|| ` chain short-circuits,
+ * so a pass can fail with one chain open and the other still zeroed, and both are handed to
+ * hostmem_multi_arena_release() -- it takes a zeroed chain untouched. Nothing is left behind
+ * before the failure propagates. Otherwise the shared contract above applies.
  */
 static void bench_cold_chains(int step_count) {
   hostmem_memory_block json = {0};
@@ -344,7 +567,11 @@ static void bench_cold_chains(int step_count) {
         HOSTMEM_SUCCESS != grdm_complete_transaction_to_json(
                                &json, &tx_typical, GRDM_JSON_COMPACT, &cold_work, &cold_result
                            )) {
-      printf("  render failed, benchmark aborted\n");
+      // whatever the short-circuit above managed to open still has to go back: a chain the
+      // first init never reached is still zeroed, and release takes that untouched
+      hostmem_multi_arena_release(&cold_work);
+      hostmem_multi_arena_release(&cold_result);
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_release(&cold_work);
@@ -357,6 +584,14 @@ static void bench_cold_chains(int step_count) {
  *
  * Nothing here reaches the host, not even the descriptor vectors. This is the row a host with
  * a fixed memory budget is looking at.
+ *
+ * The chains are built over borrowed_work, borrowed_result and borrowed_bookkeeping, so the
+ * measured cost of one pass is bounded by those fixed sizes: a borrowed chain that runs out
+ * cannot grow, it fails, and the row aborts. Setup happens once, outside the loop, and is not
+ * part of what the per step figure divides. Both abort paths release the two chains and then
+ * the bookkeeping they drew their descriptors from, in that order, before the failure
+ * propagates -- the same partial-setup rule as bench_cold_chains(), since the setup condition
+ * short-circuits too. Otherwise the shared contract above applies.
  */
 static void bench_borrowed_chains(int step_count) {
   hostmem bookkeeping = {0};
@@ -377,7 +612,11 @@ static void bench_borrowed_chains(int step_count) {
       HOSTMEM_SUCCESS != hostmem_multi_arena_borrow(
                              &borrowed_result_chain, borrowed_result, sizeof(borrowed_result)
                          )) {
-    printf("  borrowed setup failed, benchmark aborted\n");
+    // the same short-circuit rule as above: release all three, zeroed or not, then fail
+    hostmem_multi_arena_release(&borrowed_work_chain);
+    hostmem_multi_arena_release(&borrowed_result_chain);
+    hostmem_release(&bookkeeping);
+    bench_fail("borrowed setup");
     return;
   }
 
@@ -386,7 +625,10 @@ static void bench_borrowed_chains(int step_count) {
         grdm_complete_transaction_to_json(
             &json, &tx_typical, GRDM_JSON_COMPACT, &borrowed_work_chain, &borrowed_result_chain
         )) {
-      printf("  render failed, benchmark aborted\n");
+      hostmem_multi_arena_release(&borrowed_work_chain);
+      hostmem_multi_arena_release(&borrowed_result_chain);
+      hostmem_release(&bookkeeping);
+      bench_fail("render");
       return;
     }
     hostmem_multi_arena_reset(&borrowed_work_chain);
@@ -406,13 +648,27 @@ static void bench_borrowed_chains(int step_count) {
  * whole difference between the two designs on the time axis; the memory axis is in the module
  * comment of json_from_runtime.c, where the copy earns a result chain holding the text and
  * nothing else.
+ *
+ * The copy is TYPICAL_TEXT_SIZE + 1 bytes, which is what the mapping actually asks for:
+ * grdm_json_writer_finish() clones `length + 1` and then reports `length` as json.size, so the
+ * terminator is allocated and copied but not counted. Cloning TYPICAL_TEXT_SIZE alone would
+ * price one byte less than the copy this row exists to price.
+ *
+ * The source is a static buffer of zeroes, not a rendered transaction: only the byte count
+ * reaches hostmem_multi_arena_clone(), so its contents cannot change the figure -- but it is
+ * sized for the full request, since the clone reads every byte it is asked for.
+ * TYPICAL_TEXT_SIZE therefore has to track the compact size the size rows report for the
+ * typical transfer, or this row prices a copy of the wrong length. A failed clone leaves the
+ * shared result chain unreset, which the next row's reset clears. Otherwise the shared
+ * contract above applies.
  */
 static void bench_clone_reference(int step_count) {
-  static uint8_t text[TYPICAL_TEXT_SIZE];
+  static uint8_t text[TYPICAL_TEXT_SIZE + 1];
   uint8_t *copy = NULL;
   for (int i = 0; i < step_count; ++i) {
-    if (HOSTMEM_SUCCESS != hostmem_multi_arena_clone(&copy, text, TYPICAL_TEXT_SIZE, &result)) {
-      printf("  clone failed, benchmark aborted\n");
+    if (HOSTMEM_SUCCESS !=
+        hostmem_multi_arena_clone(&copy, text, TYPICAL_TEXT_SIZE + 1, &result)) {
+      bench_fail("clone");
       return;
     }
     hostmem_multi_arena_reset(&result);
@@ -421,10 +677,24 @@ static void bench_clone_reference(int step_count) {
 
 // ****************** what each shape comes to *********************************************
 
-/** @brief One render, to report the text size a row's per step figure belongs to. */
+/**
+ * @brief One render, to report the text size a row's per step figure belongs to.
+ *
+ * @param tx      the transaction to render, not null.
+ * @param format  GRDM_JSON_COMPACT or GRDM_JSON_PRETTY.
+ *
+ * @return the rendered size in bytes, not counting the terminating zero, or 0 if the render
+ *         failed. A successful render is never 0 bytes, so the two cases stay distinguishable
+ *         in the printed table -- but a caller does not have to check: the failure has already
+ *         gone through bench_fail() and will reach the exit status on its own.
+ *
+ * Untimed. Resets both shared chains on success; on failure it returns with the failed
+ * render's allocations still in them, and the next reset clears those.
+ */
 static uint32_t measure_size(const grdr_complete_transaction *tx, grdm_json_format format) {
   hostmem_memory_block json = {0};
   if (HOSTMEM_SUCCESS != grdm_complete_transaction_to_json(&json, tx, format, &work, &result)) {
+    bench_fail("size render");
     return 0;
   }
   uint32_t size = json.size;
@@ -433,39 +703,65 @@ static uint32_t measure_size(const grdr_complete_transaction *tx, grdm_json_form
   return size;
 }
 
+/**
+ * @brief Print the text size of every shape, and capture the text the reading rows parse.
+ *
+ * Takes no arguments and returns nothing. Beyond printing, it fills wire_body_json and
+ * wire_confirmed_json from real renders, which bench_read_wire_body() and
+ * bench_read_wire_confirmed() then parse -- so it must run before them, as main() arranges.
+ * Both buffers are 4096 bytes and are copied into with `json.size + 1` bytes for the
+ * terminator; a fixture grown past that would overflow them, so the LARGE_* and TYPICAL_*
+ * macros cannot be raised without checking these two sizes.
+ *
+ * A row whose render fails is skipped -- its line is not printed and, for the two captured
+ * texts, the corresponding buffer stays empty and its reading row aborts on the first pass --
+ * and every one of those skips goes through bench_fail(), so a size table with a line missing
+ * always comes with a nonzero exit status rather than passing as complete.
+ */
 static void report_sizes() {
   printf("\ntext size per shape (compact / pretty, bytes)\n");
   printf(
-      "%-*s %12u  %10u\n", BENCH_NAME_WIDTH, "  minimal, no arrays",
+      "%-*s %12" PRIu32 "  %10" PRIu32 "\n", BENCH_NAME_WIDTH, "  minimal, no arrays",
       measure_size(&tx_minimal, GRDM_JSON_COMPACT), measure_size(&tx_minimal, GRDM_JSON_PRETTY)
   );
   printf(
-      "%-*s %12u  %10u\n", BENCH_NAME_WIDTH, "  typical transfer",
+      "%-*s %12" PRIu32 "  %10" PRIu32 "\n", BENCH_NAME_WIDTH, "  typical transfer",
       measure_size(&tx_typical, GRDM_JSON_COMPACT), measure_size(&tx_typical, GRDM_JSON_PRETTY)
   );
   printf(
-      "%-*s %12u  %10u\n", BENCH_NAME_WIDTH, "  large, 4 KB body_bytes",
+      "%-*s %12" PRIu32 "  %10" PRIu32 "\n", BENCH_NAME_WIDTH, "  large, 4 KB body_bytes",
       measure_size(&tx_large, GRDM_JSON_COMPACT), measure_size(&tx_large, GRDM_JSON_PRETTY)
   );
 
   hostmem_memory_block json = {0};
   if (HOSTMEM_SUCCESS ==
       grdm_transaction_body_to_json(&json, &wire_body, GRDM_JSON_COMPACT, &work, &result)) {
-    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire transaction body", json.size);
+    printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  wire transaction body", json.size);
+    // kept for the reading rows, which parse exactly what the writing rows produce
+    wire_body_json_size = json.size;
+    memcpy(wire_body_json, json.data, json.size + 1);
+  } else {
+    bench_fail("size render");
   }
   hostmem_multi_arena_reset(&work);
   hostmem_multi_arena_reset(&result);
   if (HOSTMEM_SUCCESS == grdm_gradido_transaction_to_json(
                              &json, &wire_confirmed.transaction, GRDM_JSON_COMPACT, &work, &result
                          )) {
-    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire gradido transaction", json.size);
+    printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  wire gradido transaction", json.size);
+  } else {
+    bench_fail("size render");
   }
   hostmem_multi_arena_reset(&work);
   hostmem_multi_arena_reset(&result);
   if (HOSTMEM_SUCCESS == grdm_confirmed_transaction_to_json(
                              &json, &wire_confirmed, GRDM_JSON_COMPACT, &work, &result
                          )) {
-    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  wire confirmed transaction", json.size);
+    printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  wire confirmed transaction", json.size);
+    wire_confirmed_json_size = json.size;
+    memcpy(wire_confirmed_json, json.data, json.size + 1);
+  } else {
+    bench_fail("size render");
   }
   hostmem_multi_arena_reset(&work);
   hostmem_multi_arena_reset(&result);
@@ -473,7 +769,9 @@ static void report_sizes() {
       grdm_confirmed_transaction_with_body_to_json(
           &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
       )) {
-    printf("%-*s %12u\n", BENCH_NAME_WIDTH, "  ... with the body decoded", json.size);
+    printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  ... with the body decoded", json.size);
+  } else {
+    bench_fail("size render");
   }
   hostmem_multi_arena_reset(&work);
   hostmem_multi_arena_reset(&result);
@@ -489,7 +787,10 @@ int main(void) {
   // which is the ordinary case rather than a tuned one
   if (HOSTMEM_SUCCESS != hostmem_multi_arena_init(&work, 1 << 16, 0, NULL) ||
       HOSTMEM_SUCCESS != hostmem_multi_arena_init(&result, 1 << 16, 0, NULL)) {
-    printf("chain setup failed\n");
+    // whichever of the two came up has to go back before the run gives up on the rest
+    hostmem_multi_arena_release(&work);
+    hostmem_multi_arena_release(&result);
+    bench_fail("chain setup");
     return 1;
   }
   bench_prepared(time_used);
@@ -498,12 +799,12 @@ int main(void) {
   bench_section("complete transaction to json, compact");
   bench_step(bench_minimal_compact, STEP_COUNT, "  minimal, no arrays", "transaction");
   bench_step(bench_typical_compact, STEP_COUNT, "  typical transfer", "transaction");
-  bench_step(bench_large_compact, LARGE_STEP_COUNT, "  large, 4 KB body_bytes", "transaction");
+  bench_step(bench_large_compact, STEP_COUNT, "  large, 4 KB body_bytes", "transaction");
 
   bench_section("complete transaction to json, pretty");
   bench_step(bench_minimal_pretty, STEP_COUNT, "  minimal, no arrays", "transaction");
   bench_step(bench_typical_pretty, STEP_COUNT, "  typical transfer", "transaction");
-  bench_step(bench_large_pretty, LARGE_STEP_COUNT, "  large, 4 KB body_bytes", "transaction");
+  bench_step(bench_large_pretty, STEP_COUNT, "  large, 4 KB body_bytes", "transaction");
 
   bench_section("wire view, compact");
   bench_step(bench_wire_body, STEP_COUNT, "  transaction body", "body");
@@ -519,6 +820,10 @@ int main(void) {
       "transaction"
   );
 
+  bench_section("wire view, read back");
+  bench_step(bench_read_wire_body, STEP_COUNT, "  transaction body", "body");
+  bench_step(bench_read_wire_confirmed, STEP_COUNT, "  confirmed transaction", "transaction");
+
   bench_section("chain state, typical transfer compact");
   bench_step(bench_typical_compact, STEP_COUNT, "  reset between calls", "transaction");
   bench_step(
@@ -533,5 +838,6 @@ int main(void) {
   hostmem_multi_arena_release(&result);
 
   bench_total(time_used, STEP_COUNT, "transaction");
-  return 0;
+  // one failed row anywhere above makes the whole table partial, and the status says so
+  return bench_failure;
 }

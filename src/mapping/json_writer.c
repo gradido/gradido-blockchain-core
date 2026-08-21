@@ -13,20 +13,13 @@
  * It is a `.c` rather than a header because of what it needs: yyjson. A header in
  * `include/gradido_blockchain_core` is on the include path of everything that touches this
  * library, and one that pulls yyjson in puts a third party parser there with it. Declaring the
- * value builders in a header and defining them here as ordinary functions would avoid that too,
- * and was measured at about five percent on a typical transaction -- the builders are small
- * enough that a call is a real share of them. Included whole, they inline as before and no
- * header names yyjson at all.
+ * value builders in a header and defining them in a compiled `.c` would avoid that too, and was
+ * measured at about five percent on a typical transaction -- the builders are small enough that
+ * a call is a real share of them. Included whole, they inline as before and no header names
+ * yyjson at all.
  *
  * @whisper One body of work, carried into both houses that need it
  */
-
-#include "gradido_blockchain_core/const.h"
-#include "gradido_blockchain_core/data/wire/hiero.h"
-#include "gradido_blockchain_core/types/ledger_anchor.h"
-#include "gradido_blockchain_core/types/memo_key.h"
-
-#include <string.h>
 
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/types.h"
@@ -38,6 +31,8 @@
 #include "hostmem/memory_block.h"
 #include "hostmem/multi_arena.h"
 #include "hostmem/result.h"
+
+#include "json_arena_alc.c"
 
 #include "yyjson.h"
 
@@ -179,7 +174,7 @@ static hostmem_result grdm_json_writer_finish(
  * A recorded refusal if there was one; memory exhaustion otherwise, which is the only other way
  * a value can fail to appear.
  */
-static inline hostmem_result grdm_json_failure(const grdm_json_writer *writer) {
+static hostmem_result grdm_json_failure(const grdm_json_writer *writer) {
   return HOSTMEM_SUCCESS != writer->failure ? writer->failure : HOSTMEM_ERROR_OUT_OF_MEMORY;
 }
 
@@ -205,7 +200,7 @@ static inline hostmem_result grdm_json_failure(const grdm_json_writer *writer) {
  * @note Object keys need no such call. yyjson_mut_obj_add_str() and its siblings mark the key
  *       themselves, with a check the compiler folds away for a literal.
  */
-static inline yyjson_mut_val *grdm_json_noesc(yyjson_mut_val *val) {
+static yyjson_mut_val *grdm_json_noesc(yyjson_mut_val *val) {
   yyjson_mut_set_str_noesc(val, true);
   return val;
 }
@@ -222,16 +217,14 @@ static inline yyjson_mut_val *grdm_json_noesc(yyjson_mut_val *val) {
  *         whatever the previous tenant left, and every caller writes before it reads.
  * @whisper Ground is set aside, and the characters settle into it
  */
-static inline char *grdm_json_text_buffer(hostmem_multi_arena *work, uint32_t size) {
+static char *grdm_json_text_buffer(hostmem_multi_arena *work, uint32_t size) {
   uint8_t *buffer = NULL;
   if (HOSTMEM_SUCCESS != hostmem_multi_arena_alloc(&buffer, size, work)) { return NULL; }
   return (char *)buffer;
 }
 
 /** @brief Lowercase hex of @p size bytes, two characters each. NULL when @p size is 0. */
-static inline yyjson_mut_val *grdm_json_hex(
-    grdm_json_writer *writer, const uint8_t *data, uint32_t size
-) {
+static yyjson_mut_val *grdm_json_hex(grdm_json_writer *writer, const uint8_t *data, uint32_t size) {
   if (!data || !size) { return NULL; }
   // two characters per byte and a terminator, counted in the uint32_t hostmem measures an
   // allocation in -- a block past this bound would wrap into a buffer too small to write into
@@ -247,7 +240,7 @@ static inline yyjson_mut_val *grdm_json_hex(
 }
 
 /** @brief The canonical 8-4-4-4-12 form of 16 bytes. */
-static inline yyjson_mut_val *grdm_json_uuid(
+static yyjson_mut_val *grdm_json_uuid(
     grdm_json_writer *writer, const uint8_t uuid[HOSTMEM_UUID_BINARY_SIZE]
 ) {
   if (!uuid) { return NULL; }
@@ -259,7 +252,7 @@ static inline yyjson_mut_val *grdm_json_uuid(
 
 /** @brief `seconds.nanoseconds`, nanoseconds always nine digits. NULL when nanos is out of
  *         range, which is the one input grdd_timestamp_to_string() refuses. */
-static inline yyjson_mut_val *grdm_json_timestamp(
+static yyjson_mut_val *grdm_json_timestamp(
     grdm_json_writer *writer, const grdd_timestamp *timestamp
 ) {
   size_t size = grdd_timestamp_calculate_string_size(timestamp);
@@ -284,7 +277,7 @@ static inline yyjson_mut_val *grdm_json_timestamp(
  *  mantissa, so amounts above 2^53 / 10^4 would come back changed from a reader that parses
  *  numbers as doubles -- which most of them do.
  */
-static inline yyjson_mut_val *grdm_json_unit(grdm_json_writer *writer, grdd_unit value) {
+static yyjson_mut_val *grdm_json_unit(grdm_json_writer *writer, grdd_unit value) {
   char *buffer = grdm_json_text_buffer(writer->work, GRDM_JSON_UNIT_CAPACITY);
   if (!buffer) { return NULL; }
   int written = grdd_unit_to_string(buffer, GRDM_JSON_UNIT_CAPACITY, value, 4);
@@ -366,47 +359,12 @@ static bool grdm_json_add_signature_pairs(
     size_t count
 );
 
-/** @} */
+#include "gradido_blockchain_core/const.h"
+#include "gradido_blockchain_core/data/wire/hiero.h"
+#include "gradido_blockchain_core/types/ledger_anchor.h"
+#include "gradido_blockchain_core/types/memo_key.h"
 
-// ****************** the work chain, seen through yyjson's allocator ***********************
-//
-// yyjson asks for memory through three function pointers and a context. The context here is a
-// hostmem_multi_arena, so every byte a render needs -- the document, the value pool, the
-// writer's output buffer -- is drawn from the chain the caller opened, and malloc is never
-// reached. A bump chain hands memory back in one motion rather than block by block, which is
-// what shapes the three below.
-
-static void *arena_malloc(void *ctx, size_t size) {
-  hostmem_multi_arena *chain = (hostmem_multi_arena *)ctx;
-  if (size > UINT32_MAX) { return NULL; }
-  // NULL is how this interface says "no memory", so a zero sized request cannot answer with it
-  // and asks for one byte instead -- which the arena rounds up to its alignment anyway
-  uint8_t *buffer = NULL;
-  if (HOSTMEM_SUCCESS != hostmem_multi_arena_alloc(&buffer, size ? (uint32_t)size : 1, chain)) {
-    return NULL;
-  }
-  return buffer;
-}
-
-static void *arena_realloc(void *ctx, void *ptr, size_t old_size, size_t size) {
-  if (!ptr) { return arena_malloc(ctx, size); }
-  // the block already reaches that far; a bump allocator cannot give the difference back, and
-  // the reservation stays what it was
-  if (size <= old_size) { return ptr; }
-  void *grown = arena_malloc(ctx, size);
-  if (!grown) { return NULL; }
-  memcpy(grown, ptr, old_size);
-  return grown;
-}
-
-static void arena_free(void *ctx, void *ptr) {
-  // Deliberately empty. hostmem_multi_arena_free() reclaims a block only while it is the tail
-  // of its own arena, and it needs the size to do it -- a size this interface does not carry.
-  // So nothing is attempted: the chain comes back whole at the caller's
-  // hostmem_multi_arena_reset(), which is what the public headers promise.
-  (void)ctx;
-  (void)ptr;
-}
+#include <string.h>
 
 // ****************** the course ************************************************************
 
@@ -416,7 +374,7 @@ static hostmem_result grdm_json_writer_begin(
   if (!writer || !root || !work) { return HOSTMEM_ERROR_NULL_POINTER; }
 
   // by value into the document, so this local going out of scope is none of yyjson's business
-  const yyjson_alc alc = {arena_malloc, arena_realloc, arena_free, work};
+  const yyjson_alc alc = grdm_json_arena_alc(work);
 
   yyjson_mut_doc *doc = yyjson_mut_doc_new(&alc);
   if (!doc) { return HOSTMEM_ERROR_OUT_OF_MEMORY; }
@@ -441,7 +399,7 @@ static hostmem_result grdm_json_writer_finish(
 
   // the same allocator the document was opened on, so the output buffer is scratch like
   // everything else and never touches the chain the caller means to keep
-  const yyjson_alc alc = {arena_malloc, arena_realloc, arena_free, writer->work};
+  const yyjson_alc alc = grdm_json_arena_alc(writer->work);
   const yyjson_write_flag flags =
       (GRDM_JSON_PRETTY == format) ? YYJSON_WRITE_PRETTY : YYJSON_WRITE_NOFLAG;
 
