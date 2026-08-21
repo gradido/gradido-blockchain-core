@@ -10,14 +10,25 @@
  * drifted apart; sharing it here keeps the columns comparable when run_all.sh prints all three
  * in a row.
  *
- *   time for prepare test data: 76.2828 ms
+ * Four line kinds, from one release run of bench_json:
  *
- *   section
- *     name                                     total time    per step
+ *   time for prepare test data: 10.1590 us
  *
- *   all benchmarks: 1.0969 s, elements per step: 4000000
+ *   complete transaction to json, compact
+ *     minimal, no arrays                       18.7247 ms    374.5 ns/transaction
+ *     typical transfer                         36.5328 ms    730.7 ns/transaction
+ *     large, 4 KB body_bytes                  114.6053 ms      2.3 us/transaction
  *
- * Both time columns pick their own unit, so a step costing 19 ns and one costing 800 us are
+ *   reference, for reading the rows above
+ *     clone of the finished text into result    1.3061 ms     26.1 ns/copy
+ *
+ *   all benchmarks: 682.4179 ms, transactions per step: 50000
+ *
+ * The figures are one machine's and will not reproduce; the layout is the point. What the last
+ * column names comes from bench_step()'s @p unit, which is why the clone row counts copies
+ * while the rows above it count transactions.
+ *
+ * Both time columns pick their own unit, so the 374.5 ns step and the 2.3 us one above are
  * equally readable — a fixed ns column would drown the second in digits.
  */
 

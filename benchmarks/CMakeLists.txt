@@ -15,6 +15,17 @@ if(NOT WIN32)
   target_link_libraries(bench_numberToString m)
 endif()
 
+# one binary per unit
+add_executable(bench_json src/bench_json.c)
+target_link_libraries(bench_json gradido_blockchain_core)
+# same reason as above: the library it links may carry sodium calls in its converter
+if (USE_SODIUM)
+  target_link_libraries(bench_json sodium)
+endif()
+if(NOT WIN32)
+  target_link_libraries(bench_json m)
+endif()
+
 if (USE_SODIUM)
   # one binary per unit
   add_executable(bench_crypto src/bench_crypto.c)

@@ -25,6 +25,9 @@ target_link_libraries(test_data_wire gradido_blockchain_core GTest::gtest_main)
 add_executable(test_unit src/test_unit.cpp)
 target_link_libraries(test_unit gradido_blockchain_core GTest::gtest_main)
 
+add_executable(test_json src/test_json.cpp)
+target_link_libraries(test_json gradido_blockchain_core GTest::gtest_main)
+
 # Without USE_SODIUM the crypto sources are not part of gradido_blockchain_core at all, so a
 # binary that reaches into them -- directly, or through the key pairs it signs its fixtures
 # with -- has nothing to link against. These four are declared only when it is there, which is
@@ -52,6 +55,7 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   add_test(NAME test_data COMMAND test_data)
   add_test(NAME test_data_wire COMMAND test_data_wire)
   add_test(NAME test_unit COMMAND test_unit)
+  add_test(NAME test_json COMMAND test_json)
   if (USE_SODIUM)
     add_test(NAME test_converter COMMAND test_converter)
     add_test(NAME test_crypto COMMAND test_crypto)

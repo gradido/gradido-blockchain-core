@@ -29,11 +29,17 @@ typedef struct grdw_transaction_body grdw_transaction_body;
  * transaction structure. The community UUID provides context for the conversion.
  * Data flows from separated wire components into a unified runtime representation.
  *
- * @param[out] tx              Runtime complete transaction to populate.
+ * @param[out] tx              Runtime complete transaction to populate; not NULL. Released
+ *                             here before it is rebuilt, so a previously filled transaction is
+ *                             valid input -- but never uninitialised storage, which the release
+ *                             would read.
  * @param[in]  body            Wire-format transaction body source.
  * @param[in]  confirmed_tx    Wire-format confirmed transaction source.
  * @param[in]  community_uuid  16-byte UUID of the community context.
  * @return                     HOSTMEM_SUCCESS on success, error code on failure.
+ * @note On failure @p tx has already been released and then partly rebuilt: it may hold an
+ *       arena of its own carrying whatever was copied before the refusal, and returning does
+ *       not give that back. It is the caller's to pass to grdr_complete_transaction_release().
  */
 hostmem_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,

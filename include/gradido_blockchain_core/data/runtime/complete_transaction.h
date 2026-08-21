@@ -12,6 +12,7 @@
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
 #include "hostmem/memory_block.h"
+#include "hostmem/multi_arena.h"
 
 #include <stdint.h>
 
@@ -111,15 +112,58 @@ void grdr_complete_transaction_release(grdr_complete_transaction *tx);
 // call grdr_complete_transaction_release and will free memory where tx is pointing
 void grdr_complete_transaction_free(grdr_complete_transaction *tx);
 
-// buffer is used as scratch arena for decoding, so it must be 8 byte aligned and
-// buffer_size a multiple of 8 — otherwise HOSTMEM_ERROR_INVALID_PARAM comes back
+/**
+ * @brief Decode a confirmed transaction and its body, and build the runtime transaction from
+ *        both.
+ *
+ * Two decodes run here, the confirmed transaction and the body inside it, and they share
+ * @p workspace: each copies out what it keeps before the next one starts. @p scratch holds
+ * those copies and the wire structures built from them, and nothing that outlives the call --
+ * the runtime transaction takes an arena of its own for what it keeps, so the chain is the
+ * caller's to reset the moment this returns.
+ *
+ * A workspace that turns out too small comes back as HOSTMEM_ERROR_OUT_OF_MEMORY with nothing
+ * else wrong: enlarge it and call again. A caller reading a stream of transactions learns the
+ * size on the first one that does not fit and hands the same larger stretch to every call after
+ * it -- which is why the size is here and not guessed inside. See @ref grdw_pb_workspace.
+ *
+ * @param[out]    tx              Runtime transaction to build; not NULL, and either freshly
+ *                                initialised or previously filled -- never uninitialised
+ *                                storage. It is released before being rebuilt, so a filled one
+ *                                is valid input, but that happens once both decodes have gone
+ *                                through, inside grdm_complete_transaction_from_wire(). Bytes
+ *                                that turn out to be unreadable therefore cost the caller
+ *                                nothing: see the note below for what @p tx holds after each
+ *                                kind of failure.
+ * @param[in]     serialized_data Protobuf bytes of a confirmed transaction; not NULL.
+ * @param[in]     serialized_len  Their length; must be > 0.
+ * @param[in]     community_uuid  16-byte UUID of the community context; not NULL.
+ * @param[in]     workspace       Stretch pbtools works in; not NULL, 8 byte aligned. Written but
+ *                                not read afterwards, and free to be reused.
+ * @param[in,out] scratch         Chain the wire structures are built in; not NULL. Left holding
+ *                                them on success and on failure alike.
+ * @retval HOSTMEM_SUCCESS             @p tx is built.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  An argument is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p serialized_len is 0, or @p workspace is empty or not
+ *                                     8 byte aligned.
+ * @retval HOSTMEM_ERROR_OUT_OF_MEMORY @p workspace was too small for one of the two messages.
+ * @retval Anything the decode or grdm_complete_transaction_from_wire() reports.
+ *
+ * @note What @p tx holds afterwards depends on how far the call got. Either decode failing
+ *       leaves it exactly as it was on entry, untouched and still the caller's to use. A
+ *       failure inside grdm_complete_transaction_from_wire() -- a transaction type it does not
+ *       build, an arena it could not open or grow -- leaves it released and then partly
+ *       rebuilt, holding an arena of its own; that one has to be handed to
+ *       grdr_complete_transaction_release(), or the arena stays out.
+ * @whisper Bytes are read once, and what they meant is kept
+ */
 hostmem_result grdr_complete_transaction_init_from_protobuf(
     grdr_complete_transaction *tx,
     const uint8_t *serialized_data,
     uint32_t serialized_len,
     const uint8_t community_uuid[16],
-    uint8_t *buffer,
-    uint32_t buffer_size
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *scratch
 );
 
 const grdd_timestamp *grdr_complete_transaction_get_confirmed_at(

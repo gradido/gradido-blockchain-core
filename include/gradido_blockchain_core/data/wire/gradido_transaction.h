@@ -2,8 +2,10 @@
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_GRADIDO_TRANSACTION_H
 
 #include "basic_types.h"
+#include "gradido_blockchain_core/data/wire/pb_workspace.h"
 #include "gradido_blockchain_core/result.h"
 #include "hostmem/memory_block.h"
+#include "hostmem/multi_arena.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -58,7 +60,7 @@ void grdw_gradido_transaction_init(grdw_gradido_transaction *tx);
  *                              hasn't enough space.
  */
 hostmem_result grdw_gradido_transaction_reserve_sig_map(
-    grdw_gradido_transaction *tx, uint8_t sig_map_count, hostmem *allocator
+    grdw_gradido_transaction *tx, uint8_t sig_map_count, hostmem_multi_arena *allocator
 );
 
 /**
@@ -94,7 +96,10 @@ hostmem_result grdw_gradido_transaction_copy_sig_map(
  *                      not freed individually but as a whole.
  */
 hostmem_result grdw_gradido_transaction_decode(
-    grdw_gradido_transaction *tx, const hostmem_memory_block *binary_src, hostmem *allocator
+    grdw_gradido_transaction *tx,
+    const hostmem_memory_block *binary_src,
+    const hostmem_memory_block *workspace,
+    hostmem_multi_arena *allocator
 );
 
 /**
@@ -117,7 +122,7 @@ hostmem_result grdw_gradido_transaction_encode(
     hostmem_memory_block *binary_dst,
     int *final_size,
     const grdw_gradido_transaction *tx,
-    hostmem *allocator
+    const hostmem_memory_block *workspace
 );
 
 /**
@@ -126,10 +131,24 @@ hostmem_result grdw_gradido_transaction_encode(
  * Releases the signature map array and the body bytes memory block. The transaction
  * dissolves back to a clean state, ready for reuse or destruction.
  *
- * @param[in/out] tx        Gradido transaction to free.
- * @param[in]     allocator Memory allocator used for allocating memory.
+ * @param[in,out] tx        Gradido transaction to free; may be NULL, which does nothing.
+ *                          Otherwise it must be one this module filled and that nothing has
+ *                          edited since: each member's recorded size is what the chain is told
+ *                          to take back, and a size that does not match its allocation moves
+ *                          the bump index by the wrong amount and hands the same bytes out
+ *                          twice.
+ * @param[in]     allocator The chain the members were taken from; NULL does nothing at all --
+ *                          not even the re-initialisation below -- and a chain other than the
+ *                          one they came from reclaims nothing.
+ *
+ * Members are released in reverse allocation order, because a bump chain can only take back its
+ * own tail. Even then the reclaim is best effort: anything that is no longer the tail stays
+ * reserved until hostmem_multi_arena_reset(), which is how memory really comes back from a
+ * chain. Nothing is returned, because whether the bytes came back is not something a caller can
+ * act on -- on every path that gets past the two checks above, the structure is left reading as
+ * freshly initialised.
  */
-void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, hostmem *allocator);
+void grdw_gradido_transaction_free(grdw_gradido_transaction *tx, hostmem_multi_arena *allocator);
 
 /** @} */
 

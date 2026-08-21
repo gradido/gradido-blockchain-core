@@ -93,6 +93,13 @@ FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_block
 FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
+# Translation unit fragments: the json mappings include these whole, so compiling them here as
+# well would build objects of unreachable statics. See their file comments for why they are .c
+# files and not headers.
+list(REMOVE_ITEM MAPPING
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/json_writer.c"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/json_arena_alc.c"
+)
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB TYPES "src/types/*.c" "include/gradido_blockchain_core/types/*.h")
 FILE(GLOB UTILS "src/utils/*.c" "include/gradido_blockchain_core/utils/*.h")
@@ -123,7 +130,10 @@ endif()
 FILE(GLOB FP256 "third_party/fp256/*.h" "third_party/fp256/src/*.h" "third_party/fp256/src/*.c")
 FILE(GLOB PBTOOLS "third_party/pbtools/*.c" "third_party/pbtools/*.h")
 FILE(GLOB R128 "third_party/r128/*.c" "third_party/r128/*.h")
-set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128})
+# yyjson is a submodule of the upstream repository, which ships its tests, fuzzers and
+# tools beside the library. Only src/ is named here; the rest never enters the build.
+FILE(GLOB YYJSON "third_party/yyjson/src/*.c" "third_party/yyjson/src/*.h")
+set(GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC ${FP256} ${PBTOOLS} ${R128} ${YYJSON})
 
 if(MSVC)
 if (USE_SODIUM)
@@ -141,6 +151,7 @@ endif()
     source_group("third_party/fp256" FILES ${FP256})
     source_group("third_party/pbtools" FILES ${PBTOOLS})
     source_group("third_party/r128" FILES ${R128})
+    source_group("third_party/yyjson" FILES ${YYJSON})
 endif()
 
 include_directories(
@@ -149,6 +160,7 @@ include_directories(
     include/gradido_blockchain_core/data/proto/gradido
     third_party
     third_party/pbtools
+    third_party/yyjson/src
 )
 
 add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC} ${GRADIDO_BLOCKCHAIN_CORE_THIRD_PARTY_SRC})
