@@ -13,7 +13,7 @@ extern "C" {
 
 /** @defgroup grdm_json_from_wire grdm_json_from_wire
  *  @ingroup mapping
- *  @brief Rendering wire structures as JSON text, without touching malloc
+ *  @brief Rendering wire structures as JSON text, never allocating directly
  *
  *  The wire structures are what comes off the network, and this renders them as they stand:
  *  nested the way protobuf nests them, one function per message, each member under the name its
@@ -52,6 +52,12 @@ extern "C" {
  *  present is what the counts and the union made reachable. Arrays are the exception and are
  *  always written, empty ones included.
  *
+ *  Nothing here allocates directly: every byte comes from the two hostmem_multi_arena chains
+ *  the caller passes in. A chain in turn asks the allocator it was configured with -- malloc,
+ *  unless the caller gave it something else -- and only when it has to open an arena. Which
+ *  calls do that, and how a caller keeps it from happening at all, is set out with the
+ *  functions below.
+ *
  *  @whisper What arrived on the wire, said out loud in the shape it arrived in
  *  @{
  */
@@ -86,6 +92,7 @@ typedef struct hostmem_multi_arena hostmem_multi_arena;
  * @param[in,out] result Chain the finished text is placed in; not NULL.
  * @retval HOSTMEM_SUCCESS              @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER   An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN   @p format names no layout; nothing is written.
  * @retval HOSTMEM_ERROR_ENUM_UNHANDLED @p body carries GRDT_TRANSACTION_NONE or a value outside
  *                                      the enum, neither of which names a payload.
  * @retval HOSTMEM_ERROR_ENCODE_FAILED  A field could not be written as text: a timestamp whose
@@ -117,6 +124,7 @@ hostmem_result grdm_transaction_body_to_json(
  * @param[in,out] result Chain the finished text is placed in; not NULL.
  * @retval HOSTMEM_SUCCESS             @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER  An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN  @p format names no layout; nothing is written.
  * @retval HOSTMEM_ERROR_ENCODE_FAILED A timestamp in the pairing anchor carries nanoseconds
  *                                     outside 0..999999999.
  * @retval HOSTMEM_ERROR_ARITHMETIC_OVERFLOW The body bytes are larger than the @c uint32_t
@@ -155,6 +163,7 @@ hostmem_result grdm_gradido_transaction_to_json(
  * @param[in,out] result            Chain the finished text is placed in; not NULL.
  * @retval HOSTMEM_SUCCESS              @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER   An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN   @p format names no layout; nothing is written.
  * @retval HOSTMEM_ERROR_INVALID_PARAM  @p pb_workspace_size is 0.
  * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  The stretch was too small for the body, or a chain could
  *                                      not open another arena. Enlarge and call again.
@@ -188,6 +197,7 @@ hostmem_result grdm_gradido_transaction_with_body_to_json(
  * @param[in,out] result Chain the finished text is placed in; not NULL.
  * @retval HOSTMEM_SUCCESS             @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER  An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN  @p format names no layout; nothing is written.
  * @retval HOSTMEM_ERROR_ENCODE_FAILED A timestamp carries nanoseconds outside 0..999999999, or
  *                                     a balance does not round to four digits.
  * @retval HOSTMEM_ERROR_ARITHMETIC_OVERFLOW A field is larger than the @c uint32_t hostmem

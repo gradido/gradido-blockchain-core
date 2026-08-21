@@ -93,10 +93,18 @@ typedef struct grdm_json_error {
  * @retval HOSTMEM_SUCCESS             @p body is filled.
  * @retval HOSTMEM_ERROR_NULL_POINTER  An argument is NULL.
  * @retval HOSTMEM_ERROR_INVALID_PARAM @p json_size is 0.
- * @retval HOSTMEM_ERROR_DECODE_FAILED The text is not JSON, or a member is missing, of the wrong
- *                                     type, or holds something the field cannot take. @p error
- *                                     names which.
- * @retval HOSTMEM_ERROR_OUT_OF_MEMORY A chain could not open another arena.
+ * @retval HOSTMEM_ERROR_DECODE_FAILED A verdict on the text: it is not JSON, or a member is
+ *                                     missing, of the wrong type, or holds something the field
+ *                                     cannot take. @p error names which. Reading it again will
+ *                                     fail the same way, so this is the code that says to put
+ *                                     the message aside.
+ * @retval HOSTMEM_ERROR_OUT_OF_MEMORY No verdict on the text at all: a chain could not open
+ *                                     another arena. @p error carries no member and says the
+ *                                     allocator ran dry. The message may be perfectly good --
+ *                                     enlarge @p allocator, or reset it, and read the same text
+ *                                     again. The two are kept apart on purpose, because a
+ *                                     caller that cannot tell them apart has to treat a
+ *                                     temporary shortage as a bad message.
  * @whisper Intent, read back out of the words for it
  */
 hostmem_result grdm_transaction_body_from_json(

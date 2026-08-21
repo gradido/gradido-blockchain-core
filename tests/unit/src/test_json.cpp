@@ -178,6 +178,12 @@ TEST(JsonFromRuntimeTest, TransferRendersEveryField) {
   yyjson_val *balances = yyjson_obj_get(root, "account_balances");
   ASSERT_EQ(yyjson_arr_size(balances), 1u);
   yyjson_val *firstBalance = yyjson_arr_get(balances, 0);
+  // the balance carries its own key, seeded like the transfer's recipient rather than copied
+  // from it -- the two hex strings matching is what makeTransfer() sets up, not a stray paste
+  EXPECT_STREQ(
+      getStr(firstBalance, "pubkey"),
+      "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f"
+  );
   EXPECT_STREQ(getStr(firstBalance, "balance"), "98765.0000");
   EXPECT_STREQ(getStr(firstBalance, "community_uuid"), "019e2c31-a303-75c0-941e-f35c59e4f978");
 
@@ -188,6 +194,10 @@ TEST(JsonFromRuntimeTest, TransferRendersEveryField) {
 
   yyjson_val *signatures = yyjson_obj_get(root, "signature_pairs");
   ASSERT_EQ(yyjson_arr_size(signatures), 1u);
+  EXPECT_STREQ(
+      getStr(yyjson_arr_get(signatures, 0), "public_key"),
+      "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f"
+  );
   EXPECT_STREQ(
       getStr(yyjson_arr_get(signatures, 0), "signature"),
       "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
@@ -874,7 +884,23 @@ TEST(JsonFromWireTest, ConfirmedTransactionNestsTheGradidoTransaction) {
   yyjson_val *nested = yyjson_obj_get(root, "transaction");
   ASSERT_TRUE(nested != nullptr);
   EXPECT_STREQ(getStr(nested, "body_bytes"), "0a1b2c3d4e5f");
-  EXPECT_EQ(yyjson_arr_size(yyjson_obj_get(nested, "sig_map")), 1u);
+  yyjson_val *sigMap = yyjson_obj_get(nested, "sig_map");
+  ASSERT_EQ(yyjson_arr_size(sigMap), 1u);
+  // the only place a sig_map element's contents are pinned to a value. The runtime view's
+  // signature_pairs are checked in TransferRendersEveryField, but the wire view nests its pairs
+  // under "transaction" while the runtime view keeps them at the root, so the two shapes never
+  // meet -- unlike the balances, which WireAndRuntimeViewsSpellSharedFieldsAlike compares
+  // element for element and which are therefore covered from the runtime side.
+  yyjson_val *firstPair = yyjson_arr_get(sigMap, 0);
+  EXPECT_STREQ(
+      getStr(firstPair, "public_key"),
+      "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f"
+  );
+  EXPECT_STREQ(
+      getStr(firstPair, "signature"),
+      "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+      "2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40"
+  );
   // and its members are not also in the root
   EXPECT_TRUE(yyjson_obj_get(root, "body_bytes") == nullptr);
   EXPECT_TRUE(yyjson_obj_get(root, "sig_map") == nullptr);
@@ -962,9 +988,9 @@ TEST(JsonFromWireTest, WireAndRuntimeViewsSpellSharedFieldsAlike) {
       yyjson_obj_get(wireRoot, "account_balances"), yyjson_obj_get(runtimeRoot, "account_balances")
   ));
 
-  // the amount reaches both views through different members and comes out spelled the same
-  yyjson_val *wireSender = nullptr; // the wire view keeps it in the body, rendered separately
-  (void)wireSender;
+  // only the runtime view has the amount to show here: it carries the transfer flattened into
+  // the root, while the wire view keeps it inside the body, which this transaction holds as
+  // bytes. JsonBodyDetailTest covers the two spellings meeting once the body is decoded.
   EXPECT_STREQ(getStr(yyjson_obj_get(runtimeRoot, "transfer"), "amount"), "1.2345");
   EXPECT_STREQ(getStr(wireRoot, "confirmed_at"), getStr(runtimeRoot, "confirmed_at"));
 
@@ -1618,10 +1644,15 @@ TEST(WireFromJsonTest, BadDocumentsAreRefusedAtTheMemberAtFault) {
   );
   const std::string valid((const char *)base.json.data, base.json.size);
 
-  auto replace = [&](const std::string &from, const std::string &to) {
+  auto replace = [&](const std::string &from, const std::string &to) -> std::string {
     std::string out = valid;
     const size_t at = out.find(from);
-    EXPECT_NE(at, std::string::npos) << "fixture no longer contains: " << from;
+    if (at == std::string::npos) {
+      // EXPECT_ is not fatal, so falling through would hand npos to replace(), which throws
+      // out_of_range and takes the binary down before gtest can name the fixture that drifted
+      ADD_FAILURE() << "fixture no longer contains: " << from;
+      return out;
+    }
     return out.replace(at, from.size(), to);
   };
 
@@ -1641,6 +1672,17 @@ TEST(WireFromJsonTest, BadDocumentsAreRefusedAtTheMemberAtFault) {
        replace("1700000000.000002912", "1700000000.000002912123"), "created_at"},
       {"timestamp that is not a number at all", replace("1700000000.000002912", "yesterday"),
        "created_at"},
+      // The length has to come out at exactly what the field takes, or the check above this one
+       // catches it and this case proves nothing: two escaped NUL codepoints decode to two
+       // characters, so 62 hex digits follow them. yyjson then reports 64, the length the field
+       // wants, while strlen() stops at the first byte. Before the two were checked against each
+       // other the document was accepted and pubkey kept whatever the destination already held.
+      {"hex whose declared length hides an escaped null character",
+       replace(
+           "\"pubkey\":\"" + std::string(64, '0') + "\"",
+           "\"pubkey\":\"\\u0000\\u0000" + std::string(62, '0') + "\""
+       ),
+       "pubkey"},
       {"hex of the wrong length",
        replace(
            "\"pubkey\":\"0000000000000000000000000000000000000000000000000000000000000000\"",

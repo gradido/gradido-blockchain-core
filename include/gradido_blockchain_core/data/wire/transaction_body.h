@@ -194,8 +194,22 @@ hostmem_result grdw_transaction_body_encode(
  * within the transaction payload union. The body dissolves back to a clean
  * state, ready for reuse or destruction.
  *
- * @param[in/out] body      Transaction body to free.
- * @param[in]     allocator Memory allocator used for allocating memory.
+ * @param[in,out] body      Transaction body to free; may be NULL, which does nothing.
+ *                          Otherwise it must be one this module filled and that nothing has
+ *                          edited since: each member's recorded size is what the chain is told
+ *                          to take back, and a size that does not match its allocation moves
+ *                          the bump index by the wrong amount and hands the same bytes out
+ *                          twice.
+ * @param[in]     allocator The chain the members were taken from; NULL does nothing at all --
+ *                          not even the re-initialisation below -- and a chain other than the
+ *                          one they came from reclaims nothing.
+ *
+ * Members are released in reverse allocation order, because a bump chain can only take back its
+ * own tail. Even then the reclaim is best effort: anything that is no longer the tail stays
+ * reserved until hostmem_multi_arena_reset(), which is how memory really comes back from a
+ * chain. Nothing is returned, because whether the bytes came back is not something a caller can
+ * act on -- on every path that gets past the two checks above, the structure is left reading as
+ * freshly initialised.
  */
 void grdw_transaction_body_free(grdw_transaction_body *body, hostmem_multi_arena *allocator);
 

@@ -43,6 +43,16 @@ typedef struct json_reader {
   hostmem_multi_arena *allocator;
   //! Set once, by the first thing that went wrong. Later failures do not overwrite it.
   grdm_json_error failure;
+  /**
+   * @brief What to report instead of HOSTMEM_ERROR_DECODE_FAILED, or HOSTMEM_SUCCESS.
+   *
+   * A read gives way for two unrelated reasons, and they ask the caller for opposite things.
+   * A member that is missing or malformed means the document is not what it claims, and the
+   * answer is to reject it. An allocator with no room left says nothing about the document at
+   * all: the answer is a larger chain and the same text again. Flattening both into
+   * DECODE_FAILED would tell a caller to throw away a message that was perfectly good.
+   */
+  hostmem_result status;
 } json_reader;
 
 /**
@@ -61,6 +71,21 @@ static bool fail(json_reader *reader, const char *member, const char *reason) {
     reader->failure.member = member;
     reader->failure.reason = reason;
   }
+  return false;
+}
+
+/**
+ * @brief Record an allocation failure, keeping the code the allocator reported.
+ *
+ * The reason text is the same one every allocation site used before, so @ref grdm_json_error
+ * still names no member and still says what happened; what is added is the result itself, which
+ * the top level returns in place of HOSTMEM_ERROR_DECODE_FAILED.
+ *
+ * @return Always false, like fail(), so a call site reads `return fail_alloc(reader, taken);`.
+ */
+static bool fail_alloc(json_reader *reader, hostmem_result taken) {
+  fail(reader, NULL, "the allocator could not open another arena");
+  if (HOSTMEM_SUCCESS == reader->status) { reader->status = taken; }
   return false;
 }
 
@@ -84,8 +109,20 @@ static const char *require_str(
     fail(reader, key, "member is not a string");
     return NULL;
   }
-  if (length) { *length = yyjson_get_len(val); }
-  return yyjson_get_str(val);
+  // yyjson reports the length it decoded, while everything downstream reads a C string: hex,
+  // uuid, amount and the enum names all stop at the first NUL and work from strlen(). A
+  // \u0000 in the document makes the two disagree, and the shorter read leaves the rest of the
+  // destination as it found it -- zeros in a fixed field, and for a block taken from the arena
+  // whatever the previous tenant left. Refused here, so the two lengths are one number for
+  // every member below rather than a check each one has to remember.
+  const size_t reported = yyjson_get_len(val);
+  const char *text = yyjson_get_str(val);
+  if (strlen(text) != reported) {
+    fail(reader, key, "string holds a null character");
+    return NULL;
+  }
+  if (length) { *length = reported; }
+  return text;
 }
 
 /** @brief Fixed length binary, from lowercase hex of exactly twice that many characters. */
@@ -111,15 +148,15 @@ static bool require_hex_block(
   size_t length = 0;
   const char *hex = require_str(reader, obj, key, &length);
   if (!hex) { return false; }
-  if (!length || (length & 1u)) {
+  if (!length) { return fail(reader, key, "hex string is empty"); }
+  if (length & 1u) {
     return fail(reader, key, "hex string has an odd number of characters");
   }
   if (length / 2 > UINT32_MAX) { return fail(reader, key, "hex string is too long to allocate"); }
 
   uint32_t size = (uint32_t)(length / 2);
-  if (HOSTMEM_SUCCESS != grdw_block_alloc(dst, size, reader->allocator)) {
-    return fail(reader, NULL, "the allocator could not open another arena");
-  }
+  const hostmem_result taken = grdw_block_alloc(dst, size, reader->allocator);
+  if (HOSTMEM_SUCCESS != taken) { return fail_alloc(reader, taken); }
   if (HOSTMEM_SUCCESS != hostmem_binary_from_hex(dst->data, hex)) {
     return fail(reader, key, "hex string holds a character that is not a hex digit");
   }
@@ -352,12 +389,9 @@ static bool read_account_balances(
   if (length > UINT8_MAX) { return fail(reader, key, "more entries than this field can count"); }
 
   hostmem_memory_block block = {NULL, 0};
-  if (HOSTMEM_SUCCESS !=
-      grdw_block_alloc(
-          &block, (uint32_t)(length * sizeof(grdw_account_balance)), reader->allocator
-      )) {
-    return fail(reader, NULL, "the allocator could not open another arena");
-  }
+  const hostmem_result taken =
+      grdw_block_alloc(&block, (uint32_t)(length * sizeof(grdw_account_balance)), reader->allocator);
+  if (HOSTMEM_SUCCESS != taken) { return fail_alloc(reader, taken); }
   grdw_account_balance *entries = (grdw_account_balance *)block.data;
 
   size_t index = 0;
@@ -395,12 +429,9 @@ static bool read_memos(
   if (length > UINT8_MAX) { return fail(reader, key, "more entries than this field can count"); }
 
   hostmem_memory_block block = {NULL, 0};
-  if (HOSTMEM_SUCCESS !=
-      grdw_block_alloc(
-          &block, (uint32_t)(length * sizeof(grdw_encrypted_memo)), reader->allocator
-      )) {
-    return fail(reader, NULL, "the allocator could not open another arena");
-  }
+  const hostmem_result taken =
+      grdw_block_alloc(&block, (uint32_t)(length * sizeof(grdw_encrypted_memo)), reader->allocator);
+  if (HOSTMEM_SUCCESS != taken) { return fail_alloc(reader, taken); }
   grdw_encrypted_memo *entries = (grdw_encrypted_memo *)block.data;
 
   size_t index = 0;
@@ -446,12 +477,9 @@ static bool read_signature_pairs(
   if (length > UINT8_MAX) { return fail(reader, key, "more entries than this field can count"); }
 
   hostmem_memory_block block = {NULL, 0};
-  if (HOSTMEM_SUCCESS !=
-      grdw_block_alloc(
-          &block, (uint32_t)(length * sizeof(grdw_signature_pair)), reader->allocator
-      )) {
-    return fail(reader, NULL, "the allocator could not open another arena");
-  }
+  const hostmem_result taken =
+      grdw_block_alloc(&block, (uint32_t)(length * sizeof(grdw_signature_pair)), reader->allocator);
+  if (HOSTMEM_SUCCESS != taken) { return fail_alloc(reader, taken); }
   grdw_signature_pair *entries = (grdw_signature_pair *)block.data;
 
   size_t index = 0;
@@ -644,9 +672,9 @@ static bool read_body(json_reader *reader, yyjson_val *root, grdw_transaction_bo
   // written only by a body that carries one, and read the same way
   if (member_of(root, "other_community_uuid")) {
     hostmem_memory_block uuid = {NULL, 0};
-    if (HOSTMEM_SUCCESS != grdw_block_alloc(&uuid, HOSTMEM_UUID_BINARY_SIZE, reader->allocator)) {
-      return fail(reader, NULL, "the allocator could not open another arena");
-    }
+    const hostmem_result taken =
+        grdw_block_alloc(&uuid, HOSTMEM_UUID_BINARY_SIZE, reader->allocator);
+    if (HOSTMEM_SUCCESS != taken) { return fail_alloc(reader, taken); }
     if (!require_uuid(reader, root, "other_community_uuid", uuid.data)) { return false; }
     body->other_community_uuid = uuid.data;
   }
@@ -773,11 +801,12 @@ hostmem_result grdm_transaction_body_from_json(
   if (HOSTMEM_SUCCESS != opened) { return opened; }
 
   grdw_transaction_body_init(body);
-  json_reader reader = {allocator, {NULL, NULL}};
+  json_reader reader = {allocator, {NULL, NULL}, HOSTMEM_SUCCESS};
   if (!read_body(&reader, root, body)) {
     grdw_transaction_body_init(body);
     if (error) { *error = reader.failure; }
-    return HOSTMEM_ERROR_DECODE_FAILED;
+    // an allocator that ran dry is not a verdict on the document
+    return HOSTMEM_SUCCESS != reader.status ? reader.status : HOSTMEM_ERROR_DECODE_FAILED;
   }
   return HOSTMEM_SUCCESS;
 }
@@ -799,11 +828,12 @@ hostmem_result grdm_gradido_transaction_from_json(
   if (HOSTMEM_SUCCESS != opened) { return opened; }
 
   grdw_gradido_transaction_init(tx);
-  json_reader reader = {allocator, {NULL, NULL}};
+  json_reader reader = {allocator, {NULL, NULL}, HOSTMEM_SUCCESS};
   if (!read_gradido_transaction(&reader, root, tx)) {
     grdw_gradido_transaction_init(tx);
     if (error) { *error = reader.failure; }
-    return HOSTMEM_ERROR_DECODE_FAILED;
+    // an allocator that ran dry is not a verdict on the document
+    return HOSTMEM_SUCCESS != reader.status ? reader.status : HOSTMEM_ERROR_DECODE_FAILED;
   }
   return HOSTMEM_SUCCESS;
 }
@@ -825,11 +855,12 @@ hostmem_result grdm_confirmed_transaction_from_json(
   if (HOSTMEM_SUCCESS != opened) { return opened; }
 
   grdw_confirmed_transaction_init(tx);
-  json_reader reader = {allocator, {NULL, NULL}};
+  json_reader reader = {allocator, {NULL, NULL}, HOSTMEM_SUCCESS};
   if (!read_confirmed_transaction(&reader, root, tx)) {
     grdw_confirmed_transaction_init(tx);
     if (error) { *error = reader.failure; }
-    return HOSTMEM_ERROR_DECODE_FAILED;
+    // an allocator that ran dry is not a verdict on the document
+    return HOSTMEM_SUCCESS != reader.status ? reader.status : HOSTMEM_ERROR_DECODE_FAILED;
   }
   return HOSTMEM_SUCCESS;
 }

@@ -145,12 +145,27 @@ hostmem_result grdw_confirmed_transaction_encode(
 /**
  * @brief Free all memory owned by a confirmed transaction.
  *
- * Releases the account balances array and any nested allocations within the
- * transaction and ledger anchor. The transaction dissolves back to a clean
- * state, ready for reuse or destruction.
+ * Releases the account balances array and the nested gradido transaction, which carries its
+ * own signature map and body bytes. The ledger anchor is not among them: it is a discriminator
+ * and a union of two by-value members, with nothing allocated to give back. The transaction
+ * dissolves back to a clean state, ready for reuse or destruction.
  *
- * @param[in/out] tx        Confirmed transaction to free.
- * @param[in]     allocator Memory allocator used for freeing.
+ * @param[in,out] tx        Confirmed transaction to free; may be NULL, which does nothing.
+ *                          Otherwise it must be one this module filled and that nothing has
+ *                          edited since: each member's recorded size is what the chain is told
+ *                          to take back, and a size that does not match its allocation moves
+ *                          the bump index by the wrong amount and hands the same bytes out
+ *                          twice.
+ * @param[in]     allocator The chain the members were taken from; NULL does nothing at all --
+ *                          not even the re-initialisation below -- and a chain other than the
+ *                          one they came from reclaims nothing.
+ *
+ * Members are released in reverse allocation order, because a bump chain can only take back its
+ * own tail. Even then the reclaim is best effort: anything that is no longer the tail stays
+ * reserved until hostmem_multi_arena_reset(), which is how memory really comes back from a
+ * chain. Nothing is returned, because whether the bytes came back is not something a caller can
+ * act on -- on every path that gets past the two checks above, the structure is left reading as
+ * freshly initialised.
  */
 void grdw_confirmed_transaction_free(
     grdw_confirmed_transaction *tx, hostmem_multi_arena *allocator

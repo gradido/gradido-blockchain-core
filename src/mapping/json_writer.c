@@ -151,11 +151,14 @@ static hostmem_result grdm_json_writer_begin(
  *                       characters. One further byte is written after them, a terminator, so
  *                       reclaiming the block by hand passes @c size + 1. Untouched on failure.
  * @param[in]     writer Writer holding the finished document; not NULL.
- * @param[in]     format Compact or indented.
+ * @param[in]     format GRDM_JSON_COMPACT or GRDM_JSON_PRETTY, and nothing else. C passes an
+ *                       enum parameter as a plain integer, so a value naming neither is a call
+ *                       this function has to answer for rather than assume its way past.
  * @param[in,out] result Chain the text is placed in; not NULL. May be the work chain, at the
  *                       price of the scratch staying beside the text until the reset.
  * @retval HOSTMEM_SUCCESS                   @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER        An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN        @p format names neither enumerator.
  * @retval HOSTMEM_ERROR_ARITHMETIC_OVERFLOW The text is longer than the @c uint32_t hostmem
  *                                           measures an allocation in.
  * @retval HOSTMEM_ERROR_OUT_OF_MEMORY       A chain could not open another arena.
@@ -389,6 +392,30 @@ static hostmem_result grdm_json_writer_begin(
   return HOSTMEM_SUCCESS;
 }
 
+/**
+ * @brief The yyjson flags @p format asks for, or a refusal for a value that names no format.
+ *
+ * The switch carries no `default`, so adding an enumerator to grdm_json_format makes this a
+ * -Wswitch warning rather than a silent fall through to the refusal below -- the same way the
+ * transaction type switches in the mappings above are written.
+ *
+ * @param[out] flags  Untouched unless HOSTMEM_SUCCESS is returned.
+ * @param[in]  format The caller's choice.
+ * @retval HOSTMEM_SUCCESS            @p flags holds what yyjson is to be handed.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN @p format names neither enumerator.
+ */
+static hostmem_result grdm_json_write_flags(yyjson_write_flag *flags, grdm_json_format format) {
+  switch (format) {
+  case GRDM_JSON_COMPACT:
+    *flags = YYJSON_WRITE_NOFLAG;
+    return HOSTMEM_SUCCESS;
+  case GRDM_JSON_PRETTY:
+    *flags = YYJSON_WRITE_PRETTY;
+    return HOSTMEM_SUCCESS;
+  }
+  return HOSTMEM_ERROR_ENUM_UNKNOWN;
+}
+
 static hostmem_result grdm_json_writer_finish(
     hostmem_memory_block *json,
     const grdm_json_writer *writer,
@@ -397,11 +424,15 @@ static hostmem_result grdm_json_writer_finish(
 ) {
   if (!json || !writer || !result) { return HOSTMEM_ERROR_NULL_POINTER; }
 
+  // before the document is written rather than after: a format nobody named is the caller's
+  // mistake, and answering it with compact text would be a wrong answer instead of a loud one
+  yyjson_write_flag flags = YYJSON_WRITE_NOFLAG;
+  const hostmem_result format_known = grdm_json_write_flags(&flags, format);
+  if (HOSTMEM_SUCCESS != format_known) { return format_known; }
+
   // the same allocator the document was opened on, so the output buffer is scratch like
   // everything else and never touches the chain the caller means to keep
   const yyjson_alc alc = grdm_json_arena_alc(writer->work);
-  const yyjson_write_flag flags =
-      (GRDM_JSON_PRETTY == format) ? YYJSON_WRITE_PRETTY : YYJSON_WRITE_NOFLAG;
 
   size_t length = 0;
   char *text = yyjson_mut_write_opts(writer->doc, flags, &alc, &length, NULL);

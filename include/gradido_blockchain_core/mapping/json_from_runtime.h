@@ -11,7 +11,7 @@ extern "C" {
 
 /** @defgroup grdm_json_from_runtime grdm_json_from_runtime
  *  @ingroup mapping
- *  @brief Rendering runtime structures as JSON text, without touching malloc
+ *  @brief Rendering runtime structures as JSON text, never allocating directly
  *
  *  The sibling mappers move between wire, protobuf and runtime -- shapes that all carry the
  *  same bytes. This one leaves that circle: a runtime transaction goes out as text, and text
@@ -34,6 +34,12 @@ extern "C" {
  *  members present in the object are exactly the members the union and the counts made
  *  reachable. The one exception is named at
  *  grdm_complete_transaction_to_json().
+ *
+ *  Nothing here allocates directly: every byte comes from the two hostmem_multi_arena chains
+ *  the caller passes in. A chain in turn asks the allocator it was configured with -- malloc,
+ *  unless the caller gave it something else -- and only when it has to open an arena. Which
+ *  calls do that, and how a caller keeps it from happening at all, is set out with the
+ *  function below.
  *
  *  @whisper The same transaction, told in a language people read
  *  @{
@@ -77,7 +83,8 @@ typedef struct hostmem_multi_arena hostmem_multi_arena;
  *                       failure.
  * @param[in]     tx     Transaction to render; not NULL. Read only, and not read past what its
  *                       counts and its transaction type make reachable.
- * @param[in]     format Compact or indented; see @ref grdm_json_format.
+ * @param[in]     format GRDM_JSON_COMPACT or GRDM_JSON_PRETTY, and nothing else; @ref
+ *                       grdm_json_format sets out what a value naming neither does.
  * @param[in,out] work   Chain for the rendering itself; not NULL. Left holding the scratch of
  *                       this call, on success and on failure alike -- a bump chain gives
  *                       nothing back one block at a time, so hostmem_multi_arena_reset() is
@@ -87,6 +94,10 @@ typedef struct hostmem_multi_arena hostmem_multi_arena;
  *                       the reset.
  * @retval HOSTMEM_SUCCESS                   @p json holds the text.
  * @retval HOSTMEM_ERROR_NULL_POINTER        An argument is NULL.
+ * @retval HOSTMEM_ERROR_ENUM_UNKNOWN        @p format is neither GRDM_JSON_COMPACT nor
+ *                                           GRDM_JSON_PRETTY. Refused before the text is
+ *                                           written, so @p json is untouched and @p result
+ *                                           holds nothing new.
  * @retval HOSTMEM_ERROR_ENUM_UNHANDLED      @p tx carries a transaction type this mapping does
  *                                           not describe -- the same types
  *                                           grdm_complete_transaction_from_wire() refuses to

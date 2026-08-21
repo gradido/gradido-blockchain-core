@@ -127,8 +127,14 @@ void grdr_complete_transaction_free(grdr_complete_transaction *tx);
  * size on the first one that does not fit and hands the same larger stretch to every call after
  * it -- which is why the size is here and not guessed inside. See @ref grdw_pb_workspace.
  *
- * @param[out]    tx              Runtime transaction to build; not NULL. Released first, so a
- *                                previously filled one is valid input.
+ * @param[out]    tx              Runtime transaction to build; not NULL, and either freshly
+ *                                initialised or previously filled -- never uninitialised
+ *                                storage. It is released before being rebuilt, so a filled one
+ *                                is valid input, but that happens once both decodes have gone
+ *                                through, inside grdm_complete_transaction_from_wire(). Bytes
+ *                                that turn out to be unreadable therefore cost the caller
+ *                                nothing: see the note below for what @p tx holds after each
+ *                                kind of failure.
  * @param[in]     serialized_data Protobuf bytes of a confirmed transaction; not NULL.
  * @param[in]     serialized_len  Their length; must be > 0.
  * @param[in]     community_uuid  16-byte UUID of the community context; not NULL.
@@ -142,6 +148,13 @@ void grdr_complete_transaction_free(grdr_complete_transaction *tx);
  *                                     8 byte aligned.
  * @retval HOSTMEM_ERROR_OUT_OF_MEMORY @p workspace was too small for one of the two messages.
  * @retval Anything the decode or grdm_complete_transaction_from_wire() reports.
+ *
+ * @note What @p tx holds afterwards depends on how far the call got. Either decode failing
+ *       leaves it exactly as it was on entry, untouched and still the caller's to use. A
+ *       failure inside grdm_complete_transaction_from_wire() -- a transaction type it does not
+ *       build, an arena it could not open or grow -- leaves it released and then partly
+ *       rebuilt, holding an arena of its own; that one has to be handed to
+ *       grdr_complete_transaction_release(), or the arena stays out.
  * @whisper Bytes are read once, and what they meant is kept
  */
 hostmem_result grdr_complete_transaction_init_from_protobuf(

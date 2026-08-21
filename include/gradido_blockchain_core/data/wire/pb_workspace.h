@@ -31,14 +31,21 @@ extern "C" {
  * be too small on the same message every time or too large on all the others, and it would
  * repeat the decode to find out.
  *
- * The stretch is written but never read by the caller and never kept: pbtools works in it, the
- * `grdm_*_from_pbtools()` step copies out what the wire structure keeps, and the caller is free
- * to reuse the same bytes for the next message.
+ * On the way through, the stretch is written but never read back by this code and never kept:
+ * pbtools works in it, the `grdm_*_from_pbtools()` step copies out what the wire structure
+ * keeps, and the caller is free to reuse the same bytes for the next message. Nothing the call
+ * hands back points into it, which is what makes that reuse safe. The one time a caller may
+ * want to look at the bytes themselves is the failure the note below describes.
  *
  * @note The stretch must be 8 byte aligned, which is what every hostmem allocation already is.
- * @note **A failing decode leaves the workspace as it found it.** What pbtools managed to write
- *       before it gave up is exactly what someone wants to read when a message will not decode,
- *       and the stretch belongs to the caller anyway.
+ * @note **A failing decode does not reset the workspace.** Nothing here writes over what
+ *       pbtools left, so the stretch comes back holding partial data rather than either its
+ *       previous contents or a decoded message: the empty message `proto_*_new()` lays down
+ *       before any byte is read, plus whatever fields the decode managed before it gave up.
+ *       That is deliberate -- it is exactly what someone wants to look at when a message will
+ *       not decode, and the stretch belongs to the caller anyway. The output structure was
+ *       never filled from it, so nothing points in, and the next call may be handed the same
+ *       bytes: each decode starts by laying its own message down over them.
  *
  * @whisper The ground is measured out by the one who knows the walk
  *  @{
@@ -50,6 +57,22 @@ extern "C" {
  * hostmem ships the memory_block helpers for a single arena only, and the three messages here
  * keep pointer and size together the way those helpers do. Three lines each, rather than three
  * lines at every call site.
+ *
+ * @param[out]    block     Descriptor to fill; not NULL. Written only once the whole call has
+ *                          succeeded, so a refusal leaves both its members exactly as they
+ *                          were: a descriptor that already named an allocation still names it,
+ *                          a zeroed one is still empty, and there is no half-filled state for a
+ *                          caller to check for.
+ * @param[in]     size      Bytes to reserve; must be > 0. The chain reserves the next multiple
+ *                          of 8 for them. They are not zeroed -- they hold whatever the
+ *                          previous tenant of that stretch left.
+ * @param[in,out] allocator Chain to draw from; not NULL. NULL is refused rather than taken as a
+ *                          malloc fallback.
+ * @retval HOSTMEM_SUCCESS             @p block names @p size usable bytes.
+ * @retval HOSTMEM_ERROR_NULL_POINTER  @p block or @p allocator is NULL.
+ * @retval HOSTMEM_ERROR_INVALID_PARAM @p size is 0.
+ * @retval Anything else hostmem_multi_arena_alloc() reports: no arena had room and none could
+ *         be opened, or rounding @p size up to 8 would wrap uint32_t.
  */
 static inline hostmem_result grdw_block_alloc(
     hostmem_memory_block *block, uint32_t size, hostmem_multi_arena *allocator
@@ -61,7 +84,24 @@ static inline hostmem_result grdw_block_alloc(
   return HOSTMEM_SUCCESS;
 }
 
-/** @brief hostmem_memory_block_clone() against a chain. An empty source copies nothing. */
+/**
+ * @brief hostmem_memory_block_clone() against a chain.
+ *
+ * @param[out]    dst       Descriptor to fill; not NULL. On success it names a fresh copy taken
+ *                          from @p allocator, never the source bytes. A refusal leaves it
+ *                          untouched, the same as grdw_block_alloc() above.
+ * @param[in]     src       Source to copy; not NULL. Its @c data must hold @c size bytes,
+ *                          unless @c size is 0. Read only; the copy does not alias it.
+ * @param[in,out] allocator Chain the copy is taken from; not NULL.
+ * @retval HOSTMEM_SUCCESS            @p dst names the copy, or was emptied for an empty source.
+ * @retval HOSTMEM_ERROR_NULL_POINTER @p dst, @p src, @p src->data or @p allocator is NULL.
+ * @retval Anything else hostmem_multi_arena_alloc() reports, for the allocation the copy needs.
+ *
+ * @note An empty source does not leave @p dst alone -- it empties it to @c {NULL, 0} and reports
+ *       success. A descriptor that named an allocation before such a call stops naming it: the
+ *       bytes stay reserved in their arena until it is reset, with nothing pointing at them any
+ *       more. Clone into a fresh descriptor, or hand the old one to grdw_block_free() first.
+ */
 static inline hostmem_result grdw_block_clone(
     hostmem_memory_block *dst, const hostmem_memory_block *src, hostmem_multi_arena *allocator
 ) {
@@ -82,6 +122,20 @@ static inline hostmem_result grdw_block_clone(
  *
  * Reclaims only while the block is the tail of its arena, the same bargain a single arena
  * offers. The descriptor is emptied either way, so a caller cannot read a block it has released.
+ *
+ * @param[in,out] block     Descriptor to release; may be NULL, which does nothing. It must be
+ *                          one grdw_block_alloc() or grdw_block_clone() filled and that nothing
+ *                          has edited since: the size it carries is what the arena is told to
+ *                          take back, and a size that does not match the allocation moves the
+ *                          bump index by the wrong amount and hands the same bytes out twice.
+ *                          An already empty descriptor is left empty and nothing is reclaimed.
+ * @param[in,out] allocator Chain the block was taken from. NULL, or a different chain than the
+ *                          one it came from, reclaims nothing -- and the descriptor is emptied
+ *                          all the same, so this cannot be detected afterwards.
+ *
+ * Returns nothing on purpose: whether the bytes came back is not something a caller can act on.
+ * A block that was not the tail stays reserved until hostmem_multi_arena_reset(), which is how
+ * memory really comes back from a bump chain, and the descriptor reads @c {NULL, 0} either way.
  */
 static inline void grdw_block_free(hostmem_memory_block *block, hostmem_multi_arena *allocator) {
   if (!block) { return; }

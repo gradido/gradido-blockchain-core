@@ -95,7 +95,7 @@ hostmem_result grdw_confirmed_transaction_encode(
 void grdw_confirmed_transaction_free(
     grdw_confirmed_transaction *tx, hostmem_multi_arena *allocator
 ) {
-  if (!tx) { return; }
+  if (!tx || !allocator) { return; }
   // inner transaction first: it is allocated after account_balances, so an arena unwinds in order
   grdw_gradido_transaction_free(&tx->transaction, allocator);
   hostmem_multi_arena_free(

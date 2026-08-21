@@ -11,6 +11,7 @@
 #include "hostmem/multi_arena.h"
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -90,6 +91,32 @@ static void bench_fail(const char *what) {
   printf("  %s failed, benchmark aborted\n", what);
   bench_failure = 1;
 }
+
+/**
+ * @brief Print a row that was not run, where its figures would have been.
+ *
+ * @param name why-less row label, in the same column as every other row.
+ * @param why  what was missing, printed instead of the two time columns.
+ *
+ * A row left out with nothing printed would read as a row that does not exist, and the next
+ * reader would go looking for why the table is one line short. The failure itself is already
+ * on its way to the exit status through bench_fail(); this only accounts for the gap.
+ */
+static void bench_skipped(const char *name, const char *why) {
+  printf("%-*s %s\n", BENCH_NAME_WIDTH, name, why);
+}
+
+/**
+ * @brief Whether prepare_transactions() got the body the decoding rows are measured on.
+ *
+ * False leaves wire_confirmed.transaction.body_bytes empty, and that is not a fixture the
+ * decoding rows can run against: each would abort on its first pass and report a per step
+ * figure divided over no work, which is a row that looks fast rather than a row that is
+ * missing. They are skipped instead, and so is the size line that decodes the same body.
+ * The rows that read the body as hex still run -- an empty byte string renders, and what they
+ * then measure is a transaction without a body, which the failed line above already says.
+ */
+static bool have_encoded_body;
 
 static const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03,
                                                                  0x75, 0xc0, 0x94, 0x1e, 0xf3, 0x5c,
@@ -236,10 +263,11 @@ static void prepare_signatures(grdw_signature_pair *signatures, size_t count) {
  *
  * Takes no arguments, returns nothing, and is called once from main() before the timer rows.
  * One step can fail: if encoding the body into `encoded_body` fails -- it needs the body under
- * 512 bytes and the workspace sufficient -- wire_confirmed.transaction.body_bytes stays empty
- * and the body-decoding rows would price a transaction with no body, so the failure goes
- * through bench_fail() and the run ends with a nonzero status. The rows still run, since a
- * table with one wrong row plus a named failure says more than no table at all.
+ * 512 bytes and the workspace sufficient -- wire_confirmed.transaction.body_bytes stays empty.
+ * That failure goes through bench_fail(), so the run ends with a nonzero status, and it clears
+ * have_encoded_body, so the rows that would have decoded that body are skipped rather than run
+ * against a fixture that was never built. Everything not resting on the body still runs: a
+ * table with one line accounted for as skipped says more than no table at all.
  */
 static void prepare_transactions() {
   // a creation with no arrays at all: the floor of what the mapping has to write
@@ -321,8 +349,11 @@ static void prepare_transactions() {
         grdw_transaction_body_encode(&destination, &final_size, &wire_body, &workspace)) {
       wire_confirmed.transaction.body_bytes.data = encoded_body;
       wire_confirmed.transaction.body_bytes.size = (uint32_t)final_size;
+      have_encoded_body = true;
     } else {
-      // without a body the decoding rows below would quietly price a transaction that has none
+      // without a body the decoding rows below have nothing to decode: the failure goes to the
+      // exit status here, and have_encoded_body keeps those rows from running on a fixture that
+      // was never built
       bench_fail("body encode");
     }
   }
@@ -645,9 +676,8 @@ static void bench_borrowed_chains(int step_count) {
  *
  * The mapping renders through the work chain and copies the result across, rather than letting
  * yyjson write into the result chain directly. That copy is what this row prices. It is the
- * whole difference between the two designs on the time axis; the memory axis is in the module
- * comment of json_from_runtime.c, where the copy earns a result chain holding the text and
- * nothing else.
+ * whole difference between the two designs on the time axis; the memory axis is in the header,
+ * json_from_runtime.h, where the copy earns a result chain holding the text and nothing else.
  *
  * The copy is TYPICAL_TEXT_SIZE + 1 bytes, which is what the mapping actually asks for:
  * grdm_json_writer_finish() clones `length + 1` and then reports `length` as json.size, so the
@@ -710,8 +740,10 @@ static uint32_t measure_size(const grdr_complete_transaction *tx, grdm_json_form
  * wire_confirmed_json from real renders, which bench_read_wire_body() and
  * bench_read_wire_confirmed() then parse -- so it must run before them, as main() arranges.
  * Both buffers are 4096 bytes and are copied into with `json.size + 1` bytes for the
- * terminator; a fixture grown past that would overflow them, so the LARGE_* and TYPICAL_*
- * macros cannot be raised without checking these two sizes.
+ * terminator. A render that does not fit is refused rather than copied, so growing a fixture
+ * past what they hold costs a named failure and a nonzero exit rather than a silent write past
+ * the end of a static buffer -- the reading row that would have parsed the text then finds its
+ * buffer empty and aborts on its first pass.
  *
  * A row whose render fails is skipped -- its line is not printed and, for the two captured
  * texts, the corresponding buffer stays empty and its reading row aborts on the first pass --
@@ -737,9 +769,15 @@ static void report_sizes() {
   if (HOSTMEM_SUCCESS ==
       grdm_transaction_body_to_json(&json, &wire_body, GRDM_JSON_COMPACT, &work, &result)) {
     printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  wire transaction body", json.size);
-    // kept for the reading rows, which parse exactly what the writing rows produce
-    wire_body_json_size = json.size;
-    memcpy(wire_body_json, json.data, json.size + 1);
+    // kept for the reading rows, which parse exactly what the writing rows produce. The
+    // comparison is against the buffer rather than one less than it so that `size + 1` cannot
+    // wrap on the way in: a size that leaves no room for the terminator is already too large.
+    if (json.size >= sizeof(wire_body_json)) {
+      bench_fail("body text capture");
+    } else {
+      wire_body_json_size = json.size;
+      memcpy(wire_body_json, json.data, json.size + 1);
+    }
   } else {
     bench_fail("size render");
   }
@@ -758,17 +796,23 @@ static void report_sizes() {
                              &json, &wire_confirmed, GRDM_JSON_COMPACT, &work, &result
                          )) {
     printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  wire confirmed transaction", json.size);
-    wire_confirmed_json_size = json.size;
-    memcpy(wire_confirmed_json, json.data, json.size + 1);
+    if (json.size >= sizeof(wire_confirmed_json)) {
+      bench_fail("confirmed text capture");
+    } else {
+      wire_confirmed_json_size = json.size;
+      memcpy(wire_confirmed_json, json.data, json.size + 1);
+    }
   } else {
     bench_fail("size render");
   }
   hostmem_multi_arena_reset(&work);
   hostmem_multi_arena_reset(&result);
-  if (HOSTMEM_SUCCESS ==
-      grdm_confirmed_transaction_with_body_to_json(
-          &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
-      )) {
+  if (!have_encoded_body) {
+    bench_skipped("  ... with the body decoded", "skipped, no body was encoded");
+  } else if (HOSTMEM_SUCCESS ==
+             grdm_confirmed_transaction_with_body_to_json(
+                 &json, &wire_confirmed, GRDM_JSON_COMPACT, PB_WORKSPACE_SIZE, &work, &result
+             )) {
     printf("%-*s %12" PRIu32 "\n", BENCH_NAME_WIDTH, "  ... with the body decoded", json.size);
   } else {
     bench_fail("size render");
@@ -809,16 +853,25 @@ int main(void) {
   bench_section("wire view, compact");
   bench_step(bench_wire_body, STEP_COUNT, "  transaction body", "body");
   bench_step(bench_wire_gradido, STEP_COUNT, "  gradido transaction, body as hex", "transaction");
-  bench_step(
-      bench_wire_gradido_decoded, STEP_COUNT, "  gradido transaction, body decoded", "transaction"
-  );
+  if (have_encoded_body) {
+    bench_step(
+        bench_wire_gradido_decoded, STEP_COUNT, "  gradido transaction, body decoded",
+        "transaction"
+    );
+  } else {
+    bench_skipped("  gradido transaction, body decoded", "skipped, no body was encoded");
+  }
   bench_step(
       bench_wire_confirmed, STEP_COUNT, "  confirmed transaction, body as hex", "transaction"
   );
-  bench_step(
-      bench_wire_confirmed_decoded, STEP_COUNT, "  confirmed transaction, body decoded",
-      "transaction"
-  );
+  if (have_encoded_body) {
+    bench_step(
+        bench_wire_confirmed_decoded, STEP_COUNT, "  confirmed transaction, body decoded",
+        "transaction"
+    );
+  } else {
+    bench_skipped("  confirmed transaction, body decoded", "skipped, no body was encoded");
+  }
 
   bench_section("wire view, read back");
   bench_step(bench_read_wire_body, STEP_COUNT, "  transaction body", "body");
