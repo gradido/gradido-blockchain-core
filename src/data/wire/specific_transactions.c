@@ -28,13 +28,13 @@ void grdw_gradido_creation_assemble(
     grdw_gradido_creation *gradido_creation,
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint64_t target_date_seconds
 ) {
   if (!gradido_creation || !recipient_pubkey || !community_uuid) { return; }
   memcpy(gradido_creation->recipient.pubkey, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE);
   gradido_creation->recipient.amount = amount;
-  memcpy(gradido_creation->recipient.community_uuid, community_uuid, HOSTMEM_UUID_BINARY_SIZE);
+  memcpy(gradido_creation->recipient.community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
   gradido_creation->target_date.seconds = target_date_seconds;
 }
 
@@ -42,13 +42,13 @@ void grdw_gradido_transfer_assemble(
     grdw_gradido_transfer *gradido_transfer,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE]
 ) {
   if (!gradido_transfer || !sender_pubkey || !community_uuid || !recipient_pubkey) { return; }
   memcpy(gradido_transfer->sender.pubkey, sender_pubkey, SIGN_PUBLIC_KEY_SIZE);
   gradido_transfer->sender.amount = amount;
-  memcpy(gradido_transfer->sender.community_uuid, community_uuid, HOSTMEM_UUID_BINARY_SIZE);
+  memcpy(gradido_transfer->sender.community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
   memcpy(gradido_transfer->recipient, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE);
 }
 
@@ -56,7 +56,7 @@ void grdw_gradido_deferred_transfer_assemble(
     grdw_gradido_deferred_transfer *gradido_deferred_transfer,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const uint32_t timeout_duration
 ) {
@@ -67,7 +67,7 @@ void grdw_gradido_deferred_transfer_assemble(
   gradido_deferred_transfer->transfer.sender.amount = amount;
   memcpy(
       gradido_deferred_transfer->transfer.sender.community_uuid, community_uuid,
-      HOSTMEM_UUID_BINARY_SIZE
+      ARNM_UUID_BINARY_SIZE
   );
   memcpy(gradido_deferred_transfer->transfer.recipient, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE);
   gradido_deferred_transfer->timeout_duration = timeout_duration;
@@ -78,7 +78,7 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
     const uint64_t deferred_transfer_transaction_nr,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE]
 ) {
   if (!gradido_redeem_deferred_transfer || !sender_pubkey || !community_uuid || !recipient_pubkey) {
@@ -92,7 +92,7 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
   gradido_redeem_deferred_transfer->transfer.sender.amount = amount;
   memcpy(
       gradido_redeem_deferred_transfer->transfer.sender.community_uuid, community_uuid,
-      HOSTMEM_UUID_BINARY_SIZE
+      ARNM_UUID_BINARY_SIZE
   );
   memcpy(
       gradido_redeem_deferred_transfer->transfer.recipient, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE

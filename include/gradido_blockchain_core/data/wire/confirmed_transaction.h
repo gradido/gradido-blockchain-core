@@ -1,12 +1,12 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_CONFIRMED_TRANSACTION_H
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_CONFIRMED_TRANSACTION_H
 
+#include "arnm/memory_block.h"
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_transaction.h"
-#include "hostmem/memory_block.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -68,12 +68,12 @@ void grdw_confirmed_transaction_init(grdw_confirmed_transaction *tx);
  * @param[in/out] tx                       Confirmed transaction to reserve balances in.
  * @param[in]     account_balances_count   Number of balance slots to allocate.
  * @param[in]     allocator                Memory allocator for the pointer array.
- * @return                                 HOSTMEM_SUCCESS on success
- *                                         HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough
+ * @return                                 ARNM_SUCCESS on success
+ *                                         ARNM_ERROR_OUT_OF_MEMORY if allocator hasn't enough
  * space
  */
-hostmem_result grdw_confirmed_transaction_reserve_account_balances(
-    grdw_confirmed_transaction *tx, uint8_t account_balances_count, hostmem *allocator
+arnm_result grdw_confirmed_transaction_reserve_account_balances(
+    grdw_confirmed_transaction *tx, uint8_t account_balances_count, arnm *allocator
 );
 
 /**
@@ -86,9 +86,9 @@ hostmem_result grdw_confirmed_transaction_reserve_account_balances(
  * @param[in/out] tx               Confirmed transaction to receive the balance copy.
  * @param[in]     account_balance  Source account balance to copy from.
  * @param[in]     index            Target slot index.
- * @return                         HOSTMEM_SUCCESS on success, error code on failure.
+ * @return                         ARNM_SUCCESS on success, error code on failure.
  */
-hostmem_result grdw_confirmed_transaction_copy_account_balance(
+arnm_result grdw_confirmed_transaction_copy_account_balance(
     grdw_confirmed_transaction *tx, grdw_account_balance *account_balance, uint8_t index
 );
 
@@ -103,14 +103,14 @@ hostmem_result grdw_confirmed_transaction_copy_account_balance(
  * @param[out] tx       Confirmed transaction to populate.
  * @param[in]  binary_src Source memory block containing binary data.
  * @param[in]  allocator Area allocator for nested allocations.
- * @return              HOSTMEM_SUCCESS on success
- *                      HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough space
+ * @return              ARNM_SUCCESS on success
+ *                      ARNM_ERROR_OUT_OF_MEMORY if allocator hasn't enough space
  * @note                The allocator must be an area allocator; memory is
  *                      not freed individually but as a whole.
  * @whisper             Settlement takes shape
  */
-hostmem_result grdw_confirmed_transaction_decode(
-    grdw_confirmed_transaction *tx, const hostmem_memory_block *binary_src, hostmem *allocator
+arnm_result grdw_confirmed_transaction_decode(
+    grdw_confirmed_transaction *tx, const arnm_memory_block *binary_src, arnm *allocator
 );
 
 /**
@@ -125,16 +125,16 @@ hostmem_result grdw_confirmed_transaction_decode(
  * @param[out] final_size  Number of bytes written to binary_dst.
  * @param[in]  tx          Confirmed transaction to encode.
  * @param[in]  allocator   Memory allocator for temporary encoding buffers.
- * @return                 HOSTMEM_SUCCESS on success
- *                         HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
- *                         HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough space
+ * @return                 ARNM_SUCCESS on success
+ *                         ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
+ *                         ARNM_ERROR_OUT_OF_MEMORY if allocator hasn't enough space
  * @whisper                Settlement becomes message
  */
-hostmem_result grdw_confirmed_transaction_encode(
-    hostmem_memory_block *binary_dst,
+arnm_result grdw_confirmed_transaction_encode(
+    arnm_memory_block *binary_dst,
     int *final_size,
     const grdw_confirmed_transaction *tx,
-    hostmem *allocator
+    arnm *allocator
 );
 
 /**
@@ -147,7 +147,7 @@ hostmem_result grdw_confirmed_transaction_encode(
  * @param[in/out] tx        Confirmed transaction to free.
  * @param[in]     allocator Memory allocator used for freeing.
  */
-void grdw_confirmed_transaction_free(grdw_confirmed_transaction *tx, hostmem *allocator);
+void grdw_confirmed_transaction_free(grdw_confirmed_transaction *tx, arnm *allocator);
 
 /** @} */
 

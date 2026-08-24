@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "../terminal_colors.h"
+#include "arnm/mono_timer.h"
 #include "gradido_blockchain_core/data/unit.h"
-#include "hostmem/mono_timer.h"
 
 #include "memory_limit.h"
 #include <iomanip>
@@ -624,8 +624,8 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecayRandom) {
 TEST(GradidoUnitTest, testManyCasesDecayRevertDecay) {
   constexpr int bufferSize = 32;
   char buffer[bufferSize];
-  hostmem_mono_timer timeUsed;
-  hostmem_mono_timer_reset(&timeUsed);
+  arnm_mono_timer timeUsed;
+  arnm_mono_timer_reset(&timeUsed);
   unsigned int NUM_THREADS = std::thread::hardware_concurrency();
 
   // We sample logarithmically across the value range to cover all orders of magnitude.
@@ -691,7 +691,7 @@ TEST(GradidoUnitTest, testManyCasesDecayRevertDecay) {
   std::cout << "Testing " << amountSamples.size() << " amounts x " << durationSamples.size()
             << " durations = " << totalTests << " combinations." << std::endl;
 
-  hostmem_mono_timer_string(buffer, bufferSize, timeUsed);
+  arnm_mono_timer_string(buffer, bufferSize, timeUsed);
   std::cout << "Time for preparations: " << buffer << std::endl;
 
   std::vector<ThreadResult> threadResults(NUM_THREADS);

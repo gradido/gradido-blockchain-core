@@ -1,5 +1,7 @@
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
 
+#include "arnm/arena.h"
+#include "arnm/result.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
@@ -7,29 +9,25 @@
 #include "gradido_blockchain_core/data/wire/specific_transactions.h"
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
-#include "hostmem/memory.h"
-#include "hostmem/result.h"
 #include <string.h>
 
 static size_t calculate_memory_size(
     const struct grdw_confirmed_transaction *confirmed_tx, const struct grdw_transaction_body *body
 ) {
   size_t result = 0;
-  result += HOSTMEM_ALIGN8(confirmed_tx->account_balances_count * sizeof(grdw_account_balance));
+  result += ARNM_ALIGN8(confirmed_tx->account_balances_count * sizeof(grdw_account_balance));
   if (body->memos_count) {
-    result += HOSTMEM_ALIGN8(body->memos_count * sizeof(grdw_encrypted_memo));
-    for (int i = 0; i < body->memos_count; ++i) {
-      result += HOSTMEM_ALIGN8(body->memos[i].memo.size);
-    }
+    result += ARNM_ALIGN8(body->memos_count * sizeof(grdw_encrypted_memo));
+    for (int i = 0; i < body->memos_count; ++i) { result += ARNM_ALIGN8(body->memos[i].memo.size); }
   }
-  if (body->other_community_uuid) { result += HOSTMEM_UUID_BINARY_SIZE; }
+  if (body->other_community_uuid) { result += ARNM_UUID_BINARY_SIZE; }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
-  result += HOSTMEM_ALIGN8(transaction->sig_map_count * sizeof(grdw_signature_pair));
+  result += ARNM_ALIGN8(transaction->sig_map_count * sizeof(grdw_signature_pair));
 
   if (GRDT_LEDGER_ANCHOR_UNSPECIFIED != transaction->pairing_ledger_anchor.type) {
-    result += HOSTMEM_ALIGN8(sizeof(grdw_ledger_anchor));
+    result += ARNM_ALIGN8(sizeof(grdw_ledger_anchor));
   }
-  result += HOSTMEM_ALIGN8(transaction->body_bytes.size);
+  result += ARNM_ALIGN8(transaction->body_bytes.size);
   return result;
 }
 
@@ -39,7 +37,7 @@ static void copy_transfer(grdr_complete_transaction *tx, const grdw_gradido_tran
   memcpy(tx->transfer.recipient_pubkey, transfer_tx->recipient, SIGN_PUBLIC_KEY_SIZE);
   tx->transfer.amount = transfer_tx->sender.amount;
   memcpy(
-      tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, HOSTMEM_UUID_BINARY_SIZE
+      tx->transfer.coin_community_uuid, transfer_tx->sender.community_uuid, ARNM_UUID_BINARY_SIZE
   );
 }
 
@@ -100,22 +98,21 @@ static void copy_community_root(
   memcpy(tx->community_root.auf_public_key, community_root->auf_pubkey, SIGN_PUBLIC_KEY_SIZE);
 }
 
-hostmem_result grdm_complete_transaction_from_wire(
+arnm_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const struct grdw_transaction_body *body,
     const struct grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE]
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE]
 ) {
-  if (!tx || !body || !confirmed_tx) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!tx || !body || !confirmed_tx) { return ARNM_ERROR_NULL_POINTER; }
   grdr_complete_transaction_release(tx);
-  hostmem_result result =
-      hostmem_init_arena(&tx->memory_area, calculate_memory_size(confirmed_tx, body));
-  if (HOSTMEM_SUCCESS != result) { return result; }
+  arnm_result result = arnm_init_arena(&tx->memory_area, calculate_memory_size(confirmed_tx, body));
+  if (ARNM_SUCCESS != result) { return result; }
 
   tx->tx_nr = confirmed_tx->id;
   tx->confirmed_at = confirmed_tx->confirmed_at;
   tx->created_at = body->created_at;
-  memcpy(tx->tx_community_uuid, community_uuid, HOSTMEM_UUID_BINARY_SIZE);
+  memcpy(tx->tx_community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
   tx->ledger_anchor = confirmed_tx->ledger_anchor;
 
   // sorted by expected frequency of occurrence
@@ -142,67 +139,67 @@ hostmem_result grdm_complete_transaction_from_wire(
     copy_community_root(tx, &body->community_root);
     break;
   default:
-    return HOSTMEM_ERROR_ENUM_UNHANDLED;
+    return ARNM_ERROR_ENUM_UNHANDLED;
   }
 
   tx->transaction_type = body->transaction_type;
   tx->balance_derivation_type = confirmed_tx->balance_derivation;
   memcpy(tx->tx_running_hash, confirmed_tx->running_hash, GENERIC_HASH_SIZE);
 
-  result = HOSTMEM_SUCCESS;
+  result = ARNM_SUCCESS;
   // arrays
   if (confirmed_tx->account_balances_count) {
-    result = hostmem_clone(
+    result = arnm_clone(
         (uint8_t **)&tx->account_balances, (const uint8_t *)confirmed_tx->account_balances,
         confirmed_tx->account_balances_count * sizeof(grdw_account_balance), &tx->memory_area
     );
-    if (HOSTMEM_SUCCESS != result) { return result; }
+    if (ARNM_SUCCESS != result) { return result; }
     tx->account_balances_count = confirmed_tx->account_balances_count;
   }
   if (body->memos_count) {
-    result = hostmem_alloc(
+    result = arnm_alloc(
         (uint8_t **)&tx->encrypted_memos, body->memos_count * sizeof(grdw_encrypted_memo),
         &tx->memory_area
     );
-    if (HOSTMEM_SUCCESS != result) { return result; }
+    if (ARNM_SUCCESS != result) { return result; }
 
     for (int i = 0; i < body->memos_count; ++i) {
       tx->encrypted_memos[i].type = body->memos[i].type;
-      result = hostmem_memory_block_clone(
+      result = arnm_memory_block_clone(
           &tx->encrypted_memos[i].memo, &body->memos[i].memo, &tx->memory_area
       );
-      if (HOSTMEM_SUCCESS != result) { return result; }
+      if (ARNM_SUCCESS != result) { return result; }
     }
     tx->encrypted_memos_count = body->memos_count;
   }
   const grdw_gradido_transaction *transaction = &confirmed_tx->transaction;
   if (transaction->sig_map_count) {
-    result = hostmem_clone(
+    result = arnm_clone(
         (uint8_t **)&tx->signature_pairs, (const uint8_t *)transaction->sig_map,
         transaction->sig_map_count * sizeof(grdw_signature_pair), &tx->memory_area
     );
-    if (HOSTMEM_SUCCESS != result) { return result; }
+    if (ARNM_SUCCESS != result) { return result; }
     tx->signature_pairs_count = transaction->sig_map_count;
   }
 
   tx->cross_group_type = body->type;
 
   if (body->other_community_uuid) {
-    result = hostmem_clone(
+    result = arnm_clone(
         (uint8_t **)&tx->tx_pairing_community_uuid, body->other_community_uuid,
-        HOSTMEM_UUID_BINARY_SIZE, &tx->memory_area
+        ARNM_UUID_BINARY_SIZE, &tx->memory_area
     );
-    if (HOSTMEM_SUCCESS != result) { return result; }
+    if (ARNM_SUCCESS != result) { return result; }
   }
 
   if (GRDT_LEDGER_ANCHOR_UNSPECIFIED != transaction->pairing_ledger_anchor.type) {
-    result = hostmem_clone(
+    result = arnm_clone(
         (uint8_t **)&tx->pairing_ledger_anchor,
         (const uint8_t *)&transaction->pairing_ledger_anchor, sizeof(grdw_ledger_anchor),
         &tx->memory_area
     );
-    if (HOSTMEM_SUCCESS != result) { return result; }
+    if (ARNM_SUCCESS != result) { return result; }
   }
 
-  return hostmem_memory_block_clone(&tx->body_bytes, &transaction->body_bytes, &tx->memory_area);
+  return arnm_memory_block_clone(&tx->body_bytes, &transaction->body_bytes, &tx->memory_area);
 }

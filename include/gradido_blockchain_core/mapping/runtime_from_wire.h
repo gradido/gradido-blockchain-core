@@ -33,13 +33,13 @@ typedef struct grdw_transaction_body grdw_transaction_body;
  * @param[in]  body            Wire-format transaction body source.
  * @param[in]  confirmed_tx    Wire-format confirmed transaction source.
  * @param[in]  community_uuid  16-byte UUID of the community context.
- * @return                     HOSTMEM_SUCCESS on success, error code on failure.
+ * @return                     ARNM_SUCCESS on success, error code on failure.
  */
-hostmem_result grdm_complete_transaction_from_wire(
+arnm_result grdm_complete_transaction_from_wire(
     grdr_complete_transaction *tx,
     const grdw_transaction_body *body,
     const grdw_confirmed_transaction *confirmed_tx,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE]
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE]
 );
 
 /** @} */

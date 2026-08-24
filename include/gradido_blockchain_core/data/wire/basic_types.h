@@ -1,9 +1,9 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_BASIC_TYPES_H
 
+#include "arnm/memory_block.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/types/memo_key.h"
-#include "hostmem/memory_block.h"
 
 #include <stdint.h>
 
@@ -36,7 +36,7 @@ extern "C" {
 typedef struct grdw_account_balance {
   uint8_t pubkey[SIGN_PUBLIC_KEY_SIZE];
   int64_t balance;
-  uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE];
+  uint8_t community_uuid[ARNM_UUID_BINARY_SIZE];
 } grdw_account_balance;
 
 int64_t grdw_account_balance_get_balance(const grdw_account_balance *account_balance);
@@ -66,7 +66,7 @@ const uint8_t *grdw_account_balance_get_community_uuid(const grdw_account_balanc
  */
 typedef struct grdw_encrypted_memo {
   grdt_memo_key type;
-  hostmem_memory_block memo;
+  arnm_memory_block memo;
 } grdw_encrypted_memo;
 
 /**
@@ -119,7 +119,7 @@ typedef struct grdw_timestamp_seconds {
 typedef struct grdw_transfer_amount {
   uint8_t pubkey[SIGN_PUBLIC_KEY_SIZE];
   int64_t amount;
-  uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE];
+  uint8_t community_uuid[ARNM_UUID_BINARY_SIZE];
 } grdw_transfer_amount;
 
 /** @} */

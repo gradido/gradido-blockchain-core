@@ -1,7 +1,7 @@
 #include "gradido_blockchain_core/data/timestamp.h"
+#include "arnm/converter.h"
 #include "gradido_blockchain_core/data/types.h"
 #include "gradido_blockchain_core/utils/converter.h"
-#include "hostmem/converter.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -83,23 +83,23 @@ static bool nanos_representable(int32_t nanos) {
 size_t grdd_timestamp_calculate_string_size(const grdd_timestamp *timestamp) {
   if (!timestamp || !nanos_representable(timestamp->nanos)) { return 0; }
   // always 9 for nano seconds, and pad with 0
-  return hostmem_int64_to_string_size(timestamp->seconds) + 9 + 1;
+  return arnm_int64_to_string_size(timestamp->seconds) + 9 + 1;
 }
 
 size_t grdd_timestamp_to_string(char *buffer, size_t buffer_size, const grdd_timestamp *timestamp) {
   if (!buffer || !buffer_size || !timestamp) { return 0; }
   if (!nanos_representable(timestamp->nanos)) { return 0; }
 
-  size_t seconds_size = hostmem_int64_to_string_size(timestamp->seconds);
-  size_t nanos_size = hostmem_int64_to_string_size(timestamp->nanos);
+  size_t seconds_size = arnm_int64_to_string_size(timestamp->seconds);
+  size_t nanos_size = arnm_int64_to_string_size(timestamp->nanos);
   size_t result_size = seconds_size + 1 + 9;
-  // buffer_size counts the terminator, the way snprintf and hostmem's converters count it, so a
+  // buffer_size counts the terminator, the way snprintf and arnm's converters count it, so a
   // buffer of exactly result_size is one byte short rather than an exact fit -- the writes below
   // close the run with a '\0'. The return stays the character count, which is what a caller
   // sizing a buffer adds one to.
   if (buffer_size < result_size + 1) { return result_size; }
 
-  hostmem_int64_to_string_known_string_size(buffer, timestamp->seconds, seconds_size);
+  arnm_int64_to_string_known_string_size(buffer, timestamp->seconds, seconds_size);
   buffer += seconds_size;
   *buffer = '.';
   buffer++;
@@ -109,6 +109,6 @@ size_t grdd_timestamp_to_string(char *buffer, size_t buffer_size, const grdd_tim
     memset(buffer, '0', zeroPadCount);
     buffer += zeroPadCount;
   }
-  hostmem_int64_to_string_known_string_size(buffer, timestamp->nanos, nanos_size);
+  arnm_int64_to_string_known_string_size(buffer, timestamp->nanos, nanos_size);
   return result_size;
 }

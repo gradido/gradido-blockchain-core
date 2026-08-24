@@ -1,16 +1,16 @@
 #ifdef USE_SODIUM
 
 #include "utils.h"
-#include "hostmem/memory.h"
+#include "arnm/memory.h"
 
 #include "sodium.h"
 
 #include <cstring>
 
-hostmem_memory_block fromBase64(
+arnm_memory_block fromBase64(
     const char *base64String, size_t size, int variant /* = sodium_base64_VARIANT_ORIGINAL  */
 ) {
-  hostmem_memory_block result{};
+  arnm_memory_block result{};
   size_t binSize = (size / 4) * 3;
 
   uint8_t *buffer = (uint8_t *)malloc(binSize);
@@ -35,8 +35,7 @@ hostmem_memory_block fromBase64(
   return result;
 }
 
-std::string
-toBase64(hostmem_memory_block *data, int variant /* = sodium_base64_VARIANT_ORIGINAL  */) {
+std::string toBase64(arnm_memory_block *data, int variant /* = sodium_base64_VARIANT_ORIGINAL  */) {
   if (!data || !data->size) { return ""; }
   size_t encodedSize = sodium_base64_encoded_len(data->size, variant);
   uint8_t *buffer = (uint8_t *)malloc(encodedSize);

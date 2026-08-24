@@ -12,6 +12,48 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.17.0 -- 2026-08-24
+
+hostmem is now [arnm](https://github.com/gradido/arnm), and the dependency moves from hostmem
+0.4.0 to arnm 0.7.2. The library is the same one under a new name -- arnm 0.5.0 renamed every
+symbol it has -- so most of this release is a prefix substituted in 50 files. What is not
+mechanical is named below.
+
+### Changed
+
+- **Every `hostmem_` is an `arnm_`, every `HOSTMEM_` an `ARNM_`, and the headers moved from
+  `hostmem/` to `arnm/`.** This reaches the public headers of this project: `arnm_result` is
+  what `grd*` functions return, `arnm_memory_block` is what they take, and `arnm *` is the
+  allocator. A consumer substitutes the prefix in both cases and the include path once;
+  no signature moved and no result code changed its value.
+- **`arnm_init_arena()` and `arnm_init_arena_borrow()` live in `arnm/arena.h`,** which arnm
+  0.6.0 split out of `arnm/memory.h`. The five translation units that set an arena up include
+  that header instead; it includes `arnm/memory.h`, so nothing else had to be added.
+- **The arena is asked how much it has left instead of being measured.** arnm 0.6.0 made the
+  allocator an opaque 32 byte struct, so `allocator->capacity - allocator->last_index` -- the
+  expression that handed pbtools the rest of the arena as workspace -- is no longer readable.
+  arnm 0.7.1 added `arnm_arena_remaining()`, which answers that same subtraction, and the four
+  sites in `src/data/wire` use it.
+  - `grdw_pb_workspace_take()` also tells host mode from a full arena through
+    `arnm_is_arena()` rather than through a capacity of 0. The two result codes it answers with
+    are unchanged: `ARNM_ERROR_INVALID_PARAM` for an allocator with no arena to lend,
+    `ARNM_ERROR_OUT_OF_MEMORY` for one with nothing left.
+  - `test_pbtools` read `last_index` and `capacity` to assert that an arena was full, empty, or
+    holding a kept workspace. All three now read `arnm_arena_remaining()`, the "empty" figure
+    taken from the arena itself right after `arnm_init_arena()` rather than written out as a
+    constant.
+
+### Notes
+
+- arnm carries a copy of yyjson in its tree since arnm 0.7.2, for `arnm/json_reader.h` and
+  `arnm/json_writer.h`. Both builds of this project compile arnm's sources into their own
+  target rather than linking a second archive, so both compile that one source too and add its
+  include path privately. Nothing of this project includes a JSON header, and no installed
+  header names yyjson.
+  - It had to be that release: yyjson was a git submodule up to arnm 0.7.1, and neither a
+    GitHub tarball nor `zig fetch` carries one -- both deliver `third_party/yyjson` as an empty
+    directory, and arnm's own `build.zig` stops the build when it finds it that way.
+
 ## 0.16.0 -- 2026-08-19
 
 The release that finishes moving everything general out of this project. What is left is the

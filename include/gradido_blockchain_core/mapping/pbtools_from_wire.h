@@ -37,9 +37,9 @@ typedef struct grdw_transaction_body grdw_transaction_body;
  *
  * @param[out] pb_transaction_body Protobuf transaction body to populate.
  * @param[in]  transaction_body     Wire-format transaction body source.
- * @return                         HOSTMEM_SUCCESS on success, error code on failure.
+ * @return                         ARNM_SUCCESS on success, error code on failure.
  */
-hostmem_result grdm_transaction_body_from_wire(
+arnm_result grdm_transaction_body_from_wire(
     struct proto_gradido_transaction_body_t *pb_transaction_body,
     const grdw_transaction_body *transaction_body
 );
@@ -53,9 +53,9 @@ hostmem_result grdm_transaction_body_from_wire(
  *
  * @param[out] pbtx Protobuf gradido transaction to populate.
  * @param[in]  tx   Wire-format gradido transaction source.
- * @return          HOSTMEM_SUCCESS on success, error code on failure.
+ * @return          ARNM_SUCCESS on success, error code on failure.
  */
-hostmem_result grdm_gradido_transaction_from_wire(
+arnm_result grdm_gradido_transaction_from_wire(
     struct proto_gradido_gradido_transaction_t *pbtx, const grdw_gradido_transaction *tx
 );
 
@@ -68,9 +68,9 @@ hostmem_result grdm_gradido_transaction_from_wire(
  *
  * @param[out] pb_confirmed_tx Protobuf confirmed transaction to populate.
  * @param[in]  confirmed_tx    Wire-format confirmed transaction source.
- * @return                     HOSTMEM_SUCCESS on success, error code on failure.
+ * @return                     ARNM_SUCCESS on success, error code on failure.
  */
-hostmem_result grdm_confirmed_transaction_from_wire(
+arnm_result grdm_confirmed_transaction_from_wire(
     struct proto_gradido_confirmed_transaction_t *pb_confirmed_tx,
     const grdw_confirmed_transaction *confirmed_tx
 );

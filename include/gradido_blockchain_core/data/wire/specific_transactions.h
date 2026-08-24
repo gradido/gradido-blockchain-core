@@ -3,12 +3,12 @@
 
 #include <stdbool.h>
 
+#include "arnm/memory.h"
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
 #include "hiero.h"
-#include "hostmem/memory.h"
 #include "ledger_anchor.h"
 
 #ifdef __cplusplus
@@ -288,7 +288,7 @@ void grdw_gradido_creation_assemble(
     grdw_gradido_creation *gradido_creation,
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint64_t target_date_seconds
 );
 
@@ -312,7 +312,7 @@ void grdw_gradido_transfer_assemble(
     grdw_gradido_transfer *gradido_transfer,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE]
 );
 
@@ -340,7 +340,7 @@ void grdw_gradido_deferred_transfer_assemble(
     grdw_gradido_deferred_transfer *gradido_deferred_transfer,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const uint32_t timeout_duration
 );
@@ -373,7 +373,7 @@ void grdw_gradido_redeem_deferred_transfer_assemble(
     const uint64_t deferred_transfer_transaction_nr,
     const uint8_t sender_pubkey[SIGN_PUBLIC_KEY_SIZE],
     const int64_t amount,
-    const uint8_t community_uuid[HOSTMEM_UUID_BINARY_SIZE],
+    const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE],
     const uint8_t recipient_pubkey[SIGN_PUBLIC_KEY_SIZE]
 );
 

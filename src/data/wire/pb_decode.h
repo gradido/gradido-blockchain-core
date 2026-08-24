@@ -1,9 +1,9 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_PB_DECODE_H
 #define GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_PB_DECODE_H
 
-#include "hostmem/memory.h"
-#include "hostmem/memory_block.h"
-#include "hostmem/result.h"
+#include "arnm/memory.h"
+#include "arnm/memory_block.h"
+#include "arnm/result.h"
 
 #include <stdint.h>
 
@@ -15,7 +15,7 @@
  *
  * All three decoders in this folder run the same course: take what is left of the arena as
  * workspace for pbtools, let the generated code decode into it, hand the unused tail back, and
- * translate pbtools' answer into a @ref hostmem_result. Only the three generated calls in
+ * translate pbtools' answer into a @ref arnm_result. Only the three generated calls in
  * between differ by message type. The course itself lives here, because it was copied three
  * times and every misjudgement in it had to be found three times.
  *
@@ -36,11 +36,11 @@
  *
  * @param[out]    workspace Receives the block; untouched on failure.
  * @param[in,out] allocator Arena to draw from; must not be NULL and must be in arena mode.
- * @retval HOSTMEM_SUCCESS              Workspace claimed.
- * @retval HOSTMEM_ERROR_INVALID_PARAM  @p allocator is in default mode and has nothing to lend.
- * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  The arena is already full.
+ * @retval ARNM_SUCCESS              Workspace claimed.
+ * @retval ARNM_ERROR_INVALID_PARAM  @p allocator is in default mode and has nothing to lend.
+ * @retval ARNM_ERROR_OUT_OF_MEMORY  The arena is already full.
  */
-hostmem_result grdw_pb_workspace_take(hostmem_memory_block *workspace, hostmem *allocator);
+arnm_result grdw_pb_workspace_take(arnm_memory_block *workspace, arnm *allocator);
 
 /**
  * @brief Return the unused tail of the workspace and judge what pbtools reported.
@@ -56,17 +56,17 @@ hostmem_result grdw_pb_workspace_take(hostmem_memory_block *workspace, hostmem *
  * @param[in]     source_size   Bytes handed in. A decode that consumed a different number read
  *                              a message that does not match its own length.
  * @param[in,out] allocator     Allocator the workspace came from.
- * @retval HOSTMEM_SUCCESS              Decode complete and consistent.
- * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  pbtools ran out of workspace.
- * @retval HOSTMEM_ERROR_DECODE_FAILED  Malformed message, or a length that does not add up.
- * @retval Anything hostmem_realloc() reports as an error.
+ * @retval ARNM_SUCCESS              Decode complete and consistent.
+ * @retval ARNM_ERROR_OUT_OF_MEMORY  pbtools ran out of workspace.
+ * @retval ARNM_ERROR_DECODE_FAILED  Malformed message, or a length that does not add up.
+ * @retval Anything arnm_realloc() reports as an error.
  */
-hostmem_result grdw_pb_decode_finish(
-    hostmem_memory_block *workspace,
+arnm_result grdw_pb_decode_finish(
+    arnm_memory_block *workspace,
     int used_bytes,
     int decoded_bytes,
     uint32_t source_size,
-    hostmem *allocator
+    arnm *allocator
 );
 
 #endif // GRADIDO_BLOCKCHAIN_CORE_DATA_WIRE_PB_DECODE_H

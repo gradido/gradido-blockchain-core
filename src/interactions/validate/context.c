@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/interactions/validate/context.h"
+#include "arnm/memory.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
@@ -12,7 +13,6 @@
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/types/transaction.h"
-#include "hostmem/memory.h"
 
 #ifdef USE_SODIUM
 #include "sodium.h"

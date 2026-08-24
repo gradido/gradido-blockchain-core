@@ -1,7 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_CONST_H
 #define GRADIDO_BLOCKCHAIN_CORE_CONST_H
 
-#include "hostmem/converter.h"
+#include "arnm/converter.h"
 
 #include <stdint.h>
 
@@ -20,7 +20,7 @@ extern "C" {
 #define SIGN_PRIVATE_KEY_SIZE 64
 #define SIGN_SIGNATURE_SIZE 64
 #define GENERIC_HASH_SIZE 32
-/* A uuid's 16 bytes are hostmem's HOSTMEM_UUID_BINARY_SIZE; it is not repeated here, so the two
+/* A uuid's 16 bytes are arnm's ARNM_UUID_BINARY_SIZE; it is not repeated here, so the two
    cannot drift apart. grdc_uuid_binary_size() below hands it to callers that reach this library
    through ffi and have no headers to read it from. */
 const static int MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS = 120;
