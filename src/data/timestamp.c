@@ -99,7 +99,7 @@ size_t grdd_timestamp_to_string(char *buffer, size_t buffer_size, const grdd_tim
   // sizing a buffer adds one to.
   if (buffer_size < result_size + 1) { return result_size; }
 
-  arnm_int64_to_string_known_string_size(buffer, timestamp->seconds, seconds_size);
+  arnm_int64_to_string_known_string_size(buffer, timestamp->seconds, (uint8_t)seconds_size);
   buffer += seconds_size;
   *buffer = '.';
   buffer++;
@@ -109,6 +109,6 @@ size_t grdd_timestamp_to_string(char *buffer, size_t buffer_size, const grdd_tim
     memset(buffer, '0', zeroPadCount);
     buffer += zeroPadCount;
   }
-  arnm_int64_to_string_known_string_size(buffer, timestamp->nanos, nanos_size);
+  arnm_int64_to_string_known_string_size(buffer, timestamp->nanos, (uint8_t)nanos_size);
   return result_size;
 }

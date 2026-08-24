@@ -21,9 +21,10 @@ int64_t grdw_hiero_account_id_get_account_num(const grdw_hiero_account_id *hiero
 
 size_t grdw_hiero_account_id_calculate_string_size(const grdw_hiero_account_id *hiero_account_id) {
   if (!hiero_account_id) { return 0; }
-  return arnm_int64_to_string_size(hiero_account_id->shardNum) +
-         arnm_int64_to_string_size(hiero_account_id->realmNum) +
-         arnm_int64_to_string_size(hiero_account_id->accountNum) + 2;
+  // three uint8_t lengths and a separator each; the sum is small and never negative
+  return (size_t)(arnm_int64_to_string_size(hiero_account_id->shardNum) +
+                  arnm_int64_to_string_size(hiero_account_id->realmNum) +
+                  arnm_int64_to_string_size(hiero_account_id->accountNum) + 2);
 }
 size_t grdw_hiero_account_id_to_string(
     char *buffer, size_t buffer_size, const grdw_hiero_account_id *hiero_account_id
@@ -37,15 +38,21 @@ size_t grdw_hiero_account_id_to_string(
   // buffer_size counts the terminator; the last of the three numbers writes one.
   if (buffer_size < result_size + 1) { return result_size; }
 
-  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->shardNum, shardNum_size);
+  arnm_int64_to_string_known_string_size(
+      buffer, hiero_account_id->shardNum, (uint8_t)shardNum_size
+  );
   buffer += shardNum_size;
   *buffer = '.';
   buffer++;
-  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->realmNum, realmNum_size);
+  arnm_int64_to_string_known_string_size(
+      buffer, hiero_account_id->realmNum, (uint8_t)realmNum_size
+  );
   buffer += realmNum_size;
   *buffer = '.';
   buffer++;
-  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->accountNum, accountNum_size);
+  arnm_int64_to_string_known_string_size(
+      buffer, hiero_account_id->accountNum, (uint8_t)accountNum_size
+  );
   return result_size;
 }
 

@@ -257,6 +257,36 @@ TEST(GradidoUnitTest, toString_AllCases) {
   // number outside of double range
 }
 
+// INT64_MIN is the one value whose magnitude the type cannot hold, so the sign has to come off
+// it without negating it -- `rounded *= -1` on it is undefined, and UndefinedBehaviorSanitizer
+// stops the build that runs it. A precision of 4 rounds nothing and hands the value straight
+// through, which is how it reaches the formatting at all.
+TEST(GradidoUnitTest, toString_Int64Min) {
+  constexpr int bufferSize = 32;
+  char buffer[bufferSize];
+
+  grdd_unit v = INT64_MIN;
+  EXPECT_EQ(grdd_unit_to_string(buffer, bufferSize, v, 4), 21);
+  EXPECT_STREQ("-922337203685477.5808", buffer);
+
+  // Two decimals round the tail down, which lands on a value the type still holds. The other
+  // three round the magnitude up past INT64_MAX, and grdd_unit_round_to_precision() refuses
+  // rather than wrapping -- so -2 here is that refusal reaching the caller, not a formatting
+  // failure.
+  EXPECT_EQ(grdd_unit_to_string(buffer, bufferSize, v, 2), 19);
+  EXPECT_STREQ("-922337203685477.58", buffer);
+  for (uint8_t precision : {0, 1, 3}) {
+    EXPECT_EQ(grdd_unit_to_string(buffer, bufferSize, v, precision), -2)
+        << "precision " << (int)precision;
+  }
+
+  // the neighbour that needs no special handling, so the case above is pinned as the boundary
+  // and not as the whole end of the range
+  v = INT64_MIN + 1;
+  EXPECT_EQ(grdd_unit_to_string(buffer, bufferSize, v, 4), 21);
+  EXPECT_STREQ("-922337203685477.5807", buffer);
+}
+
 TEST(GradidoUnitTest, roundToPrecision_EdgeCases) {
   struct TestCase {
     int64_t raw; // GradidoCent (4 decimal places)

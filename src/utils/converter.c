@@ -62,7 +62,7 @@ arnm_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex) {
   return ARNM_SUCCESS;
 }
 
-const static int BASE64_VARIANT = sodium_base64_VARIANT_ORIGINAL;
+static const int BASE64_VARIANT = sodium_base64_VARIANT_ORIGINAL;
 
 size_t grdu_binary_to_base64_length(size_t binSize) {
   return sodium_base64_encoded_len(binSize, BASE64_VARIANT);

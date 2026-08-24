@@ -23,8 +23,8 @@ extern "C" {
 /* A uuid's 16 bytes are arnm's ARNM_UUID_BINARY_SIZE; it is not repeated here, so the two
    cannot drift apart. grdc_uuid_binary_size() below hands it to callers that reach this library
    through ffi and have no headers to read it from. */
-const static int MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS = 120;
-const static int64_t GRADIDO_DECAY_RESPITE_CENT = 100;
+static const int MAGIC_NUMBER_MAX_TIMESPAN_BETWEEN_CREATING_AND_RECEIVING_TRANSACTION_SECONDS = 120;
+static const int64_t GRADIDO_DECAY_RESPITE_CENT = 100;
 
 // for ffi
 int grdc_sign_public_key_size();

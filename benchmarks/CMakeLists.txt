@@ -4,6 +4,7 @@ project(GradidoBlockchainCoreBenchmarks C)
 
 # one binary per unit
 add_executable(bench_numberToString src/bench_numberToString.c)
+target_compile_options(bench_numberToString PRIVATE ${GRADIDO_WARNING_FLAGS})
 target_link_libraries(bench_numberToString gradido_blockchain_core)
 # This one needs no crypto of its own, but the library it links carries sodium calls in its
 # converter, so it follows whatever the library was built with rather than naming sodium
@@ -18,6 +19,7 @@ endif()
 if (USE_SODIUM)
   # one binary per unit
   add_executable(bench_crypto src/bench_crypto.c)
+  target_compile_options(bench_crypto PRIVATE ${GRADIDO_WARNING_FLAGS})
   target_link_libraries(bench_crypto gradido_blockchain_core sodium)
   if(NOT WIN32)
     target_link_libraries(bench_crypto m)

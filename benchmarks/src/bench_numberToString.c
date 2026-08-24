@@ -49,19 +49,24 @@ static void test_r128_integer(int stepCount) {
 static void test_unit_fixed(int stepCount) {
   grdd_unit gdd;
   for (int i = 0; i < stepCount; ++i) {
-    gdd = getNextTestValue();
+    gdd = (grdd_unit)getNextTestValue();
     grdd_unit_to_string(benchBuffer, STRING_BUFFER_SIZE, gdd, 4);
   }
 }
 
 static void test_unit_round(int stepCount) {
   grdd_unit r;
-  for (int i = 0; i < stepCount; ++i) { grdd_unit_round_to_precision(&r, getNextTestValue(), 2); }
+  for (int i = 0; i < stepCount; ++i) {
+    grdd_unit_round_to_precision(&r, (grdd_unit)getNextTestValue(), 2);
+  }
 }
 
 static void test_calculate_decay(int stepCount) {
   for (int i = 0; i < stepCount; ++i) {
-    grdd_unit_calculate_decay(abs((int64_t)getNextTestValue()), getNextTestValue() % 31556952 * 10);
+    grdd_unit_calculate_decay(
+        llabs((long long)getNextTestValue()),
+        (grdd_duration_seconds)(getNextTestValue() % 31556952 * 10)
+    );
   }
 }
 
@@ -73,9 +78,10 @@ static void test_hiero_transaction_id_to_string_snprintf(int stepCount) {
   char buffer[128];
   for (int i = 0; i < stepCount; ++i) {
     snprintf(
-        buffer, 128, "%lld.%lld.%lld@%lld.%09d", transactionId.accountID.shardNum,
-        transactionId.accountID.realmNum, transactionId.accountID.accountNum,
-        transactionId.transactionValidStart.seconds, transactionId.transactionValidStart.nanos
+        buffer, 128, "%" PRId64 ".%" PRId64 ".%" PRId64 "@%" PRId64 ".%09d",
+        transactionId.accountID.shardNum, transactionId.accountID.realmNum,
+        transactionId.accountID.accountNum, transactionId.transactionValidStart.seconds,
+        transactionId.transactionValidStart.nanos
     );
   }
 }
