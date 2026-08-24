@@ -23,8 +23,13 @@ extern "C" {
  * If ANY of these fail, protobuf generation or enum ordering changed.
  */
 
+// C5287 is MSVC's "operands are different enum types" on the static_asserts below, which is
+// exactly what they are there to compare. gcc and clang have no such pragma and warn about the
+// directive itself (-Wunknown-pragmas), so it is asked for only where it means something.
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 5287)
+#endif
 
 // UNSPECIFIED
 static_assert(
@@ -44,7 +49,9 @@ static_assert(
     "CrossGroupType enum mismatch: OUTBOUND"
 );
 
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 #ifdef __cplusplus
 }

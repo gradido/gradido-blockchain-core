@@ -106,7 +106,12 @@ arnm_result grdm_complete_transaction_from_wire(
 ) {
   if (!tx || !body || !confirmed_tx) { return ARNM_ERROR_NULL_POINTER; }
   grdr_complete_transaction_release(tx);
-  arnm_result result = arnm_init_arena(&tx->memory_area, calculate_memory_size(confirmed_tx, body));
+  // calculate_memory_size() adds up counts and sizes that came off the wire, in a size_t; an
+  // arena is opened with a uint32_t. Refusing here is what keeps a sum past 4 GiB from wrapping
+  // into a small arena that every later allocation then overflows.
+  const size_t memory_size = calculate_memory_size(confirmed_tx, body);
+  if (memory_size > ARNM_MAX_ALLOC_SIZE) { return ARNM_ERROR_RESOURCE_SIZE_EXCEED; }
+  arnm_result result = arnm_init_arena(&tx->memory_area, (uint32_t)memory_size);
   if (ARNM_SUCCESS != result) { return result; }
 
   tx->tx_nr = confirmed_tx->id;

@@ -80,10 +80,10 @@ arnm_result grdc_sign_key_pair_derive(
   memcpy(data + 1, sign_parent_key_pair->seed, SIGN_SEED_SIZE);
 
   // index (big endian!)
-  data[33] = (harden_index >> 24) & 0xFF;
-  data[34] = (harden_index >> 16) & 0xFF;
-  data[35] = (harden_index >> 8) & 0xFF;
-  data[36] = harden_index & 0xFF;
+  data[33] = (uint8_t)((harden_index >> 24) & 0xFF);
+  data[34] = (uint8_t)((harden_index >> 16) & 0xFF);
+  data[35] = (uint8_t)((harden_index >> 8) & 0xFF);
+  data[36] = (uint8_t)(harden_index & 0xFF);
 
   uint8_t I[64];
 

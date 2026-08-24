@@ -276,7 +276,6 @@ static arnm_result gradido_redeem_deferred_transfer_from_wire(
   if (!gradido_redeem_deferred_transfer || !pb_gradido_redeem_deferred_transfer) {
     return ARNM_ERROR_NULL_POINTER;
   }
-  arnm_result result = ARNM_ERROR_NOT_INITIALIZED;
   pb_gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr =
       gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr;
   if (proto_gradido_gradido_redeem_deferred_transfer_transfer_alloc(

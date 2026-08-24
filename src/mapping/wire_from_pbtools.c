@@ -55,7 +55,10 @@ static arnm_result memory_block_from_pbtools(
 ) {
   if (!dst || !bytes || !allocator) { return ARNM_ERROR_NULL_POINTER; }
   if (!bytes->size) { return ARNM_ERROR_INVALID_PARAM; }
-  arnm_result result = arnm_memory_block_alloc(dst, bytes->size, allocator);
+  // pbtools counts bytes in a size_t; arnm allocates in a uint32_t. On a 64 bit host the two
+  // do not meet, so a length the decoder accepted could wrap on the way into the request.
+  if (bytes->size > ARNM_MAX_ALLOC_SIZE) { return ARNM_ERROR_RESOURCE_SIZE_EXCEED; }
+  arnm_result result = arnm_memory_block_alloc(dst, (uint32_t)bytes->size, allocator);
   if (ARNM_SUCCESS != result) { return result; }
 
   memcpy(dst->data, bytes->buf_p, bytes->size);
@@ -142,7 +145,7 @@ static arnm_result hiero_account_id_from_pbtools(
 ) {
   if (!hiero_account_id || !pb_hiero_account_id) { return ARNM_ERROR_NULL_POINTER; }
   if (proto_gradido_account_id_account_account_num_e != pb_hiero_account_id->account) {
-    return GRD_ERROR_PB_UNHANDLED_ONEOF_BRANCH;
+    return (arnm_result)GRD_ERROR_PB_UNHANDLED_ONEOF_BRANCH;
   }
   hiero_account_id->accountNum = pb_hiero_account_id->account_num;
   hiero_account_id->realmNum = pb_hiero_account_id->realm_num;
@@ -156,7 +159,7 @@ static arnm_result hiero_transaction_id_from_pbtools(
 ) {
   if (!hiero_transaction_id || !pb_hiero_transaction_id) { return ARNM_ERROR_NULL_POINTER; }
   if (pb_hiero_transaction_id->nonce || pb_hiero_transaction_id->scheduled) {
-    return GRD_ERROR_PB_UNHANDLED_PARAMETER;
+    return (arnm_result)GRD_ERROR_PB_UNHANDLED_PARAMETER;
   }
   arnm_result result = timestamp_from_pbtools(
       &hiero_transaction_id->transactionValidStart,
@@ -252,8 +255,13 @@ static arnm_result gradido_deferred_transfer_from_pbtools(
   if (!gradido_deferred_transfer || !pb_gradido_deferred_transfer) {
     return ARNM_ERROR_NULL_POINTER;
   }
+  // the field is a uint32_t of seconds -- about 136 years. A wire value beyond that is not a
+  // timeout this project can carry, and truncating it would silently make it a short one.
+  if (pb_gradido_deferred_transfer->timeout_duration_p->seconds > UINT32_MAX) {
+    return ARNM_ERROR_RESOURCE_SIZE_EXCEED;
+  }
   gradido_deferred_transfer->timeout_duration =
-      pb_gradido_deferred_transfer->timeout_duration_p->seconds;
+      (uint32_t)pb_gradido_deferred_transfer->timeout_duration_p->seconds;
 
   return gradido_transfer_from_pbtools(
       &gradido_deferred_transfer->transfer, pb_gradido_deferred_transfer->transfer_p
@@ -268,7 +276,6 @@ static arnm_result gradido_redeem_deferred_transfer_from_pbtools(
   if (!gradido_redeem_deferred_transfer || !pb_gradido_redeem_deferred_transfer) {
     return ARNM_ERROR_NULL_POINTER;
   }
-  arnm_result result = ARNM_ERROR_NOT_INITIALIZED;
   gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr =
       pb_gradido_redeem_deferred_transfer->deferred_transfer_transaction_nr;
 
@@ -320,14 +327,14 @@ arnm_result grdm_transaction_body_from_pbtools(
 ) {
   if (!transaction_body || !pb_transaction_body || !allocator) { return ARNM_ERROR_NULL_POINTER; }
   if (GRDU_GRADIDO_PROTOCOL_VERSION != pb_transaction_body->version_number) {
-    return GRD_ERROR_PB_INCORRECT_VERSION;
+    return (arnm_result)GRD_ERROR_PB_INCORRECT_VERSION;
   }
   arnm_result result = ARNM_ERROR_NOT_INITIALIZED;
   if (pb_transaction_body->memos.length > 0) {
     int memos_count = pb_transaction_body->memos.length;
     if (memos_count >= 255) { return ARNM_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
 
-    result = grdw_transaction_body_reserve_memos(transaction_body, memos_count, allocator);
+    result = grdw_transaction_body_reserve_memos(transaction_body, (size_t)memos_count, allocator);
     if (ARNM_SUCCESS != result) { return result; }
 
     grdw_encrypted_memo temp_memo;
@@ -417,7 +424,7 @@ arnm_result grdm_gradido_transaction_from_pb(
     int sig_map_count = pbtx->sig_map_p->sig_pair.length;
     if (sig_map_count >= 255) { return ARNM_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
 
-    result = grdw_gradido_transaction_reserve_sig_map(tx, sig_map_count, allocator);
+    result = grdw_gradido_transaction_reserve_sig_map(tx, (uint8_t)sig_map_count, allocator);
     if (ARNM_SUCCESS != result) { return result; }
 
     grdw_signature_pair temp_signature_pair;
@@ -426,7 +433,7 @@ arnm_result grdm_gradido_transaction_from_pb(
           signature_pair_from_pbtools(&temp_signature_pair, &pbtx->sig_map_p->sig_pair.items_p[i]);
       if (ARNM_SUCCESS != result) { return result; }
 
-      result = grdw_gradido_transaction_copy_sig_map(tx, &temp_signature_pair, i);
+      result = grdw_gradido_transaction_copy_sig_map(tx, &temp_signature_pair, (uint8_t)i);
       if (ARNM_SUCCESS != result) { return result; }
     }
   }
@@ -445,7 +452,7 @@ arnm_result grdm_confirmed_transaction_from_pb(
 ) {
   if (!confirmed_tx || !pb_confirmed_tx || !allocator) { return ARNM_ERROR_NULL_POINTER; }
   if (GRDU_GRADIDO_PROTOCOL_VERSION != pb_confirmed_tx->version_number) {
-    return GRD_ERROR_PB_INCORRECT_VERSION;
+    return (arnm_result)GRD_ERROR_PB_INCORRECT_VERSION;
   }
   arnm_result result = ARNM_ERROR_NOT_INITIALIZED;
   confirmed_tx->id = pb_confirmed_tx->id;
@@ -468,7 +475,7 @@ arnm_result grdm_confirmed_transaction_from_pb(
     int account_balances_count = pb_confirmed_tx->account_balances.length;
     if (account_balances_count >= 255) { return ARNM_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS; }
     result = grdw_confirmed_transaction_reserve_account_balances(
-        confirmed_tx, account_balances_count, allocator
+        confirmed_tx, (uint8_t)account_balances_count, allocator
     );
     if (ARNM_SUCCESS != result) { return result; }
 
@@ -479,8 +486,9 @@ arnm_result grdm_confirmed_transaction_from_pb(
       );
       if (ARNM_SUCCESS != result) { return result; }
 
-      result =
-          grdw_confirmed_transaction_copy_account_balance(confirmed_tx, &account_balance_test, i);
+      result = grdw_confirmed_transaction_copy_account_balance(
+          confirmed_tx, &account_balance_test, (uint8_t)i
+      );
       if (ARNM_SUCCESS != result) { return result; }
     }
   }

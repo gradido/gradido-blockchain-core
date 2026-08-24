@@ -35,7 +35,7 @@ void grdw_gradido_creation_assemble(
   memcpy(gradido_creation->recipient.pubkey, recipient_pubkey, SIGN_PUBLIC_KEY_SIZE);
   gradido_creation->recipient.amount = amount;
   memcpy(gradido_creation->recipient.community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
-  gradido_creation->target_date.seconds = target_date_seconds;
+  gradido_creation->target_date.seconds = (int64_t)target_date_seconds;
 }
 
 void grdw_gradido_transfer_assemble(

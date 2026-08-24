@@ -19,8 +19,10 @@ static const grdd_timestamp_seconds DECAY_START_TIME = 1620927991;
 // precalculated decay factor for deterministic decay calculation across platforms, 2^64 /
 // SECONDS_PER_YEAR static const uint64_t DECAY_FACTOR_PER_SECOND =   18446743668527564941ULL; //
 // TypeScript Decimal.js
-static const uint64_t DECAY_FACTOR_PER_SECOND = 18446743668527564940ULL;
-static const uint64_t GROW_FACTOR_PER_SECOND = 405181995575ULL; // for low, and 1 for hi
+// Belong to the pow() based decay this file no longer runs -- see the commented out reference
+// in grdd_unit_calculate_decay(). The r128 path takes its numbers from DECAY_POWERS instead.
+// static const uint64_t DECAY_FACTOR_PER_SECOND = 18446743668527564940ULL;
+// static const uint64_t GROW_FACTOR_PER_SECOND = 405181995575ULL; // for low, and 1 for hi
 
 // precalculated powers of 10 for fast rounding
 static const uint64_t POW10[] = {1, 10, 100, 1000, 10000};
@@ -47,7 +49,7 @@ static const uint64_t DECAY_POWERS[] = {
 static double round_to_precision(double gdd, uint8_t precision) {
   if (precision > 4) { precision = 4; }
 
-  double factor = POW10[precision];
+  double factor = (double)POW10[precision];
   return round(gdd * factor) / factor;
 }
 
@@ -64,14 +66,14 @@ bool grdd_unit_round_to_precision(grdd_unit *result, grdd_unit value, uint8_t pr
   // half-up rounding
   uint64_t half = divisor / 2;
   uint64_t rounded = 0;
-  uint64_t gdd = value;
-  if (value < 0) { gdd = -value; }
+  uint64_t gdd = (uint64_t)value;
+  if (value < 0) { gdd = -(uint64_t)value; }
   rounded = ((gdd + half) / divisor) * divisor;
   if (rounded > INT64_MAX) { return false; }
   if (value < 0) {
-    *result = -rounded;
+    *result = -(grdd_unit)rounded;
   } else {
-    *result = rounded;
+    *result = (grdd_unit)rounded;
   }
   return true;
 }
@@ -166,33 +168,37 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
   if (!grdd_unit_round_to_precision(&rounded, value, precision)) { return -2; }
 
   bool negative = rounded < 0;
+  // The sign is written once here and the digits are carried unsigned from this line on, which
+  // is what makes INT64_MIN come out as the number it is. `rounded *= -1` on it is undefined --
+  // its magnitude is one past what the type holds -- and it is reachable: a precision of 4 lets
+  // grdd_unit_round_to_precision() pass the value straight through. Negating the unsigned copy
+  // is defined and gives exactly that magnitude.
+  uint64_t magnitude = negative ? -(uint64_t)rounded : (uint64_t)rounded;
 
   size_t cursor = 0;
 
-  if (negative) {
-    rounded *= -1;
-    buffer[cursor++] = '-';
-  }
+  if (negative) { buffer[cursor++] = '-'; }
   if (!precision) {
-    int64_t integerPart = rounded / 10000;
+    uint64_t integerPart = magnitude / 10000;
     size_t integerPartStringSize = arnm_uint64_to_string_size(integerPart);
     if (bufferSize < cursor + integerPartStringSize + 1) {
-      return cursor + integerPartStringSize; // return required size without null terminator
+      return (int)(cursor + integerPartStringSize); // required size without null terminator
     }
     cursor += arnm_uint64_to_string_known_string_size(
-        &buffer[cursor], integerPart, integerPartStringSize
+        &buffer[cursor], integerPart, (uint8_t)integerPartStringSize
     );
-    return cursor;
+    return (int)cursor;
   }
-  size_t numberPlacesCount = arnm_uint64_to_string_size(rounded);
+  size_t numberPlacesCount = arnm_uint64_to_string_size(magnitude);
   if (numberPlacesCount < 5 && bufferSize < cursor + 7) {
-    return cursor + 6; // return required size without null terminator
+    return (int)(cursor + 6); // return required size without null terminator
   }
   if (bufferSize < cursor + numberPlacesCount + 2) {
-    return cursor + numberPlacesCount + 1; // return required size without null terminator
+    return (int)(cursor + numberPlacesCount + 1); // required size without null terminator
   }
-  size_t stringSize =
-      arnm_uint64_to_string_known_string_size(&buffer[cursor], rounded, numberPlacesCount);
+  size_t stringSize = arnm_uint64_to_string_known_string_size(
+      &buffer[cursor], magnitude, (uint8_t)numberPlacesCount
+  );
   if (numberPlacesCount != stringSize) {
     return -3; // this should never happen, but just in case
   }
@@ -214,7 +220,7 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
     buffer[cursor] = '\0';
   }
 
-  return cursor;
+  return (int)cursor;
 }
 
 grdd_timestamp_seconds grdd_unit_decay_start_time() {
@@ -335,7 +341,7 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
       // after more than 63 years, all gradidos are decayed
       return 0;
     }
-    duration = duration - times * SECONDS_PER_YEAR;
+    duration = duration - (grdd_duration_seconds)times * SECONDS_PER_YEAR;
     gdd_temp = gdd >> times; // equivalent to gdd / (2^times)
     if (!duration) { return gdd_temp; }
   } else {
@@ -368,11 +374,11 @@ grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duratio
   // r128 Version
   R128 factor = {.lo = 0, .hi = 1};
   bool negative = false;
-  uint64_t exp = duration;
+  uint64_t exp = (uint64_t)duration;
 
   if (duration < 0) {
     negative = true;
-    exp = -duration;
+    exp = -(uint64_t)duration;
   }
 
   int i = 0;

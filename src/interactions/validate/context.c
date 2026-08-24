@@ -112,7 +112,7 @@ static grdi_validate_result_type validateCommon(
     return GRDI_VALIDATE_INVALID_FIELD;
   }
   if (input_tx->signature_pairs_count) {
-    for (int i = 0; i < input_tx->signature_pairs_count; i++) {
+    for (size_t i = 0; i < input_tx->signature_pairs_count; i++) {
       grdw_signature_pair *sigPair = &input_tx->signature_pairs[i];
       if (IS_EMPTY_PUBLIC_KEY(sigPair->public_key)) {
         grd_error_details_fill(error_details, "empty public key in signature map", NULL, NULL);

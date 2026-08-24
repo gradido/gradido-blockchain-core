@@ -13,5 +13,9 @@ grdi_validate_result_type grdi_validate_complete_transaction_transfer(
     const grdi_validate_options *options,
     grd_error_details *error_details
 ) {
+  // named for the signature this will have once it is written; nothing reads them yet
+  (void)input_tx;
+  (void)options;
+  (void)error_details;
   return GRDI_VALIDATE_NOT_IMPLEMENTED_YET;
 }

@@ -25,11 +25,11 @@ static inline bool grdd_timestamp_eq(const grdd_timestamp *t1, grdd_timestamp *t
 }
 
 static inline bool grdd_timestamp_gt(const grdd_timestamp *t1, const grdd_timestamp *t2) {
-  return t1->seconds > t2->seconds || t1->seconds == t2->seconds && t1->nanos > t2->nanos;
+  return t1->seconds > t2->seconds || (t1->seconds == t2->seconds && t1->nanos > t2->nanos);
 }
 
 static inline bool grdd_timestamp_lt(const grdd_timestamp *t1, const grdd_timestamp *t2) {
-  return t1->seconds < t2->seconds || t1->seconds == t2->seconds && t1->nanos < t2->nanos;
+  return t1->seconds < t2->seconds || (t1->seconds == t2->seconds && t1->nanos < t2->nanos);
 }
 
 grdd_timestamp grdd_timestamp_minus(const grdd_timestamp *t1, const grdd_timestamp *t2);

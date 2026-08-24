@@ -101,7 +101,7 @@ const grdw_account_balance *grdr_complete_transaction_get_account_balance_for_pu
     const grdr_complete_transaction *tx, const uint8_t public_key[SIGN_PUBLIC_KEY_SIZE]
 ) {
   if (!tx || !public_key) return NULL;
-  for (int i = 0; i < tx->account_balances_count; ++i) {
+  for (size_t i = 0; i < tx->account_balances_count; ++i) {
     const grdw_account_balance *account_balance = &tx->account_balances[i];
     if (0 == memcmp(account_balance->pubkey, public_key, SIGN_PUBLIC_KEY_SIZE)) {
       return account_balance;

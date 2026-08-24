@@ -71,7 +71,7 @@ arnm_result grd_error_details_fill_actual_is_number(
 
   char strBuffer[22];
   memset(strBuffer, 0, 22);
-  int strLen = arnm_int64_to_string(strBuffer, 22, actual);
+  arnm_int64_to_string(strBuffer, 22, actual);
   return grd_error_details_fill(error_details, message, strBuffer, expected);
 }
 

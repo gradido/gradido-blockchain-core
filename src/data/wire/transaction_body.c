@@ -19,11 +19,12 @@ arnm_result grdw_transaction_body_reserve_memos(
 ) {
   if (!body) { return ARNM_ERROR_NULL_POINTER; }
   if (memos_count > 255) { return ARNM_ERROR_INVALID_PARAM; }
-  arnm_result result =
-      arnm_alloc((uint8_t **)&body->memos, sizeof(grdw_encrypted_memo) * memos_count, allocator);
+  arnm_result result = arnm_alloc(
+      (uint8_t **)&body->memos, (uint32_t)(sizeof(grdw_encrypted_memo) * memos_count), allocator
+  );
   if (ARNM_SUCCESS != result) { return result; }
 
-  body->memos_count = memos_count;
+  body->memos_count = (uint8_t)memos_count;
   return ARNM_SUCCESS;
 }
 
