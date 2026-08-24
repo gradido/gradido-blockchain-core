@@ -57,7 +57,7 @@ const BuildContext = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     core_lib: *std.Build.Step.Compile,
-    hostmem_dep: *std.Build.Dependency,
+    arnm_dep: *std.Build.Dependency,
     googletest_dep: ?*std.Build.Dependency,
     sodium_dep: ?*std.Build.Dependency,
     singleOutputDir: bool,
@@ -100,7 +100,7 @@ fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, p
 
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(b.path("third_party"));
-    exe.addIncludePath(context.hostmem_dep.path("include"));
+    exe.addIncludePath(context.arnm_dep.path("include"));
 
     for (build_target.srcs) |src_file| {
         exe.addCSourceFiles(.{
@@ -138,16 +138,17 @@ pub fn build(b: *std.Build) void {
     }) });
     applySanitize(core_lib.root_module, sanitize);
 
-    // hostmem carries the allocator, the containers and the conversions this project used to
-    // keep in src/utils. It is pulled in as a package, not vendored.
-    const hostmem_dep = b.dependency("hostmem", .{ .target = target, .optimize = optimize });
+    // arnm carries the allocator, the containers and the conversions this project used to
+    // keep in src/utils. It was called hostmem until arnm 0.5.0, which renamed every symbol.
+    // It is pulled in as a package, not vendored.
+    const arnm_dep = b.dependency("arnm", .{ .target = target, .optimize = optimize });
 
     const context: BuildContext = .{
         .b = b,
         .target = target,
         .optimize = optimize,
         .core_lib = core_lib,
-        .hostmem_dep = hostmem_dep,
+        .arnm_dep = arnm_dep,
         .googletest_dep = b.lazyDependency("googletest", .{
             .target = target,
             .optimize = optimize,
@@ -171,8 +172,8 @@ pub fn build(b: *std.Build) void {
     }
 
     core_lib.linkLibC();
-    core_lib.linkLibrary(hostmem_dep.artifact("hostmem"));
-    core_lib.addIncludePath(hostmem_dep.path("include"));
+    core_lib.linkLibrary(arnm_dep.artifact("arnm"));
+    core_lib.addIncludePath(arnm_dep.path("include"));
 
     core_lib.addIncludePath(b.path("include"));
     core_lib.addIncludePath(b.path("include/gradido_blockchain_core/data/proto/gradido"));

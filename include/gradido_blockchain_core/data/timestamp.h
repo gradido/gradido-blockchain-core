@@ -52,7 +52,7 @@ size_t grdd_timestamp_calculate_string_size(const grdd_timestamp *timestamp);
  * @brief Write the value as text into a buffer the caller sized.
  *
  * @p buffer_size counts the terminator, the way snprintf counts it and the way
- * hostmem's converters do: a buffer of exactly the character count is one byte short and is
+ * arnm's converters do: a buffer of exactly the character count is one byte short and is
  * refused rather than filled. The matching _calculate_string_size() returns that character
  * count, so a caller sizing a buffer from it adds one.
  *

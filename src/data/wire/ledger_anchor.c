@@ -44,28 +44,28 @@ void grdw_ledger_anchor_assemble_hiero_transaction_id(
   };
 }
 
-hostmem_result grdw_ledger_anchor_assemble_legacy_id(
+arnm_result grdw_ledger_anchor_assemble_legacy_id(
     grdw_ledger_anchor *ledger_anchor, grdt_ledger_anchor type, uint64_t legacy_id
 ) {
-  if (!ledger_anchor) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!ledger_anchor) { return ARNM_ERROR_NULL_POINTER; }
   if (GRDT_LEDGER_ANCHOR_UNSPECIFIED == type || GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID == type ||
       GRDT_LEDGER_ANCHOR_NODE_TRIGGER_TRANSACTION_ID == type) {
-    return HOSTMEM_ERROR_INVALID_ENUM_TYPE;
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
   }
   ledger_anchor->type = type;
   ledger_anchor->id = legacy_id;
 
-  return HOSTMEM_SUCCESS;
+  return ARNM_SUCCESS;
 }
 
-hostmem_result grdw_ledger_anchor_assemble_node_trigger_transaction_id(
+arnm_result grdw_ledger_anchor_assemble_node_trigger_transaction_id(
     grdw_ledger_anchor *ledger_anchor, uint64_t node_trigger_transaction_id
 ) {
-  if (!ledger_anchor) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!ledger_anchor) { return ARNM_ERROR_NULL_POINTER; }
   ledger_anchor->type = GRDT_LEDGER_ANCHOR_NODE_TRIGGER_TRANSACTION_ID;
   ledger_anchor->id = node_trigger_transaction_id;
 
-  return HOSTMEM_SUCCESS;
+  return ARNM_SUCCESS;
 }
 
 grdt_ledger_anchor grdw_ledger_anchor_get_type(grdw_ledger_anchor *ledger_anchor) {

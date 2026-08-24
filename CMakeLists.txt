@@ -46,26 +46,36 @@ endif()
 
 include(FetchContent)
 
-# hostmem carries the allocator, the containers and the number conversions this project used to
-# keep in src/utils. Its sources join this library's target below rather than linking a second
-# archive, which is also what keeps the sanitizer flags set above on every byte of it.
+# arnm carries the allocator, the containers and the number conversions this project used to
+# keep in src/utils. It was called hostmem until arnm 0.5.0, which renamed every symbol.
+# Its sources join this library's target below rather than linking a second archive, which is
+# also what keeps the sanitizer flags set above on every byte of it.
 #
-# Since v0.3.0 hostmem ships a CMakeLists of its own. FetchContent_MakeAvailable would call
-# add_subdirectory() on it, and because our ENABLE_TESTS / ENABLE_BENCHMARKS options carry the
-# same names as its own, -DENABLE_TESTS=ON here would build hostmem's googletest suite too.
-# SOURCE_SUBDIR names a directory that holds no CMakeLists, which is the documented way to say
-# populate only. Point it at the real thing instead if this project ever wants that target.
-FetchContent_Declare(hostmem
-  URL https://github.com/einhornimmond/hostmem/archive/refs/tags/v0.4.0.tar.gz
+# arnm ships a CMakeLists of its own. FetchContent_MakeAvailable would call add_subdirectory()
+# on it, and because our ENABLE_TESTS / ENABLE_BENCHMARKS options carry the same names as its
+# own, -DENABLE_TESTS=ON here would build arnm's googletest suite too. SOURCE_SUBDIR names a
+# directory that holds no CMakeLists, which is the documented way to say populate only. Point
+# it at the real thing instead if this project ever wants that target.
+FetchContent_Declare(arnm
+  URL https://github.com/gradido/arnm/archive/refs/tags/v0.7.2.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=92479e8a1e9c6256e75f81f4debd0ec59e7886fa65fbcd52baa8c0f682bd169e
+  URL_HASH SHA256=3022dfa8d93411d4a0d32e4fe2efc8c5cb193fa1c63349a4153fe30015e43288
   SOURCE_SUBDIR do-not-add-subdirectory
 )
-FetchContent_MakeAvailable(hostmem)
-FILE(GLOB_RECURSE HOSTMEM_SRC "${hostmem_SOURCE_DIR}/src/*.c" "${hostmem_SOURCE_DIR}/include/hostmem/*.h")
-message(STATUS "hostmem from ${hostmem_SOURCE_DIR}")
+FetchContent_MakeAvailable(arnm)
+FILE(GLOB_RECURSE ARNM_SRC "${arnm_SOURCE_DIR}/src/*.c" "${arnm_SOURCE_DIR}/include/arnm/*.h")
+
+# yyjson is the parser behind arnm/json_reader.h, carried inside arnm's tree since arnm 0.7.2
+# (it was a git submodule before, which a FetchContent tarball delivers as an empty directory).
+# arnm's own build compiles it straight into libarnm; populating instead of add_subdirectory
+# means this project does the same, so the two arnm sources that include yyjson.h link.
+list(APPEND ARNM_SRC "${arnm_SOURCE_DIR}/third_party/yyjson/src/yyjson.c")
+# The narrowing warnings this project sets are not a third party source's to answer for.
+set_source_files_properties("${arnm_SOURCE_DIR}/third_party/yyjson/src/yyjson.c" PROPERTIES
+  COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/wd4242;/wd4244;/wd4267,-Wno-conversion>")
+message(STATUS "arnm from ${arnm_SOURCE_DIR}")
 
 if (USE_SODIUM)
   add_compile_definitions(USE_SODIUM)
@@ -103,7 +113,7 @@ FILE(GLOB INTERACTION_VALIDATE
 )
 
 set(GRADIDO_BLOCKCHAIN_CORE_SRC
-  ${HOSTMEM_SRC}
+  ${ARNM_SRC}
   ${DATA}
   ${DATA_PROTO_GRADIDO}
   ${DATA_RUNTIME}
@@ -137,7 +147,7 @@ endif()
     source_group("mapping" FILES ${MAPPING} )
     source_group("types" FILES ${TYPES})
     source_group("utils" FILES ${UTILS} )
-    source_group("hostmem" FILES ${HOSTMEM_SRC})
+    source_group("arnm" FILES ${ARNM_SRC})
     source_group("third_party/fp256" FILES ${FP256})
     source_group("third_party/pbtools" FILES ${PBTOOLS})
     source_group("third_party/r128" FILES ${R128})
@@ -145,7 +155,9 @@ endif()
 
 include_directories(
     include
-    ${hostmem_SOURCE_DIR}/include
+    ${arnm_SOURCE_DIR}/include
+    # private to the arnm sources compiled in above; no installed header names yyjson
+    ${arnm_SOURCE_DIR}/third_party/yyjson/src
     include/gradido_blockchain_core/data/proto/gradido
     third_party
     third_party/pbtools

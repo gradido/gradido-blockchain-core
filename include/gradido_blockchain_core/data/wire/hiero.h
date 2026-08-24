@@ -41,7 +41,7 @@ size_t grdw_hiero_account_id_calculate_string_size(const grdw_hiero_account_id *
  * @brief Write the value as text into a buffer the caller sized.
  *
  * @p buffer_size counts the terminator, the way snprintf counts it and the way
- * hostmem's converters do: a buffer of exactly the character count is one byte short and is
+ * arnm's converters do: a buffer of exactly the character count is one byte short and is
  * refused rather than filled. The matching _calculate_string_size() returns that character
  * count, so a caller sizing a buffer from it adds one.
  *
@@ -90,7 +90,7 @@ size_t grdw_hiero_transaction_id_calculate_string_size(
  * @brief Write the value as text into a buffer the caller sized.
  *
  * @p buffer_size counts the terminator, the way snprintf counts it and the way
- * hostmem's converters do: a buffer of exactly the character count is one byte short and is
+ * arnm's converters do: a buffer of exactly the character count is one byte short and is
  * refused rather than filled. The matching _calculate_string_size() returns that character
  * count, so a caller sizing a buffer from it adds one.
  *

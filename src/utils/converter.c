@@ -1,6 +1,6 @@
 #include "gradido_blockchain_core/utils/converter.h"
-#include "hostmem/memory.h"
-#include "hostmem/result.h"
+#include "arnm/memory.h"
+#include "arnm/result.h"
 #include <stdint.h>
 
 #ifdef USE_SODIUM
@@ -36,19 +36,19 @@
  * Neither pair is the whole story for a secret: wiping the caller's buffers afterwards and
  * keeping them out of swap is still the caller's part.
  */
-hostmem_result grdu_secret_to_hex(char *result_buffer, const hostmem_memory_block *data) {
-  if (!result_buffer || !data || !data->data) { return HOSTMEM_ERROR_NULL_POINTER; }
-  if (!data->size) { return HOSTMEM_ERROR_INVALID_PARAM; }
+arnm_result grdu_secret_to_hex(char *result_buffer, const arnm_memory_block *data) {
+  if (!result_buffer || !data || !data->data) { return ARNM_ERROR_NULL_POINTER; }
+  if (!data->size) { return ARNM_ERROR_INVALID_PARAM; }
 
   sodium_bin2hex(result_buffer, (size_t)data->size * 2 + 1, data->data, data->size);
-  return HOSTMEM_SUCCESS;
+  return ARNM_SUCCESS;
 }
 
-hostmem_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex) {
-  if (!result_buffer || !hex) { return HOSTMEM_ERROR_NULL_POINTER; }
+arnm_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex) {
+  if (!result_buffer || !hex) { return ARNM_ERROR_NULL_POINTER; }
   size_t hex_size = strlen(hex);
   size_t bin_size = hex_size / 2;
-  if (bin_size * 2 != hex_size) { return HOSTMEM_ERROR_INVALID_PARAM; }
+  if (bin_size * 2 != hex_size) { return ARNM_ERROR_INVALID_PARAM; }
 
   size_t written = 0;
   if (0 != sodium_hex2bin(result_buffer, bin_size, hex, hex_size, NULL, &written, NULL)) {
@@ -57,9 +57,9 @@ hostmem_result grdu_secret_from_hex(uint8_t *result_buffer, const char *hex) {
     // nobody reads again is exactly what a compiler is allowed to drop, and that is the one
     // place it must not.
     sodium_memzero(result_buffer, bin_size);
-    return HOSTMEM_ERROR_DECODE_FAILED;
+    return ARNM_ERROR_DECODE_FAILED;
   }
-  return HOSTMEM_SUCCESS;
+  return ARNM_SUCCESS;
 }
 
 const static int BASE64_VARIANT = sodium_base64_VARIANT_ORIGINAL;
@@ -68,38 +68,38 @@ size_t grdu_binary_to_base64_length(size_t binSize) {
   return sodium_base64_encoded_len(binSize, BASE64_VARIANT);
 }
 
-hostmem_result grdu_binary_to_base64_with_known_size(
-    hostmem_memory_block *result_block, const hostmem_memory_block *data
+arnm_result grdu_binary_to_base64_with_known_size(
+    arnm_memory_block *result_block, const arnm_memory_block *data
 ) {
   if (!result_block || !result_block->data || !data || !data->data) {
-    return HOSTMEM_ERROR_NULL_POINTER;
+    return ARNM_ERROR_NULL_POINTER;
   }
   // sodium_bin2base64 does not report a destination that is too small: it calls
   // sodium_misuse(), which aborts the process. Checking the room here is the only way to turn
   // a caller's miscalculation into a result they can handle — and the reason the NULL check
   // that used to stand here was unreachable.
   if (result_block->size < sodium_base64_encoded_len(data->size, BASE64_VARIANT)) {
-    return HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL;
+    return ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL;
   }
   sodium_bin2base64(
       (char *)result_block->data, result_block->size, data->data, data->size, BASE64_VARIANT
   );
-  return HOSTMEM_SUCCESS;
+  return ARNM_SUCCESS;
 }
 
-hostmem_result grdu_binary_to_base64(
-    hostmem_memory_block *result_block, const hostmem_memory_block *data, hostmem *allocator
+arnm_result grdu_binary_to_base64(
+    arnm_memory_block *result_block, const arnm_memory_block *data, arnm *allocator
 ) {
-  if (!result_block || !data || !allocator) { return HOSTMEM_ERROR_NULL_POINTER; }
+  if (!result_block || !data || !allocator) { return ARNM_ERROR_NULL_POINTER; }
   size_t strSize = sodium_base64_encoded_len(data->size, BASE64_VARIANT);
-  if (strSize > UINT32_MAX - 7) { return HOSTMEM_ERROR_ARITHMETIC_OVERFLOW; }
-  hostmem_result result = hostmem_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
-  if (result != HOSTMEM_SUCCESS) { return result; }
+  if (strSize > UINT32_MAX - 7) { return ARNM_ERROR_ARITHMETIC_OVERFLOW; }
+  arnm_result result = arnm_memory_block_alloc(result_block, (uint32_t)strSize, allocator);
+  if (result != ARNM_SUCCESS) { return result; }
 
   return grdu_binary_to_base64_with_known_size(result_block, data);
 }
 
-size_t grdu_binary_from_base64(hostmem_memory_block *result_block, const char *base64_str) {
+size_t grdu_binary_from_base64(arnm_memory_block *result_block, const char *base64_str) {
   if (!result_block || !base64_str) { return 0; }
   size_t result_bin_size = 0;
   if (sodium_base642bin(

@@ -3,10 +3,10 @@
 
 #include "basic_types.h"
 
+#include "arnm/memory_block.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
-#include "hostmem/memory_block.h"
 #include "specific_transactions.h"
 
 /** @defgroup wire Wire Format Serialization
@@ -91,13 +91,13 @@ void grdw_transaction_body_init(grdw_transaction_body *body);
  * @param[in/out] body          Transaction body to reserve memos in. Must not be NULL.
  * @param[in]     memos_count   Number of memo slots to allocate. Max 255.
  * @param[in]     allocator     Memory allocator for the pointer array, or NULL for malloc.
- * @retval HOSTMEM_SUCCESS              Slots reserved, @p body owns the array.
- * @retval HOSTMEM_ERROR_NULL_POINTER   @p body is NULL.
- * @retval HOSTMEM_ERROR_INVALID_PARAM  @p memos_count is above 255.
- * @retval HOSTMEM_ERROR_OUT_OF_MEMORY  the allocator has no room for the array.
+ * @retval ARNM_SUCCESS              Slots reserved, @p body owns the array.
+ * @retval ARNM_ERROR_NULL_POINTER   @p body is NULL.
+ * @retval ARNM_ERROR_INVALID_PARAM  @p memos_count is above 255.
+ * @retval ARNM_ERROR_OUT_OF_MEMORY  the allocator has no room for the array.
  */
-hostmem_result grdw_transaction_body_reserve_memos(
-    grdw_transaction_body *body, size_t memos_count, hostmem *allocator
+arnm_result grdw_transaction_body_reserve_memos(
+    grdw_transaction_body *body, size_t memos_count, arnm *allocator
 );
 
 /**
@@ -110,10 +110,10 @@ hostmem_result grdw_transaction_body_reserve_memos(
  * @param[in/out] body  Transaction body to receive the memo.
  * @param[in]     memo  Memo pointer to move (ownership transferred).
  * @param[in]     index Target slot index.
- * @return              HOSTMEM_SUCCESS on success,
- *                      HOSTMEM_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS if index >= memos_count.
+ * @return              ARNM_SUCCESS on success,
+ *                      ARNM_ERROR_ARRAY_INDEX_OUT_OF_BOUNDS if index >= memos_count.
  */
-hostmem_result grdw_transaction_body_move_memo(
+arnm_result grdw_transaction_body_move_memo(
     grdw_transaction_body *body, grdw_encrypted_memo *memo, uint8_t index
 );
 
@@ -128,11 +128,11 @@ hostmem_result grdw_transaction_body_move_memo(
  * @param[in]     memo      Source memo to copy from.
  * @param[in]     index     Target slot index.
  * @param[in]     allocator Memory allocator for the copy.
- * @return                  HOSTMEM_SUCCESS on success
- *                          HOSTMEM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
+ * @return                  ARNM_SUCCESS on success
+ *                          ARNM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
  */
-hostmem_result grdw_transaction_body_copy_memo(
-    grdw_transaction_body *body, const grdw_encrypted_memo *memo, uint8_t index, hostmem *allocator
+arnm_result grdw_transaction_body_copy_memo(
+    grdw_transaction_body *body, const grdw_encrypted_memo *memo, uint8_t index, arnm *allocator
 );
 
 /**
@@ -145,14 +145,14 @@ hostmem_result grdw_transaction_body_copy_memo(
  * @param[out] body       Transaction body to populate.
  * @param[in]  binary_src  Source memory block containing binary data.
  * @param[in]  allocator  Area allocator for nested allocations.
- * @return                HOSTMEM_SUCCESS on success,
- *                        HOSTMEM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
+ * @return                ARNM_SUCCESS on success,
+ *                        ARNM_ERROR_OUT_OF_MEMORY if allocater hasn't enough space.
  * @note                  The allocator must be an area allocator; memory is
  *                        not freed individually but as a whole.
  * @whisper                From chaos comes form
  */
-hostmem_result grdw_transaction_body_decode(
-    grdw_transaction_body *body, const hostmem_memory_block *binary_src, hostmem *allocator
+arnm_result grdw_transaction_body_decode(
+    grdw_transaction_body *body, const arnm_memory_block *binary_src, arnm *allocator
 );
 
 /**
@@ -166,17 +166,17 @@ hostmem_result grdw_transaction_body_decode(
  * @param[out] final_size  Number of bytes written to binary_dst.
  * @param[in]  body        Transaction body to encode.
  * @param[in]  allocator  Memory allocator for temporary encoding buffers.
- * @return                HOSTMEM_SUCCESS on success
- *                        HOSTMEM_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
- *                        HOSTMEM_ERROR_OUT_OF_MEMORY if allocator hasn't enough capacity
- *                        HOSTMEM_ERROR_ENCODE_FAILED should only happen on message schema update
+ * @return                ARNM_SUCCESS on success
+ *                        ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL if binary_dst is to small
+ *                        ARNM_ERROR_OUT_OF_MEMORY if allocator hasn't enough capacity
+ *                        ARNM_ERROR_ENCODE_FAILED should only happen on message schema update
  * @whisper                Form becomes message
  */
-hostmem_result grdw_transaction_body_encode(
-    hostmem_memory_block *binary_dst,
+arnm_result grdw_transaction_body_encode(
+    arnm_memory_block *binary_dst,
     int *final_size,
     const grdw_transaction_body *body,
-    hostmem *allocator
+    arnm *allocator
 );
 
 /**
@@ -189,7 +189,7 @@ hostmem_result grdw_transaction_body_encode(
  * @param[in/out] body      Transaction body to free.
  * @param[in]     allocator Memory allocator used for allocating memory.
  */
-void grdw_transaction_body_free(grdw_transaction_body *body, hostmem *allocator);
+void grdw_transaction_body_free(grdw_transaction_body *body, arnm *allocator);
 
 /** @} */
 

@@ -1,8 +1,8 @@
 #include "gradido_blockchain_core/data/wire/hiero.h"
+#include "arnm/converter.h"
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/utils/converter.h"
-#include "hostmem/converter.h"
 
 int64_t grdw_hiero_account_id_get_shared_num(const grdw_hiero_account_id *hiero_account_id) {
   if (!hiero_account_id) { return 0; }
@@ -21,31 +21,31 @@ int64_t grdw_hiero_account_id_get_account_num(const grdw_hiero_account_id *hiero
 
 size_t grdw_hiero_account_id_calculate_string_size(const grdw_hiero_account_id *hiero_account_id) {
   if (!hiero_account_id) { return 0; }
-  return hostmem_int64_to_string_size(hiero_account_id->shardNum) +
-         hostmem_int64_to_string_size(hiero_account_id->realmNum) +
-         hostmem_int64_to_string_size(hiero_account_id->accountNum) + 2;
+  return arnm_int64_to_string_size(hiero_account_id->shardNum) +
+         arnm_int64_to_string_size(hiero_account_id->realmNum) +
+         arnm_int64_to_string_size(hiero_account_id->accountNum) + 2;
 }
 size_t grdw_hiero_account_id_to_string(
     char *buffer, size_t buffer_size, const grdw_hiero_account_id *hiero_account_id
 ) {
   if (!buffer || !buffer_size || !hiero_account_id) { return 0; }
 
-  size_t shardNum_size = hostmem_int64_to_string_size(hiero_account_id->shardNum);
-  size_t realmNum_size = hostmem_int64_to_string_size(hiero_account_id->realmNum);
-  size_t accountNum_size = hostmem_int64_to_string_size(hiero_account_id->accountNum);
+  size_t shardNum_size = arnm_int64_to_string_size(hiero_account_id->shardNum);
+  size_t realmNum_size = arnm_int64_to_string_size(hiero_account_id->realmNum);
+  size_t accountNum_size = arnm_int64_to_string_size(hiero_account_id->accountNum);
   size_t result_size = shardNum_size + realmNum_size + accountNum_size + 2;
   // buffer_size counts the terminator; the last of the three numbers writes one.
   if (buffer_size < result_size + 1) { return result_size; }
 
-  hostmem_int64_to_string_known_string_size(buffer, hiero_account_id->shardNum, shardNum_size);
+  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->shardNum, shardNum_size);
   buffer += shardNum_size;
   *buffer = '.';
   buffer++;
-  hostmem_int64_to_string_known_string_size(buffer, hiero_account_id->realmNum, realmNum_size);
+  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->realmNum, realmNum_size);
   buffer += realmNum_size;
   *buffer = '.';
   buffer++;
-  hostmem_int64_to_string_known_string_size(buffer, hiero_account_id->accountNum, accountNum_size);
+  arnm_int64_to_string_known_string_size(buffer, hiero_account_id->accountNum, accountNum_size);
   return result_size;
 }
 

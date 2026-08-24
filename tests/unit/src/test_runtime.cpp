@@ -1,4 +1,6 @@
 #include "../terminal_colors.h"
+#include "arnm/arena.h"
+#include "arnm/mono_timer.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/timestamp.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
@@ -10,8 +12,6 @@
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/utils/version.h"
-#include "hostmem/memory.h"
-#include "hostmem/mono_timer.h"
 #include "key_pairs.h"
 
 #include "memory_limit.h"
@@ -33,10 +33,10 @@ constexpr auto confirmedCommunityRootTransactionBase64 =
 static const uint8_t community_uuid[16] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03, 0x75, 0xc0,
                                            0x94, 0x1e, 0xf3, 0x5c, 0x59, 0xe4, 0xf9, 0x78};
 
-static hostmem_memory_block fromBase64(
+static arnm_memory_block fromBase64(
     const char *base64String, size_t size, int variant = sodium_base64_VARIANT_ORIGINAL
 ) {
-  hostmem_memory_block result{};
+  arnm_memory_block result{};
   size_t binSize = (size / 4) * 3;
 
   uint8_t *buffer = (uint8_t *)malloc(binSize);
@@ -62,31 +62,29 @@ static hostmem_memory_block fromBase64(
 }
 
 TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_CommunityRoot) {
-  hostmem mem{};
-  ASSERT_EQ(hostmem_init_arena(&mem, 2048), HOSTMEM_SUCCESS);
+  arnm mem{};
+  ASSERT_EQ(arnm_init_arena(&mem, 2048), ARNM_SUCCESS);
 
   grdw_confirmed_transaction confirmed_tx;
   grdw_confirmed_transaction_init(&confirmed_tx);
   auto base64 = fromBase64(
       confirmedCommunityRootTransactionBase64, strlen(confirmedCommunityRootTransactionBase64)
   );
-  ASSERT_EQ(grdw_confirmed_transaction_decode(&confirmed_tx, &base64, &mem), HOSTMEM_SUCCESS);
+  ASSERT_EQ(grdw_confirmed_transaction_decode(&confirmed_tx, &base64, &mem), ARNM_SUCCESS);
   grdw_transaction_body body;
   grdw_transaction_body_init(&body);
   ASSERT_EQ(
-      grdw_transaction_body_decode(&body, &confirmed_tx.transaction.body_bytes, &mem),
-      HOSTMEM_SUCCESS
+      grdw_transaction_body_decode(&body, &confirmed_tx.transaction.body_bytes, &mem), ARNM_SUCCESS
   );
   grdr_complete_transaction tx;
   grdr_complete_transaction_init(&tx);
   ASSERT_EQ(
-      grdm_complete_transaction_from_wire(&tx, &body, &confirmed_tx, community_uuid),
-      HOSTMEM_SUCCESS
+      grdm_complete_transaction_from_wire(&tx, &body, &confirmed_tx, community_uuid), ARNM_SUCCESS
   );
 
   // the runtime transaction carries an arena of its own, the wire decode borrowed this one, and
   // fromBase64 hands back malloc'd bytes -- three owners, three releases
   grdr_complete_transaction_release(&tx);
   free(base64.data);
-  hostmem_release(&mem);
+  arnm_release(&mem);
 }
