@@ -47,12 +47,13 @@
 
 #define MEMO_BYTES 256
 #define BODY_BUFFER_SIZE 4096
-#define PROTOBUF_BUFFER_SIZE 8192
-/* one transaction at a time, reset between steps -- the pretty form of the large fixture is
-   the tallest thing that ever stands in here */
-#define BENCH_ARENA_SIZE (1024u * 1024u)
-/* holds the wire structures and the two encoded buffers for both fixtures, for the whole run */
-#define PREPARE_ARENA_SIZE (256u * 1024u)
+#define PROTOBUF_BUFFER_SIZE (64u * 1024u)
+/* one transaction at a time, reset between steps -- the pretty form of the wide fixture is the
+   tallest thing that ever stands in here */
+#define BENCH_ARENA_SIZE (4u * 1024u * 1024u)
+/* holds the wire structures, the encoded buffers and both documents of every fixture, for the
+   whole run */
+#define PREPARE_ARENA_SIZE (2u * 1024u * 1024u)
 
 static const uint8_t communityUuid[ARNM_UUID_BINARY_SIZE] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03,
                                                              0x75, 0xc0, 0x94, 0x1e, 0xf3, 0x5c,
@@ -76,6 +77,7 @@ typedef struct fixture {
 
 static fixture small_transfer;
 static fixture large_transfer;
+static fixture wide_transfer;
 /* bench_step() hands its function nothing but a step count, so the fixture a row runs on is
    named here rather than passed */
 static const fixture *current = NULL;
@@ -335,6 +337,14 @@ int main(void) {
       &large_transfer, "  large transfer", "large transfer -- 8 balances, 4 memos, 3 signatures", 8,
       4, 3
   );
+  /* Not a transaction anyone will see: it exists to isolate one cost. Its payload is as small as
+     the small fixture's, and everything above that is array elements -- so the gap between this
+     row and the small one is what walking and reading 400 little objects is worth, with the hex
+     of a memo nowhere near it. */
+  prepare_fixture(
+      &wide_transfer, "  wide transfer", "wide transfer -- 200 balances, no memo, 200 signatures",
+      200, 0, 200
+  );
   bench_prepared(timeUsed);
 
   /* Chosen so a debug build stays in the same minute as the other bench_* binaries when
@@ -346,14 +356,17 @@ int main(void) {
   printf("%-*s %11s  %11s  %11s\n", BENCH_NAME_WIDTH, "", "protobuf", "json", "json pretty");
   report_sizes(&small_transfer);
   report_sizes(&large_transfer);
+  report_sizes(&wide_transfer);
 
   run_fixture(&small_transfer, stepCount);
   run_fixture(&large_transfer, stepCount);
+  run_fixture(&wide_transfer, stepCount);
 
   bench_total(timeUsed, stepCount, "transaction");
 
   grdr_complete_transaction_release(&small_transfer.runtime);
   grdr_complete_transaction_release(&large_transfer.runtime);
+  grdr_complete_transaction_release(&wide_transfer.runtime);
   arnm_release(&bench_arena);
   arnm_release(&prepare_arena);
   return 0;

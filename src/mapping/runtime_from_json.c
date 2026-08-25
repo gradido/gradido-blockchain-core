@@ -21,6 +21,462 @@
 #include <stdint.h>
 #include <string.h>
 
+/*
+ * How this file reads an object, and why it does not ask for members by name.
+ *
+ * A JSON object keeps its members in a chain, so asking it for one key walks that chain until
+ * the key turns up. Asking it for all of its keys therefore walks it once per question -- the
+ * square of its length in comparisons, for an object that could have answered every question in
+ * a single pass. The transaction's root object carries twenty-odd members and this mapping
+ * wants nearly all of them, which is the worst shape that arithmetic has; an array of a few
+ * hundred little objects is the second worst, because the same waste is paid per element.
+ *
+ * So nothing here asks. Every object is walked once, every key is handed to a recogniser that
+ * answers what it is with a switch on its length and at most one memcmp, and the value is filed
+ * in a slot the recogniser named. What comes out is a small array of pointers into the
+ * document, indexed by field: present members hold their value, absent ones hold NULL, and
+ * reading the object afterwards is array indexing with no searching left in it.
+ *
+ * The second thing that falls out of the walk is order. A JSON object promises none, and this
+ * mapping needs `transaction_type` before it can know whether `transfer` or `community_root` is
+ * the member that matters -- which a walk cannot guarantee having reached. Collecting first and
+ * deciding afterwards makes the question disappear rather than answering it.
+ */
+
+// ********** one walk per object ***********************************************************
+
+/**
+ * @brief What a recogniser answers: the field a key names, or 0 for one this shape ignores.
+ *
+ * Every shape below has an enumeration of its own whose first member is its "none", so one
+ * function type serves all of them and @ref collect_members() needs no variant per object.
+ */
+typedef uint32_t (*field_recogniser)(const char *key, uint32_t key_size);
+
+/**
+ * @brief Walk @p object once and file every member it carries under the field its key names.
+ *
+ * @param[in]  object    Object to walk; not NULL.
+ * @param[out] member    Slots to fill, one per field; every one is written, none is read, so
+ *                       uninitialised storage is a valid input. A field the object does not
+ *                       carry stays NULL.
+ * @param[in]  count     Slots in @p member -- the shape's `_COUNT`.
+ * @param[in]  recognise What turns a key into one of those fields.
+ * @retval ARNM_SUCCESS                 Walked; @p member holds what the object had.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p object is not an object.
+ * @note A duplicate key keeps the last of its values, which is what a second assignment to the
+ *       same slot does and what JSON leaves open anyway.
+ * @whisper Every name asked once what it is, instead of every question asked of every name
+ */
+static arnm_result collect_members(
+    const arnm_json_value *object,
+    arnm_json_value **member,
+    uint32_t count,
+    field_recogniser recognise
+) {
+  for (uint32_t i = 0; i < count; ++i) { member[i] = NULL; }
+
+  arnm_json_object_iter iter;
+  if (ARNM_SUCCESS != arnm_json_object_iter_init(object, &iter)) {
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
+  }
+
+  const char *key = NULL;
+  uint32_t key_size = 0;
+  arnm_json_value *value = NULL;
+  while (arnm_json_object_iter_next(&iter, &key, &key_size, &value)) {
+    const uint32_t field = recognise(key, key_size);
+    if (field && field < count) { member[field] = value; }
+  }
+  return ARNM_SUCCESS;
+}
+
+/**
+ * @brief The length of a key macro's literal, terminator excluded, worked out by the compiler.
+ *
+ * Every `case` label of every recogniser below is one of these. A length typed out by hand is
+ * a length that can be wrong, and a wrong one is invisible: the key simply never matches, the
+ * member reads as absent, and the document is refused for a reason that names the wrong thing.
+ * Taken from the literal instead, it cannot drift from the key it belongs to -- and two keys of
+ * equal length become a duplicate `case`, which is a compile error at exactly the place that
+ * then needs a second look at the first byte.
+ */
+#define KEY_LEN(key) ((uint32_t)(sizeof(key) - 1u))
+
+/**
+ * @brief Whether @p key is exactly the literal @p want, its length already matched by the switch.
+ *
+ * The length comes from the same literal, so this compares what it means to compare and no
+ * terminator with it.
+ */
+#define KEY_IS(key, want) (0 == memcmp((key), (want), sizeof(want) - 1u))
+
+// ********** the shapes, and the keys each of them knows ************************************
+
+/** @brief Members of the document's root object. */
+typedef enum root_field {
+  ROOT_FIELD_NONE = 0,
+  ROOT_FIELD_TX_NR,
+  ROOT_FIELD_CONFIRMED_AT,
+  ROOT_FIELD_CREATED_AT,
+  ROOT_FIELD_TX_COMMUNITY_UUID,
+  ROOT_FIELD_LEDGER_ANCHOR,
+  ROOT_FIELD_TRANSACTION_TYPE,
+  ROOT_FIELD_BALANCE_DERIVATION_TYPE,
+  ROOT_FIELD_CROSS_GROUP_TYPE,
+  ROOT_FIELD_TX_RUNNING_HASH,
+  ROOT_FIELD_BODY_BYTES,
+  ROOT_FIELD_TRANSFER,
+  ROOT_FIELD_REGISTER_ADDRESS,
+  ROOT_FIELD_COMMUNITY_ROOT,
+  ROOT_FIELD_TARGET_DATE,
+  ROOT_FIELD_TIMEOUT_DURATION,
+  ROOT_FIELD_PREVIOUS_TX,
+  ROOT_FIELD_ACCOUNT_BALANCES,
+  ROOT_FIELD_ENCRYPTED_MEMOS,
+  ROOT_FIELD_SIGNATURE_PAIRS,
+  ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID,
+  ROOT_FIELD_PAIRING_LEDGER_ANCHOR,
+  ROOT_FIELD_COUNT
+} root_field;
+
+/**
+ * @brief Recognise a member of the root object.
+ *
+ * Sorted by the one thing that separates most of these keys for free -- how long they are.
+ * Where a length is shared, the first byte settles it, and only then is the whole name
+ * compared. Twenty-odd questions of the object become one pass over it.
+ */
+static uint32_t root_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_TX_NR):
+    return KEY_IS(key, GRDM_JSON_KEY_TX_NR) ? ROOT_FIELD_TX_NR : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_TRANSFER):
+    return KEY_IS(key, GRDM_JSON_KEY_TRANSFER) ? ROOT_FIELD_TRANSFER : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_CREATED_AT):
+    switch (key[0]) {
+    case 'b':
+      return KEY_IS(key, GRDM_JSON_KEY_BODY_BYTES) ? ROOT_FIELD_BODY_BYTES : ROOT_FIELD_NONE;
+    case 'c':
+      return KEY_IS(key, GRDM_JSON_KEY_CREATED_AT) ? ROOT_FIELD_CREATED_AT : ROOT_FIELD_NONE;
+    default:
+      return ROOT_FIELD_NONE;
+    }
+  case KEY_LEN(GRDM_JSON_KEY_TARGET_DATE):
+    switch (key[0]) {
+    case 'p':
+      return KEY_IS(key, GRDM_JSON_KEY_PREVIOUS_TX) ? ROOT_FIELD_PREVIOUS_TX : ROOT_FIELD_NONE;
+    case 't':
+      return KEY_IS(key, GRDM_JSON_KEY_TARGET_DATE) ? ROOT_FIELD_TARGET_DATE : ROOT_FIELD_NONE;
+    default:
+      return ROOT_FIELD_NONE;
+    }
+  case KEY_LEN(GRDM_JSON_KEY_CONFIRMED_AT):
+    return KEY_IS(key, GRDM_JSON_KEY_CONFIRMED_AT) ? ROOT_FIELD_CONFIRMED_AT : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_LEDGER_ANCHOR):
+    return KEY_IS(key, GRDM_JSON_KEY_LEDGER_ANCHOR) ? ROOT_FIELD_LEDGER_ANCHOR : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_COMMUNITY_ROOT):
+    return KEY_IS(key, GRDM_JSON_KEY_COMMUNITY_ROOT) ? ROOT_FIELD_COMMUNITY_ROOT : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_TX_RUNNING_HASH):
+    switch (key[0]) {
+    case 'e':
+      return KEY_IS(key, GRDM_JSON_KEY_ENCRYPTED_MEMOS) ? ROOT_FIELD_ENCRYPTED_MEMOS
+                                                        : ROOT_FIELD_NONE;
+    case 's':
+      return KEY_IS(key, GRDM_JSON_KEY_SIGNATURE_PAIRS) ? ROOT_FIELD_SIGNATURE_PAIRS
+                                                        : ROOT_FIELD_NONE;
+    case 't':
+      return KEY_IS(key, GRDM_JSON_KEY_TX_RUNNING_HASH) ? ROOT_FIELD_TX_RUNNING_HASH
+                                                        : ROOT_FIELD_NONE;
+    default:
+      return ROOT_FIELD_NONE;
+    }
+  case KEY_LEN(GRDM_JSON_KEY_TRANSACTION_TYPE):
+    switch (key[0]) {
+    case 'a':
+      return KEY_IS(key, GRDM_JSON_KEY_ACCOUNT_BALANCES) ? ROOT_FIELD_ACCOUNT_BALANCES
+                                                         : ROOT_FIELD_NONE;
+    case 'c':
+      return KEY_IS(key, GRDM_JSON_KEY_CROSS_GROUP_TYPE) ? ROOT_FIELD_CROSS_GROUP_TYPE
+                                                         : ROOT_FIELD_NONE;
+    case 'r':
+      return KEY_IS(key, GRDM_JSON_KEY_REGISTER_ADDRESS) ? ROOT_FIELD_REGISTER_ADDRESS
+                                                         : ROOT_FIELD_NONE;
+    case 't':
+      if (KEY_IS(key, GRDM_JSON_KEY_TRANSACTION_TYPE)) { return ROOT_FIELD_TRANSACTION_TYPE; }
+      return KEY_IS(key, GRDM_JSON_KEY_TIMEOUT_DURATION) ? ROOT_FIELD_TIMEOUT_DURATION
+                                                         : ROOT_FIELD_NONE;
+    default:
+      return ROOT_FIELD_NONE;
+    }
+  case KEY_LEN(GRDM_JSON_KEY_TX_COMMUNITY_UUID):
+    return KEY_IS(key, GRDM_JSON_KEY_TX_COMMUNITY_UUID) ? ROOT_FIELD_TX_COMMUNITY_UUID
+                                                        : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR):
+    return KEY_IS(key, GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR) ? ROOT_FIELD_PAIRING_LEDGER_ANCHOR
+                                                            : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE):
+    return KEY_IS(key, GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE) ? ROOT_FIELD_BALANCE_DERIVATION_TYPE
+                                                              : ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID):
+    return KEY_IS(key, GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID)
+               ? ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID
+               : ROOT_FIELD_NONE;
+  default:
+    return ROOT_FIELD_NONE;
+  }
+}
+
+/** @brief Members of a timestamp object. */
+typedef enum timestamp_field {
+  TIMESTAMP_FIELD_NONE = 0,
+  TIMESTAMP_FIELD_SECONDS,
+  TIMESTAMP_FIELD_NANOS,
+  TIMESTAMP_FIELD_COUNT
+} timestamp_field;
+
+static uint32_t timestamp_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_NANOS):
+    return KEY_IS(key, GRDM_JSON_KEY_NANOS) ? TIMESTAMP_FIELD_NANOS : TIMESTAMP_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_SECONDS):
+    return KEY_IS(key, GRDM_JSON_KEY_SECONDS) ? TIMESTAMP_FIELD_SECONDS : TIMESTAMP_FIELD_NONE;
+  default:
+    return TIMESTAMP_FIELD_NONE;
+  }
+}
+
+/** @brief Members of a ledger anchor object. */
+typedef enum anchor_field {
+  ANCHOR_FIELD_NONE = 0,
+  ANCHOR_FIELD_TYPE,
+  ANCHOR_FIELD_ID,
+  ANCHOR_FIELD_HIERO_TRANSACTION_ID,
+  ANCHOR_FIELD_COUNT
+} anchor_field;
+
+static uint32_t anchor_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_ID):
+    return KEY_IS(key, GRDM_JSON_KEY_ID) ? ANCHOR_FIELD_ID : ANCHOR_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_TYPE):
+    return KEY_IS(key, GRDM_JSON_KEY_TYPE) ? ANCHOR_FIELD_TYPE : ANCHOR_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_HIERO_TRANSACTION_ID):
+    return KEY_IS(key, GRDM_JSON_KEY_HIERO_TRANSACTION_ID) ? ANCHOR_FIELD_HIERO_TRANSACTION_ID
+                                                           : ANCHOR_FIELD_NONE;
+  default:
+    return ANCHOR_FIELD_NONE;
+  }
+}
+
+/** @brief Members of a hiero transaction id object. */
+typedef enum hiero_field {
+  HIERO_FIELD_NONE = 0,
+  HIERO_FIELD_TRANSACTION_VALID_START,
+  HIERO_FIELD_ACCOUNT_ID,
+  HIERO_FIELD_COUNT
+} hiero_field;
+
+static uint32_t hiero_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_ACCOUNT_ID):
+    return KEY_IS(key, GRDM_JSON_KEY_ACCOUNT_ID) ? HIERO_FIELD_ACCOUNT_ID : HIERO_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_TRANSACTION_VALID_START):
+    return KEY_IS(key, GRDM_JSON_KEY_TRANSACTION_VALID_START) ? HIERO_FIELD_TRANSACTION_VALID_START
+                                                              : HIERO_FIELD_NONE;
+  default:
+    return HIERO_FIELD_NONE;
+  }
+}
+
+/** @brief Members of a hiero account id object. */
+typedef enum account_id_field {
+  ACCOUNT_ID_FIELD_NONE = 0,
+  ACCOUNT_ID_FIELD_SHARD_NUM,
+  ACCOUNT_ID_FIELD_REALM_NUM,
+  ACCOUNT_ID_FIELD_ACCOUNT_NUM,
+  ACCOUNT_ID_FIELD_COUNT
+} account_id_field;
+
+static uint32_t account_id_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_SHARD_NUM):
+    switch (key[0]) {
+    case 'r':
+      return KEY_IS(key, GRDM_JSON_KEY_REALM_NUM) ? ACCOUNT_ID_FIELD_REALM_NUM
+                                                  : ACCOUNT_ID_FIELD_NONE;
+    case 's':
+      return KEY_IS(key, GRDM_JSON_KEY_SHARD_NUM) ? ACCOUNT_ID_FIELD_SHARD_NUM
+                                                  : ACCOUNT_ID_FIELD_NONE;
+    default:
+      return ACCOUNT_ID_FIELD_NONE;
+    }
+  case KEY_LEN(GRDM_JSON_KEY_ACCOUNT_NUM):
+    return KEY_IS(key, GRDM_JSON_KEY_ACCOUNT_NUM) ? ACCOUNT_ID_FIELD_ACCOUNT_NUM
+                                                  : ACCOUNT_ID_FIELD_NONE;
+  default:
+    return ACCOUNT_ID_FIELD_NONE;
+  }
+}
+
+/** @brief Members of the transfer detail object. */
+typedef enum transfer_field {
+  TRANSFER_FIELD_NONE = 0,
+  TRANSFER_FIELD_SENDER_PUBKEY,
+  TRANSFER_FIELD_RECIPIENT_PUBKEY,
+  TRANSFER_FIELD_AMOUNT,
+  TRANSFER_FIELD_COIN_COMMUNITY_UUID,
+  TRANSFER_FIELD_COUNT
+} transfer_field;
+
+static uint32_t transfer_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_AMOUNT):
+    return KEY_IS(key, GRDM_JSON_KEY_AMOUNT) ? TRANSFER_FIELD_AMOUNT : TRANSFER_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_SENDER_PUBKEY):
+    return KEY_IS(key, GRDM_JSON_KEY_SENDER_PUBKEY) ? TRANSFER_FIELD_SENDER_PUBKEY
+                                                    : TRANSFER_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_RECIPIENT_PUBKEY):
+    return KEY_IS(key, GRDM_JSON_KEY_RECIPIENT_PUBKEY) ? TRANSFER_FIELD_RECIPIENT_PUBKEY
+                                                       : TRANSFER_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_COIN_COMMUNITY_UUID):
+    return KEY_IS(key, GRDM_JSON_KEY_COIN_COMMUNITY_UUID) ? TRANSFER_FIELD_COIN_COMMUNITY_UUID
+                                                          : TRANSFER_FIELD_NONE;
+  default:
+    return TRANSFER_FIELD_NONE;
+  }
+}
+
+/** @brief Members of the register address detail object. */
+typedef enum register_address_field {
+  REGISTER_ADDRESS_FIELD_NONE = 0,
+  REGISTER_ADDRESS_FIELD_USER_PUBLIC_KEY,
+  REGISTER_ADDRESS_FIELD_NAME_HASH,
+  REGISTER_ADDRESS_FIELD_ACCOUNT_PUBLIC_KEY,
+  REGISTER_ADDRESS_FIELD_ADDRESS_TYPE,
+  REGISTER_ADDRESS_FIELD_DERIVATION_INDEX,
+  REGISTER_ADDRESS_FIELD_COUNT
+} register_address_field;
+
+static uint32_t register_address_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_NAME_HASH):
+    return KEY_IS(key, GRDM_JSON_KEY_NAME_HASH) ? REGISTER_ADDRESS_FIELD_NAME_HASH
+                                                : REGISTER_ADDRESS_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_ADDRESS_TYPE):
+    return KEY_IS(key, GRDM_JSON_KEY_ADDRESS_TYPE) ? REGISTER_ADDRESS_FIELD_ADDRESS_TYPE
+                                                   : REGISTER_ADDRESS_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_USER_PUBLIC_KEY):
+    return KEY_IS(key, GRDM_JSON_KEY_USER_PUBLIC_KEY) ? REGISTER_ADDRESS_FIELD_USER_PUBLIC_KEY
+                                                      : REGISTER_ADDRESS_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_DERIVATION_INDEX):
+    return KEY_IS(key, GRDM_JSON_KEY_DERIVATION_INDEX) ? REGISTER_ADDRESS_FIELD_DERIVATION_INDEX
+                                                       : REGISTER_ADDRESS_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY):
+    return KEY_IS(key, GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY) ? REGISTER_ADDRESS_FIELD_ACCOUNT_PUBLIC_KEY
+                                                         : REGISTER_ADDRESS_FIELD_NONE;
+  default:
+    return REGISTER_ADDRESS_FIELD_NONE;
+  }
+}
+
+/** @brief Members of the community root detail object. */
+typedef enum community_root_field {
+  COMMUNITY_ROOT_FIELD_NONE = 0,
+  COMMUNITY_ROOT_FIELD_PUBLIC_KEY,
+  COMMUNITY_ROOT_FIELD_GMW_PUBLIC_KEY,
+  COMMUNITY_ROOT_FIELD_AUF_PUBLIC_KEY,
+  COMMUNITY_ROOT_FIELD_COUNT
+} community_root_field;
+
+static uint32_t community_root_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_PUBLIC_KEY):
+    return KEY_IS(key, GRDM_JSON_KEY_PUBLIC_KEY) ? COMMUNITY_ROOT_FIELD_PUBLIC_KEY
+                                                 : COMMUNITY_ROOT_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_GMW_PUBLIC_KEY):
+    switch (key[0]) {
+    case 'a':
+      return KEY_IS(key, GRDM_JSON_KEY_AUF_PUBLIC_KEY) ? COMMUNITY_ROOT_FIELD_AUF_PUBLIC_KEY
+                                                       : COMMUNITY_ROOT_FIELD_NONE;
+    case 'g':
+      return KEY_IS(key, GRDM_JSON_KEY_GMW_PUBLIC_KEY) ? COMMUNITY_ROOT_FIELD_GMW_PUBLIC_KEY
+                                                       : COMMUNITY_ROOT_FIELD_NONE;
+    default:
+      return COMMUNITY_ROOT_FIELD_NONE;
+    }
+  default:
+    return COMMUNITY_ROOT_FIELD_NONE;
+  }
+}
+
+/** @brief Members of one account balance object. */
+typedef enum balance_field {
+  BALANCE_FIELD_NONE = 0,
+  BALANCE_FIELD_PUBKEY,
+  BALANCE_FIELD_BALANCE,
+  BALANCE_FIELD_COMMUNITY_UUID,
+  BALANCE_FIELD_COUNT
+} balance_field;
+
+static uint32_t balance_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_PUBKEY):
+    return KEY_IS(key, GRDM_JSON_KEY_PUBKEY) ? BALANCE_FIELD_PUBKEY : BALANCE_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_BALANCE):
+    return KEY_IS(key, GRDM_JSON_KEY_BALANCE) ? BALANCE_FIELD_BALANCE : BALANCE_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_COMMUNITY_UUID):
+    return KEY_IS(key, GRDM_JSON_KEY_COMMUNITY_UUID) ? BALANCE_FIELD_COMMUNITY_UUID
+                                                     : BALANCE_FIELD_NONE;
+  default:
+    return BALANCE_FIELD_NONE;
+  }
+}
+
+/** @brief Members of one encrypted memo object. */
+typedef enum memo_field {
+  MEMO_FIELD_NONE = 0,
+  MEMO_FIELD_TYPE,
+  MEMO_FIELD_MEMO,
+  MEMO_FIELD_COUNT
+} memo_field;
+
+static uint32_t memo_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_TYPE):
+    switch (key[0]) {
+    case 'm':
+      return KEY_IS(key, GRDM_JSON_KEY_MEMO) ? MEMO_FIELD_MEMO : MEMO_FIELD_NONE;
+    case 't':
+      return KEY_IS(key, GRDM_JSON_KEY_TYPE) ? MEMO_FIELD_TYPE : MEMO_FIELD_NONE;
+    default:
+      return MEMO_FIELD_NONE;
+    }
+  default:
+    return MEMO_FIELD_NONE;
+  }
+}
+
+/** @brief Members of one signature pair object. */
+typedef enum signature_field {
+  SIGNATURE_FIELD_NONE = 0,
+  SIGNATURE_FIELD_PUBLIC_KEY,
+  SIGNATURE_FIELD_SIGNATURE,
+  SIGNATURE_FIELD_COUNT
+} signature_field;
+
+static uint32_t signature_field_of(const char *key, uint32_t key_size) {
+  switch (key_size) {
+  case KEY_LEN(GRDM_JSON_KEY_SIGNATURE):
+    return KEY_IS(key, GRDM_JSON_KEY_SIGNATURE) ? SIGNATURE_FIELD_SIGNATURE : SIGNATURE_FIELD_NONE;
+  case KEY_LEN(GRDM_JSON_KEY_PUBLIC_KEY):
+    return KEY_IS(key, GRDM_JSON_KEY_PUBLIC_KEY) ? SIGNATURE_FIELD_PUBLIC_KEY
+                                                 : SIGNATURE_FIELD_NONE;
+  default:
+    return SIGNATURE_FIELD_NONE;
+  }
+}
+
 // ********** enumerations, read back through the names they were written by ****************
 
 /*
@@ -29,14 +485,9 @@
  * and the first name that matches is the value. No second table is written, so there is no
  * second table to fall out of step with the first -- a value added to an enum is readable here
  * the moment its name is added there.
- *
- * The scan is linear over a handful of names and runs once per document per field. Where that
- * ever stops being free, the fix is a sorted table generated from the same source, not a copy
- * maintained by hand.
  */
 
-/** @brief Value of the transaction type @p name spells. @retval ARNM_ERROR_ENUM_UNKNOWN No such
- *         enumerator. */
+/** @brief Value of the transaction type @p name spells. */
 static arnm_result transaction_from_string(grdt_transaction *out, const char *name) {
   for (int value = 0; value < (int)GRDT_TRANSACTION_COUNT; ++value) {
     if (0 == strcmp(grdt_transaction_to_string((grdt_transaction)value), name)) {
@@ -114,306 +565,279 @@ static arnm_result ledger_anchor_from_string(grdt_ledger_anchor *out, const char
 // ********** the small readings every field is built from **********************************
 
 /*
- * A getter answering NULL has already told the reader why -- the member was missing, or it was
- * of another type -- and the reader keeps that first refusal and answers it at the end. So the
- * helpers below hand back ARNM_SUCCESS on a NULL and leave the field cleared: the document's
- * verdict is asked for once, where it belongs, and nothing uninitialised travels on in the
- * meantime. What they do refuse themselves is a string that is there and is wrong, because a
- * length that does not match its field is the one mistake no later check would catch.
+ * All of these take a value the walk already found, so none of them searches for anything. A
+ * NULL is a member the document did not carry, and every one of them refuses it: what a
+ * transaction type owns is required, and a silent zero in a public key or an amount is the
+ * expensive kind of forgiveness. Only the caller knows which members are optional, so only the
+ * caller tests for NULL before it gets here.
  */
 
 /**
- * @brief Read a hex member into a field whose length is fixed.
+ * @brief Read a hex string into a field whose length is fixed.
  *
- * @param[in,out] reader Reader positioned on the object holding @p key.
- * @param[in]     key    Member to read.
- * @param[out]    out    @p size bytes; cleared where the member could not be read.
- * @param[in]     size   Bytes the field holds; the string has to be exactly twice as long.
- * @retval ARNM_SUCCESS             The bytes are in @p out, or the reader recorded why not.
- * @retval ARNM_ERROR_DECODE_FAILED The string is there and is not @p size bytes of hex.
+ * @param[in]  value Member to read, or NULL where the object did not carry it.
+ * @param[out] out   @p size bytes; untouched unless the call succeeds.
+ * @param[in]  size  Bytes the field holds; the string has to be exactly twice as long.
+ * @retval ARNM_SUCCESS                 The bytes are in @p out.
+ * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent, or is not @p size bytes of hex.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p value is there and is no string.
  */
-static arnm_result read_hex_fixed(
-    arnm_json_reader *reader, const char *key, uint8_t *out, uint32_t size
-) {
+static arnm_result read_hex_fixed(const arnm_json_value *value, uint8_t *out, uint32_t size) {
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
+  const char *hex = NULL;
   uint32_t length = 0;
-  const char *hex = arnm_json_reader_get_string_length(reader, key, &length);
-  if (!hex) {
-    memset(out, 0, size);
-    return ARNM_SUCCESS;
-  }
+  const arnm_result result = arnm_json_read_string(value, &hex, &length);
+  if (ARNM_SUCCESS != result) { return result; }
   if (length != size * 2u) { return ARNM_ERROR_DECODE_FAILED; }
   return arnm_binary_from_hex(out, hex);
 }
 
 /**
- * @brief Read a uuid member in the canonical 8-4-4-4-12 form into 16 bytes.
+ * @brief Read a uuid in the canonical 8-4-4-4-12 form into 16 bytes.
  *
- * @param[in,out] reader Reader positioned on the object holding @p key.
- * @param[in]     key    Member to read.
- * @param[out]    out    @ref ARNM_UUID_BINARY_SIZE bytes; cleared where it could not be read.
- * @retval ARNM_SUCCESS             The bytes are in @p out, or the reader recorded why not.
- * @retval ARNM_ERROR_DECODE_FAILED The string is there and is no uuid.
+ * @param[in]  value Member to read, or NULL where the object did not carry it.
+ * @param[out] out   @ref ARNM_UUID_BINARY_SIZE bytes; untouched unless the call succeeds.
+ * @retval ARNM_SUCCESS                 The bytes are in @p out.
+ * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent, or is no uuid.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p value is there and is no string.
  */
-static arnm_result read_uuid(arnm_json_reader *reader, const char *key, uint8_t *out) {
+static arnm_result read_uuid(const arnm_json_value *value, uint8_t *out) {
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
+  const char *text = NULL;
   uint32_t length = 0;
-  const char *text = arnm_json_reader_get_string_length(reader, key, &length);
-  if (!text) {
-    memset(out, 0, ARNM_UUID_BINARY_SIZE);
-    return ARNM_SUCCESS;
-  }
+  const arnm_result result = arnm_json_read_string(value, &text, &length);
+  if (ARNM_SUCCESS != result) { return result; }
   if (ARNM_UUID_STRING_LENGTH != length) { return ARNM_ERROR_DECODE_FAILED; }
   return arnm_uuid_from_string(out, text);
 }
 
 /**
- * @brief Read a hex member of any length into a block drawn from @p memory.
+ * @brief Read a hex string of any length into a block drawn from @p memory.
  *
- * @p out is cleared first, so an absent member and an empty string both leave the empty block
- * the writer would have produced them from. Only bytes that are really there cost an
- * allocation.
+ * @p out is cleared first, so an empty string leaves the empty block the writer produced it
+ * from. Only bytes that are really there cost an allocation.
  *
  * @param[out]    out    Block to fill; not NULL. Written in full, read not at all.
- * @param[in,out] reader Reader positioned on the object holding @p key.
- * @param[in]     key    Member to read.
+ * @param[in]     value  Member to read, or NULL where the object did not carry it.
  * @param[in,out] memory Where the bytes come from -- the transaction's own arena.
- * @retval ARNM_SUCCESS             The bytes are in @p out, or there were none to take.
- * @retval ARNM_ERROR_DECODE_FAILED The string is there and is not an even run of hex digits.
+ * @retval ARNM_SUCCESS                 The bytes are in @p out, or there were none to take.
+ * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent, or is not an even run of hex digits.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p value is there and is no string.
  * @retval Anything arnm_memory_block_alloc() can return.
  */
 static arnm_result read_hex_block(
-    arnm_memory_block *out, arnm_json_reader *reader, const char *key, arnm *memory
+    arnm_memory_block *out, const arnm_json_value *value, arnm *memory
 ) {
   out->data = NULL;
   out->size = 0;
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
 
+  const char *hex = NULL;
   uint32_t length = 0;
-  const char *hex = arnm_json_reader_get_string_length(reader, key, &length);
-  if (!hex) { return ARNM_SUCCESS; }
+  arnm_result result = arnm_json_read_string(value, &hex, &length);
+  if (ARNM_SUCCESS != result) { return result; }
   if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
   if (!length) { return ARNM_SUCCESS; }
 
-  const arnm_result result = arnm_memory_block_alloc(out, length / 2u, memory);
+  result = arnm_memory_block_alloc(out, length / 2u, memory);
   if (ARNM_SUCCESS != result) { return result; }
   return arnm_binary_from_hex(out->data, hex);
 }
 
 /**
- * @brief Read a string member and turn it into the enumerator it spells.
+ * @brief Read a string member, for the enumerations that arrive as their own spelling.
  *
- * @param[in,out] reader Reader positioned on the object holding @p key.
- * @param[in]     key    Member to read.
- * @return The member's text, or NULL where the reader could not read one -- in which case it
- *         has recorded why and the caller leaves the field at zero.
+ * @param[out] out   Receives the bytes, borrowed from the document and NUL terminated.
+ * @param[in]  value Member to read, or NULL where the object did not carry it.
+ * @retval ARNM_SUCCESS                 @p out points into the document.
+ * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p value is there and is no string.
  */
-static const char *read_enum_name(arnm_json_reader *reader, const char *key) {
-  return arnm_json_reader_get_string(reader, key);
+static arnm_result read_enum_name(const char **out, const arnm_json_value *value) {
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
+  return arnm_json_read_string(value, out, NULL);
+}
+
+/** @brief Read a signed 64 bit member, refusing one the document did not carry. */
+static arnm_result read_int64(int64_t *out, const arnm_json_value *value) {
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
+  return arnm_json_read_int64(value, out);
+}
+
+/** @brief Read an unsigned 64 bit member, refusing one the document did not carry. */
+static arnm_result read_uint64(uint64_t *out, const arnm_json_value *value) {
+  if (!value) { return ARNM_ERROR_DECODE_FAILED; }
+  return arnm_json_read_uint64(value, out);
 }
 
 /**
- * @brief Read a timestamp member: whole seconds, and the nanos within the second.
+ * @brief Read a timestamp object: whole seconds, and the nanos within the second.
  *
- * Both are left at zero where the member is missing; the reader keeps the reason.
+ * @param[out] out    Timestamp to fill; untouched unless the call succeeds.
+ * @param[in]  object The object, or NULL where the enclosing walk did not find it.
  */
-static void read_timestamp(grdd_timestamp *out, arnm_json_reader *reader, const char *key) {
-  arnm_json_value *outer = arnm_json_reader_enter(reader, key);
-  out->seconds = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_SECONDS);
-  out->nanos = arnm_json_reader_get_int32(reader, GRDM_JSON_KEY_NANOS);
-  arnm_json_reader_leave(reader, outer);
+static arnm_result read_timestamp(grdd_timestamp *out, const arnm_json_value *object) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[TIMESTAMP_FIELD_COUNT];
+  arnm_result result = collect_members(object, member, TIMESTAMP_FIELD_COUNT, timestamp_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  int64_t seconds = 0;
+  result = read_int64(&seconds, member[TIMESTAMP_FIELD_SECONDS]);
+  if (ARNM_SUCCESS != result) { return result; }
+  if (!member[TIMESTAMP_FIELD_NANOS]) { return ARNM_ERROR_DECODE_FAILED; }
+  int32_t nanos = 0;
+  result = arnm_json_read_int32(member[TIMESTAMP_FIELD_NANOS], &nanos);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  out->seconds = seconds;
+  out->nanos = nanos;
+  return ARNM_SUCCESS;
+}
+
+/** @brief Read the three numbers of a hiero account id. */
+static arnm_result read_account_id(grdw_hiero_account_id *out, const arnm_json_value *object) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[ACCOUNT_ID_FIELD_COUNT];
+  arnm_result result = collect_members(object, member, ACCOUNT_ID_FIELD_COUNT, account_id_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  result = read_int64(&out->shardNum, member[ACCOUNT_ID_FIELD_SHARD_NUM]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_int64(&out->realmNum, member[ACCOUNT_ID_FIELD_REALM_NUM]);
+  if (ARNM_SUCCESS != result) { return result; }
+  return read_int64(&out->accountNum, member[ACCOUNT_ID_FIELD_ACCOUNT_NUM]);
 }
 
 /**
- * @brief Read a ledger anchor the reader is already standing on.
+ * @brief Read a ledger anchor object.
  *
  * The type decides which member of the union is there to be read, exactly as it decided which
  * one was written. Every branch writes the whole union, so no byte of it is left as the arena
  * handed it over.
- *
- * @param[out]    out    Anchor to fill; not NULL.
- * @param[in,out] reader Reader whose current value is the anchor's object.
- * @retval ARNM_SUCCESS           The anchor is in @p out.
- * @retval ARNM_ERROR_ENUM_UNKNOWN The type member spells no anchor this library has.
  */
-static arnm_result read_ledger_anchor(grdw_ledger_anchor *out, arnm_json_reader *reader) {
+static arnm_result read_ledger_anchor(grdw_ledger_anchor *out, const arnm_json_value *object) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[ANCHOR_FIELD_COUNT];
+  arnm_result result = collect_members(object, member, ANCHOR_FIELD_COUNT, anchor_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  const char *type_name = NULL;
+  result = read_enum_name(&type_name, member[ANCHOR_FIELD_TYPE]);
+  if (ARNM_SUCCESS != result) { return result; }
+
   out->type = GRDT_LEDGER_ANCHOR_UNSPECIFIED;
   out->id = 0;
-
-  const char *type_name = read_enum_name(reader, GRDM_JSON_KEY_TYPE);
-  if (!type_name) { return ARNM_SUCCESS; }
-  const arnm_result result = ledger_anchor_from_string(&out->type, type_name);
+  result = ledger_anchor_from_string(&out->type, type_name);
   if (ARNM_SUCCESS != result) { return result; }
 
   switch (out->type) {
   case GRDT_LEDGER_ANCHOR_UNSPECIFIED:
-    break;
+    return ARNM_SUCCESS;
   case GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID: {
-    grdw_hiero_transaction_id *hiero = &out->hiero_transaction_id;
-    arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_HIERO_TRANSACTION_ID);
-    read_timestamp(&hiero->transactionValidStart, reader, GRDM_JSON_KEY_TRANSACTION_VALID_START);
-    arnm_json_value *account = arnm_json_reader_enter(reader, GRDM_JSON_KEY_ACCOUNT_ID);
-    hiero->accountID.shardNum = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_SHARD_NUM);
-    hiero->accountID.realmNum = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_REALM_NUM);
-    hiero->accountID.accountNum = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_ACCOUNT_NUM);
-    arnm_json_reader_leave(reader, account);
-    arnm_json_reader_leave(reader, outer);
-    break;
-  }
-  default:
-    out->id = arnm_json_reader_get_uint64(reader, GRDM_JSON_KEY_ID);
-    break;
-  }
-  return ARNM_SUCCESS;
-}
-
-// ********** sizing the transaction's own arena ********************************************
-
-/**
- * @brief Bytes the arrays and the byte blocks of this document will occupy.
- *
- * The counterpart of calculate_memory_size() in the wire mapping, and it answers the same
- * question from the other bank: how much ground the transaction needs before a byte of it is
- * copied. Only counts are looked at and only lengths are measured -- nothing is read, which is
- * why this pass reaches for @c has(), @c count() and @c type_of() alone. Those three record
- * nothing, and a refusal recorded here would make every later reading answer empty and turn
- * the fill pass below into a run of zeros.
- *
- * @param[out]    out    Bytes to open the arena with, aligned the way an arena charges.
- * @param[in,out] reader Reader whose current value is the document's root object.
- * @retval ARNM_SUCCESS                    @p out holds the figure.
- * @retval ARNM_ERROR_DECODE_FAILED        A memo or @c body_bytes is an odd run of hex digits.
- * @retval ARNM_ERROR_RESOURCE_SIZE_EXCEED The sum is past what an arena can be opened with.
- */
-static arnm_result calculate_memory_size(uint32_t *out, arnm_json_reader *reader) {
-  uint64_t total = 0;
-  arnm_result result = ARNM_SUCCESS;
-
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_ACCOUNT_BALANCES)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_ACCOUNT_BALANCES);
-    total += ARNM_ALIGN8((uint64_t)arnm_json_reader_count(reader) * sizeof(grdw_account_balance));
-    arnm_json_reader_leave(reader, array);
-  }
-
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_ENCRYPTED_MEMOS)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_ENCRYPTED_MEMOS);
-    const uint32_t count = arnm_json_reader_count(reader);
-    total += ARNM_ALIGN8((uint64_t)count * sizeof(grdw_encrypted_memo));
-    for (uint32_t i = 0; i < count && ARNM_SUCCESS == result; ++i) {
-      arnm_json_value *element = arnm_json_reader_enter_at(reader, i);
-      if (ARNM_JSON_TYPE_STRING == arnm_json_reader_type_of(reader, GRDM_JSON_KEY_MEMO)) {
-        uint32_t length = 0;
-        arnm_json_reader_get_string_length(reader, GRDM_JSON_KEY_MEMO, &length);
-        if (length % 2u) {
-          result = ARNM_ERROR_DECODE_FAILED;
-        } else {
-          total += ARNM_ALIGN8((uint64_t)(length / 2u));
-        }
-      }
-      arnm_json_reader_leave(reader, element);
-    }
-    arnm_json_reader_leave(reader, array);
-  }
-
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_SIGNATURE_PAIRS)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_SIGNATURE_PAIRS);
-    total += ARNM_ALIGN8((uint64_t)arnm_json_reader_count(reader) * sizeof(grdw_signature_pair));
-    arnm_json_reader_leave(reader, array);
-  }
-
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID)) {
-    total += ARNM_ALIGN8((uint64_t)ARNM_UUID_BINARY_SIZE);
-  }
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR)) {
-    total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor));
-  }
-
-  if (ARNM_JSON_TYPE_STRING == arnm_json_reader_type_of(reader, GRDM_JSON_KEY_BODY_BYTES)) {
-    uint32_t length = 0;
-    arnm_json_reader_get_string_length(reader, GRDM_JSON_KEY_BODY_BYTES, &length);
-    if (length % 2u) {
-      result = ARNM_ERROR_DECODE_FAILED;
-    } else {
-      total += ARNM_ALIGN8((uint64_t)(length / 2u));
-    }
-  }
-
-  if (ARNM_SUCCESS != result) { return result; }
-  // the counts and the lengths came out of a document, and a document may claim more than a
-  // uint32_t holds. Refusing here is what keeps a sum past 4 GiB from wrapping into a small
-  // arena that every later allocation then runs past -- the same guard the wire mapping keeps.
-  if (total > ARNM_MAX_ALLOC_SIZE) { return ARNM_ERROR_RESOURCE_SIZE_EXCEED; }
-  *out = (uint32_t)total;
-  return ARNM_SUCCESS;
-}
-
-// ********** the transaction, branch by branch *********************************************
-
-/** @brief Read the transfer branch, which serves a creation and both deferred transfers too. */
-static arnm_result read_transfer(grdr_complete_transaction *tx, arnm_json_reader *reader) {
-  arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_TRANSFER);
-  arnm_result result = read_hex_fixed(
-      reader, GRDM_JSON_KEY_SENDER_PUBKEY, tx->transfer.sender_pubkey, SIGN_PUBLIC_KEY_SIZE
-  );
-  if (ARNM_SUCCESS == result) {
-    result = read_hex_fixed(
-        reader, GRDM_JSON_KEY_RECIPIENT_PUBKEY, tx->transfer.recipient_pubkey, SIGN_PUBLIC_KEY_SIZE
+    if (!member[ANCHOR_FIELD_HIERO_TRANSACTION_ID]) { return ARNM_ERROR_DECODE_FAILED; }
+    arnm_json_value *hiero_member[HIERO_FIELD_COUNT];
+    result = collect_members(
+        member[ANCHOR_FIELD_HIERO_TRANSACTION_ID], hiero_member, HIERO_FIELD_COUNT, hiero_field_of
+    );
+    if (ARNM_SUCCESS != result) { return result; }
+    result = read_timestamp(
+        &out->hiero_transaction_id.transactionValidStart,
+        hiero_member[HIERO_FIELD_TRANSACTION_VALID_START]
+    );
+    if (ARNM_SUCCESS != result) { return result; }
+    return read_account_id(
+        &out->hiero_transaction_id.accountID, hiero_member[HIERO_FIELD_ACCOUNT_ID]
     );
   }
-  if (ARNM_SUCCESS == result) {
-    tx->transfer.amount = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_AMOUNT);
-    result = read_uuid(reader, GRDM_JSON_KEY_COIN_COMMUNITY_UUID, tx->transfer.coin_community_uuid);
+  default:
+    return read_uint64(&out->id, member[ANCHOR_FIELD_ID]);
   }
-  arnm_json_reader_leave(reader, outer);
-  return result;
+}
+
+// ********** the transaction's detail, branch by branch ************************************
+
+/** @brief Read the transfer branch, which serves a creation and both deferred transfers too. */
+static arnm_result read_transfer(grdr_complete_transaction *tx, const arnm_json_value *object) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[TRANSFER_FIELD_COUNT];
+  arnm_result result = collect_members(object, member, TRANSFER_FIELD_COUNT, transfer_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  result = read_hex_fixed(
+      member[TRANSFER_FIELD_SENDER_PUBKEY], tx->transfer.sender_pubkey, SIGN_PUBLIC_KEY_SIZE
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_hex_fixed(
+      member[TRANSFER_FIELD_RECIPIENT_PUBKEY], tx->transfer.recipient_pubkey, SIGN_PUBLIC_KEY_SIZE
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_int64(&tx->transfer.amount, member[TRANSFER_FIELD_AMOUNT]);
+  if (ARNM_SUCCESS != result) { return result; }
+  return read_uuid(member[TRANSFER_FIELD_COIN_COMMUNITY_UUID], tx->transfer.coin_community_uuid);
 }
 
 /** @brief Read the register-address branch, address type and derivation index included. */
-static arnm_result read_register_address(grdr_complete_transaction *tx, arnm_json_reader *reader) {
-  arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_REGISTER_ADDRESS);
-  arnm_result result = read_hex_fixed(
-      reader, GRDM_JSON_KEY_USER_PUBLIC_KEY, tx->register_address.user_public_key,
+static arnm_result read_register_address(
+    grdr_complete_transaction *tx, const arnm_json_value *object
+) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[REGISTER_ADDRESS_FIELD_COUNT];
+  arnm_result result =
+      collect_members(object, member, REGISTER_ADDRESS_FIELD_COUNT, register_address_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  result = read_hex_fixed(
+      member[REGISTER_ADDRESS_FIELD_USER_PUBLIC_KEY], tx->register_address.user_public_key,
       SIGN_PUBLIC_KEY_SIZE
   );
-  if (ARNM_SUCCESS == result) {
-    result = read_hex_fixed(
-        reader, GRDM_JSON_KEY_NAME_HASH, tx->register_address.name_hash, GENERIC_HASH_SIZE
-    );
-  }
-  if (ARNM_SUCCESS == result) {
-    result = read_hex_fixed(
-        reader, GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY, tx->register_address.account_public_key,
-        SIGN_PUBLIC_KEY_SIZE
-    );
-  }
-  if (ARNM_SUCCESS == result) {
-    // the second union, not the one above: same transaction, other half of the struct
-    const char *address_name = read_enum_name(reader, GRDM_JSON_KEY_ADDRESS_TYPE);
-    tx->address_type = GRDT_ADDRESS_NONE;
-    if (address_name) { result = address_from_string(&tx->address_type, address_name); }
-    tx->derivation_index = arnm_json_reader_get_uint32(reader, GRDM_JSON_KEY_DERIVATION_INDEX);
-  }
-  arnm_json_reader_leave(reader, outer);
-  return result;
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_hex_fixed(
+      member[REGISTER_ADDRESS_FIELD_NAME_HASH], tx->register_address.name_hash, GENERIC_HASH_SIZE
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_hex_fixed(
+      member[REGISTER_ADDRESS_FIELD_ACCOUNT_PUBLIC_KEY], tx->register_address.account_public_key,
+      SIGN_PUBLIC_KEY_SIZE
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+
+  // the second union, not the one above: same transaction, other half of the struct
+  const char *address_name = NULL;
+  result = read_enum_name(&address_name, member[REGISTER_ADDRESS_FIELD_ADDRESS_TYPE]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = address_from_string(&tx->address_type, address_name);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  if (!member[REGISTER_ADDRESS_FIELD_DERIVATION_INDEX]) { return ARNM_ERROR_DECODE_FAILED; }
+  return arnm_json_read_uint32(
+      member[REGISTER_ADDRESS_FIELD_DERIVATION_INDEX], &tx->derivation_index
+  );
 }
 
 /** @brief Read the community-root branch: the community key and its two account keys. */
-static arnm_result read_community_root(grdr_complete_transaction *tx, arnm_json_reader *reader) {
-  arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_COMMUNITY_ROOT);
-  arnm_result result = read_hex_fixed(
-      reader, GRDM_JSON_KEY_PUBLIC_KEY, tx->community_root.public_key, SIGN_PUBLIC_KEY_SIZE
+static arnm_result read_community_root(
+    grdr_complete_transaction *tx, const arnm_json_value *object
+) {
+  if (!object) { return ARNM_ERROR_DECODE_FAILED; }
+  arnm_json_value *member[COMMUNITY_ROOT_FIELD_COUNT];
+  arnm_result result =
+      collect_members(object, member, COMMUNITY_ROOT_FIELD_COUNT, community_root_field_of);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  result = read_hex_fixed(
+      member[COMMUNITY_ROOT_FIELD_PUBLIC_KEY], tx->community_root.public_key, SIGN_PUBLIC_KEY_SIZE
   );
-  if (ARNM_SUCCESS == result) {
-    result = read_hex_fixed(
-        reader, GRDM_JSON_KEY_GMW_PUBLIC_KEY, tx->community_root.gmw_public_key,
-        SIGN_PUBLIC_KEY_SIZE
-    );
-  }
-  if (ARNM_SUCCESS == result) {
-    result = read_hex_fixed(
-        reader, GRDM_JSON_KEY_AUF_PUBLIC_KEY, tx->community_root.auf_public_key,
-        SIGN_PUBLIC_KEY_SIZE
-    );
-  }
-  arnm_json_reader_leave(reader, outer);
-  return result;
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_hex_fixed(
+      member[COMMUNITY_ROOT_FIELD_GMW_PUBLIC_KEY], tx->community_root.gmw_public_key,
+      SIGN_PUBLIC_KEY_SIZE
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+  return read_hex_fixed(
+      member[COMMUNITY_ROOT_FIELD_AUF_PUBLIC_KEY], tx->community_root.auf_public_key,
+      SIGN_PUBLIC_KEY_SIZE
+  );
 }
 
 /**
@@ -424,209 +848,345 @@ static arnm_result read_community_root(grdr_complete_transaction *tx, arnm_json_
  * grdm_complete_transaction_from_wire() answers for the same types.
  */
 static arnm_result read_transaction_detail(
-    grdr_complete_transaction *tx, arnm_json_reader *reader
+    grdr_complete_transaction *tx, arnm_json_value *const *root
 ) {
   arnm_result result = ARNM_SUCCESS;
   switch (tx->transaction_type) {
   case GRDT_TRANSACTION_TRANSFER:
-    result = read_transfer(tx, reader);
-    break;
+    return read_transfer(tx, root[ROOT_FIELD_TRANSFER]);
   case GRDT_TRANSACTION_CREATION:
-    result = read_transfer(tx, reader);
-    if (ARNM_SUCCESS != result) { break; }
-    tx->target_date = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_TARGET_DATE);
-    break;
+    result = read_transfer(tx, root[ROOT_FIELD_TRANSFER]);
+    if (ARNM_SUCCESS != result) { return result; }
+    return read_int64(&tx->target_date, root[ROOT_FIELD_TARGET_DATE]);
   case GRDT_TRANSACTION_REGISTER_ADDRESS:
-    result = read_register_address(tx, reader);
-    break;
+    return read_register_address(tx, root[ROOT_FIELD_REGISTER_ADDRESS]);
   case GRDT_TRANSACTION_DEFERRED_TRANSFER:
-    result = read_transfer(tx, reader);
-    if (ARNM_SUCCESS != result) { break; }
-    tx->timeout_duration = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_TIMEOUT_DURATION);
-    break;
+    result = read_transfer(tx, root[ROOT_FIELD_TRANSFER]);
+    if (ARNM_SUCCESS != result) { return result; }
+    return read_int64(&tx->timeout_duration, root[ROOT_FIELD_TIMEOUT_DURATION]);
   case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER:
-    result = read_transfer(tx, reader);
-    if (ARNM_SUCCESS != result) { break; }
-    tx->previous_tx = arnm_json_reader_get_uint64(reader, GRDM_JSON_KEY_PREVIOUS_TX);
-    break;
+    result = read_transfer(tx, root[ROOT_FIELD_TRANSFER]);
+    if (ARNM_SUCCESS != result) { return result; }
+    return read_uint64(&tx->previous_tx, root[ROOT_FIELD_PREVIOUS_TX]);
   case GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER:
-    tx->previous_tx = arnm_json_reader_get_uint64(reader, GRDM_JSON_KEY_PREVIOUS_TX);
-    break;
+    return read_uint64(&tx->previous_tx, root[ROOT_FIELD_PREVIOUS_TX]);
   case GRDT_TRANSACTION_COMMUNITY_ROOT:
-    result = read_community_root(tx, reader);
-    break;
+    return read_community_root(tx, root[ROOT_FIELD_COMMUNITY_ROOT]);
   default:
-    result = ARNM_ERROR_ENUM_UNHANDLED;
-    break;
+    return ARNM_ERROR_ENUM_UNHANDLED;
   }
-  return result;
 }
 
-/** @brief Read the balances as they settled, the memos, and the signatures over them. */
-static arnm_result read_arrays(grdr_complete_transaction *tx, arnm_json_reader *reader) {
-  arnm_result result = ARNM_SUCCESS;
+// ********** sizing the transaction's own arena ********************************************
 
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_ACCOUNT_BALANCES)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_ACCOUNT_BALANCES);
-    const uint32_t count = arnm_json_reader_count(reader);
-    if (count) {
-      // the cast is what calculate_memory_size() already bounded: the arena could not have been
-      // opened if this product did not fit
-      result = arnm_alloc(
-          (uint8_t **)&tx->account_balances, (uint32_t)(count * sizeof(grdw_account_balance)),
-          &tx->memory_area
-      );
-      for (uint32_t i = 0; i < count && ARNM_SUCCESS == result; ++i) {
-        grdw_account_balance *balance = &tx->account_balances[i];
-        arnm_json_value *element = arnm_json_reader_enter_at(reader, i);
-        result =
-            read_hex_fixed(reader, GRDM_JSON_KEY_PUBKEY, balance->pubkey, SIGN_PUBLIC_KEY_SIZE);
-        if (ARNM_SUCCESS == result) {
-          balance->balance = arnm_json_reader_get_int64(reader, GRDM_JSON_KEY_BALANCE);
-          result = read_uuid(reader, GRDM_JSON_KEY_COMMUNITY_UUID, balance->community_uuid);
-        }
-        arnm_json_reader_leave(reader, element);
-      }
-      if (ARNM_SUCCESS == result) { tx->account_balances_count = count; }
-    }
-    arnm_json_reader_leave(reader, array);
+/**
+ * @brief The member, or NULL where the document wrote it as the literal `null`.
+ *
+ * arnm's reader counts a null member and an absent one as the same thing, because for a mapper
+ * they are: both say "nothing here". A walk cannot make that distinction on its own -- it files
+ * whatever it finds -- so it is made once, here, and only where a member is optional. A
+ * required member that arrives as `null` is refused further down by the reading that wanted a
+ * number or a string of it, which is the more useful complaint anyway.
+ *
+ * @param[in] value Member as the walk filed it, or NULL.
+ * @return @p value, or NULL where there is nothing to read.
+ */
+static arnm_json_value *present(arnm_json_value *value) {
+  return (value && ARNM_JSON_TYPE_NULL != arnm_json_value_type(value)) ? value : NULL;
+}
+
+/** @brief Elements in @p value, refusing anything that is there and is no array. */
+static arnm_result array_length(uint32_t *out, const arnm_json_value *value) {
+  *out = 0;
+  if (!value) { return ARNM_SUCCESS; }
+  if (ARNM_JSON_TYPE_ARRAY != arnm_json_value_type(value)) { return ARNM_ERROR_INVALID_ENUM_TYPE; }
+  *out = arnm_json_array_size(value);
+  return ARNM_SUCCESS;
+}
+
+/**
+ * @brief Bytes the memo payloads of @p array will occupy, aligned the way an arena charges.
+ *
+ * The one array whose elements have to be looked at before the arena exists: a balance and a
+ * signature are as long as their types say, a memo is as long as its own hex. Which is why this
+ * is the only array walked twice -- once here for its lengths, once below for its bytes.
+ */
+static arnm_result memo_payload_size(uint64_t *total, const arnm_json_value *array) {
+  arnm_json_array_iter iter;
+  if (ARNM_SUCCESS != arnm_json_array_iter_init(array, &iter)) {
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
+  }
+  arnm_json_value *element = NULL;
+  while (arnm_json_array_iter_next(&iter, &element)) {
+    arnm_json_value *member[MEMO_FIELD_COUNT];
+    const arnm_result result = collect_members(element, member, MEMO_FIELD_COUNT, memo_field_of);
+    if (ARNM_SUCCESS != result) { return result; }
+    if (!member[MEMO_FIELD_MEMO]) { return ARNM_ERROR_DECODE_FAILED; }
+
+    const char *hex = NULL;
+    uint32_t length = 0;
+    const arnm_result read = arnm_json_read_string(member[MEMO_FIELD_MEMO], &hex, &length);
+    if (ARNM_SUCCESS != read) { return read; }
+    if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
+    *total += ARNM_ALIGN8((uint64_t)(length / 2u));
+  }
+  return ARNM_SUCCESS;
+}
+
+/**
+ * @brief Bytes the arrays and the byte blocks of this document will occupy.
+ *
+ * The counterpart of calculate_memory_size() in the wire mapping, and it answers the same
+ * question from the other bank: how much ground the transaction needs before a byte of it is
+ * copied. Nothing is searched for -- the root walk already found every member this reads, so
+ * this is counting and no more.
+ *
+ * @param[out] out  Bytes to open the arena with, aligned the way an arena charges.
+ * @param[in]  root The root object's members, from @ref collect_members().
+ * @retval ARNM_SUCCESS                    @p out holds the figure.
+ * @retval ARNM_ERROR_DECODE_FAILED        A memo carries no hex, or an odd run of it.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE    A member is there and is of the wrong JSON type.
+ * @retval ARNM_ERROR_RESOURCE_SIZE_EXCEED The sum is past what an arena can be opened with.
+ */
+static arnm_result calculate_memory_size(uint32_t *out, arnm_json_value *const *root) {
+  uint64_t total = 0;
+  uint32_t count = 0;
+
+  arnm_result result = array_length(&count, present(root[ROOT_FIELD_ACCOUNT_BALANCES]));
+  if (ARNM_SUCCESS != result) { return result; }
+  total += ARNM_ALIGN8((uint64_t)count * sizeof(grdw_account_balance));
+
+  result = array_length(&count, present(root[ROOT_FIELD_ENCRYPTED_MEMOS]));
+  if (ARNM_SUCCESS != result) { return result; }
+  total += ARNM_ALIGN8((uint64_t)count * sizeof(grdw_encrypted_memo));
+  if (count) {
+    result = memo_payload_size(&total, present(root[ROOT_FIELD_ENCRYPTED_MEMOS]));
     if (ARNM_SUCCESS != result) { return result; }
   }
 
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_ENCRYPTED_MEMOS)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_ENCRYPTED_MEMOS);
-    const uint32_t count = arnm_json_reader_count(reader);
-    if (count) {
-      result = arnm_alloc(
-          (uint8_t **)&tx->encrypted_memos, (uint32_t)(count * sizeof(grdw_encrypted_memo)),
-          &tx->memory_area
-      );
-      for (uint32_t i = 0; i < count && ARNM_SUCCESS == result; ++i) {
-        grdw_encrypted_memo *memo = &tx->encrypted_memos[i];
-        arnm_json_value *element = arnm_json_reader_enter_at(reader, i);
-        memo->type = GRDT_MEMO_KEY_SHARED_SECRET;
-        const char *type_name = read_enum_name(reader, GRDM_JSON_KEY_TYPE);
-        if (type_name) { result = memo_key_from_string(&memo->type, type_name); }
-        if (ARNM_SUCCESS == result) {
-          result = read_hex_block(&memo->memo, reader, GRDM_JSON_KEY_MEMO, &tx->memory_area);
-        }
-        arnm_json_reader_leave(reader, element);
-      }
-      if (ARNM_SUCCESS == result) { tx->encrypted_memos_count = count; }
-    }
-    arnm_json_reader_leave(reader, array);
-    if (ARNM_SUCCESS != result) { return result; }
+  result = array_length(&count, present(root[ROOT_FIELD_SIGNATURE_PAIRS]));
+  if (ARNM_SUCCESS != result) { return result; }
+  total += ARNM_ALIGN8((uint64_t)count * sizeof(grdw_signature_pair));
+
+  if (present(root[ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID])) {
+    total += ARNM_ALIGN8((uint64_t)ARNM_UUID_BINARY_SIZE);
+  }
+  if (present(root[ROOT_FIELD_PAIRING_LEDGER_ANCHOR])) {
+    total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor));
   }
 
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_SIGNATURE_PAIRS)) {
-    arnm_json_value *array = arnm_json_reader_enter(reader, GRDM_JSON_KEY_SIGNATURE_PAIRS);
-    const uint32_t count = arnm_json_reader_count(reader);
-    if (count) {
-      result = arnm_alloc(
-          (uint8_t **)&tx->signature_pairs, (uint32_t)(count * sizeof(grdw_signature_pair)),
-          &tx->memory_area
-      );
-      for (uint32_t i = 0; i < count && ARNM_SUCCESS == result; ++i) {
-        grdw_signature_pair *pair = &tx->signature_pairs[i];
-        arnm_json_value *element = arnm_json_reader_enter_at(reader, i);
-        result = read_hex_fixed(
-            reader, GRDM_JSON_KEY_PUBLIC_KEY, pair->public_key, SIGN_PUBLIC_KEY_SIZE
-        );
-        if (ARNM_SUCCESS == result) {
-          result =
-              read_hex_fixed(reader, GRDM_JSON_KEY_SIGNATURE, pair->signature, SIGN_SIGNATURE_SIZE);
-        }
-        arnm_json_reader_leave(reader, element);
-      }
-      if (ARNM_SUCCESS == result) { tx->signature_pairs_count = count; }
-    }
-    arnm_json_reader_leave(reader, array);
+  if (root[ROOT_FIELD_BODY_BYTES]) {
+    const char *hex = NULL;
+    uint32_t length = 0;
+    result = arnm_json_read_string(root[ROOT_FIELD_BODY_BYTES], &hex, &length);
     if (ARNM_SUCCESS != result) { return result; }
+    if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
+    total += ARNM_ALIGN8((uint64_t)(length / 2u));
   }
 
-  return result;
+  // the counts and the lengths came out of a document, and a document may claim more than a
+  // uint32_t holds. Refusing here is what keeps a sum past 4 GiB from wrapping into a small
+  // arena that every later allocation then runs past -- the same guard the wire mapping keeps.
+  if (total > ARNM_MAX_ALLOC_SIZE) { return ARNM_ERROR_RESOURCE_SIZE_EXCEED; }
+  *out = (uint32_t)total;
+  return ARNM_SUCCESS;
+}
+
+// ********** the arrays ********************************************************************
+
+/** @brief Read the balances as they settled. */
+static arnm_result read_account_balances(
+    grdr_complete_transaction *tx, const arnm_json_value *array
+) {
+  uint32_t count = 0;
+  arnm_result result = array_length(&count, array);
+  if (ARNM_SUCCESS != result || !count) { return result; }
+
+  // the cast is what calculate_memory_size() already bounded: the arena could not have been
+  // opened if this product did not fit
+  result = arnm_alloc(
+      (uint8_t **)&tx->account_balances, (uint32_t)(count * sizeof(grdw_account_balance)),
+      &tx->memory_area
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+
+  arnm_json_array_iter iter;
+  if (ARNM_SUCCESS != arnm_json_array_iter_init(array, &iter)) {
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
+  }
+  arnm_json_value *element = NULL;
+  uint32_t filled = 0;
+  while (filled < count && arnm_json_array_iter_next(&iter, &element)) {
+    grdw_account_balance *balance = &tx->account_balances[filled];
+    arnm_json_value *member[BALANCE_FIELD_COUNT];
+    result = collect_members(element, member, BALANCE_FIELD_COUNT, balance_field_of);
+    if (ARNM_SUCCESS != result) { return result; }
+
+    result = read_hex_fixed(member[BALANCE_FIELD_PUBKEY], balance->pubkey, SIGN_PUBLIC_KEY_SIZE);
+    if (ARNM_SUCCESS != result) { return result; }
+    result = read_int64(&balance->balance, member[BALANCE_FIELD_BALANCE]);
+    if (ARNM_SUCCESS != result) { return result; }
+    result = read_uuid(member[BALANCE_FIELD_COMMUNITY_UUID], balance->community_uuid);
+    if (ARNM_SUCCESS != result) { return result; }
+    ++filled;
+  }
+  tx->account_balances_count = filled;
+  return ARNM_SUCCESS;
+}
+
+/** @brief Read the memos, each into a block of its own. */
+static arnm_result read_encrypted_memos(
+    grdr_complete_transaction *tx, const arnm_json_value *array
+) {
+  uint32_t count = 0;
+  arnm_result result = array_length(&count, array);
+  if (ARNM_SUCCESS != result || !count) { return result; }
+
+  result = arnm_alloc(
+      (uint8_t **)&tx->encrypted_memos, (uint32_t)(count * sizeof(grdw_encrypted_memo)),
+      &tx->memory_area
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+
+  arnm_json_array_iter iter;
+  if (ARNM_SUCCESS != arnm_json_array_iter_init(array, &iter)) {
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
+  }
+  arnm_json_value *element = NULL;
+  uint32_t filled = 0;
+  while (filled < count && arnm_json_array_iter_next(&iter, &element)) {
+    grdw_encrypted_memo *memo = &tx->encrypted_memos[filled];
+    arnm_json_value *member[MEMO_FIELD_COUNT];
+    result = collect_members(element, member, MEMO_FIELD_COUNT, memo_field_of);
+    if (ARNM_SUCCESS != result) { return result; }
+
+    const char *type_name = NULL;
+    result = read_enum_name(&type_name, member[MEMO_FIELD_TYPE]);
+    if (ARNM_SUCCESS != result) { return result; }
+    result = memo_key_from_string(&memo->type, type_name);
+    if (ARNM_SUCCESS != result) { return result; }
+    result = read_hex_block(&memo->memo, member[MEMO_FIELD_MEMO], &tx->memory_area);
+    if (ARNM_SUCCESS != result) { return result; }
+    ++filled;
+  }
+  tx->encrypted_memos_count = filled;
+  return ARNM_SUCCESS;
+}
+
+/** @brief Read the signatures over the body bytes. */
+static arnm_result read_signature_pairs(
+    grdr_complete_transaction *tx, const arnm_json_value *array
+) {
+  uint32_t count = 0;
+  arnm_result result = array_length(&count, array);
+  if (ARNM_SUCCESS != result || !count) { return result; }
+
+  result = arnm_alloc(
+      (uint8_t **)&tx->signature_pairs, (uint32_t)(count * sizeof(grdw_signature_pair)),
+      &tx->memory_area
+  );
+  if (ARNM_SUCCESS != result) { return result; }
+
+  arnm_json_array_iter iter;
+  if (ARNM_SUCCESS != arnm_json_array_iter_init(array, &iter)) {
+    return ARNM_ERROR_INVALID_ENUM_TYPE;
+  }
+  arnm_json_value *element = NULL;
+  uint32_t filled = 0;
+  while (filled < count && arnm_json_array_iter_next(&iter, &element)) {
+    grdw_signature_pair *pair = &tx->signature_pairs[filled];
+    arnm_json_value *member[SIGNATURE_FIELD_COUNT];
+    result = collect_members(element, member, SIGNATURE_FIELD_COUNT, signature_field_of);
+    if (ARNM_SUCCESS != result) { return result; }
+
+    result =
+        read_hex_fixed(member[SIGNATURE_FIELD_PUBLIC_KEY], pair->public_key, SIGN_PUBLIC_KEY_SIZE);
+    if (ARNM_SUCCESS != result) { return result; }
+    result =
+        read_hex_fixed(member[SIGNATURE_FIELD_SIGNATURE], pair->signature, SIGN_SIGNATURE_SIZE);
+    if (ARNM_SUCCESS != result) { return result; }
+    ++filled;
+  }
+  tx->signature_pairs_count = filled;
+  return ARNM_SUCCESS;
 }
 
 /** @brief Read the two members only a transaction that is not local ever carries. */
-static arnm_result read_cross_group(grdr_complete_transaction *tx, arnm_json_reader *reader) {
-  const char *cross_group_name = read_enum_name(reader, GRDM_JSON_KEY_CROSS_GROUP_TYPE);
-  tx->cross_group_type = GRDT_CROSS_GROUP_LOCAL;
-  if (cross_group_name) {
-    const arnm_result result = cross_group_from_string(&tx->cross_group_type, cross_group_name);
+static arnm_result read_cross_group(grdr_complete_transaction *tx, arnm_json_value *const *root) {
+  const char *cross_group_name = NULL;
+  arnm_result result = read_enum_name(&cross_group_name, root[ROOT_FIELD_CROSS_GROUP_TYPE]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = cross_group_from_string(&tx->cross_group_type, cross_group_name);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  if (present(root[ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID])) {
+    result = arnm_alloc(&tx->tx_pairing_community_uuid, ARNM_UUID_BINARY_SIZE, &tx->memory_area);
+    if (ARNM_SUCCESS != result) { return result; }
+    result = read_uuid(
+        present(root[ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID]), tx->tx_pairing_community_uuid
+    );
     if (ARNM_SUCCESS != result) { return result; }
   }
 
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID)) {
-    arnm_result result =
-        arnm_alloc(&tx->tx_pairing_community_uuid, ARNM_UUID_BINARY_SIZE, &tx->memory_area);
-    if (ARNM_SUCCESS != result) { return result; }
-    result =
-        read_uuid(reader, GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, tx->tx_pairing_community_uuid);
-    if (ARNM_SUCCESS != result) { return result; }
-  }
-
-  if (arnm_json_reader_has(reader, GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR)) {
-    arnm_result result = arnm_alloc(
+  if (present(root[ROOT_FIELD_PAIRING_LEDGER_ANCHOR])) {
+    result = arnm_alloc(
         (uint8_t **)&tx->pairing_ledger_anchor, (uint32_t)sizeof(grdw_ledger_anchor),
         &tx->memory_area
     );
     if (ARNM_SUCCESS != result) { return result; }
-    arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR);
-    result = read_ledger_anchor(tx->pairing_ledger_anchor, reader);
-    arnm_json_reader_leave(reader, outer);
+    result = read_ledger_anchor(
+        tx->pairing_ledger_anchor, present(root[ROOT_FIELD_PAIRING_LEDGER_ANCHOR])
+    );
     if (ARNM_SUCCESS != result) { return result; }
   }
 
   return ARNM_SUCCESS;
 }
 
-/** @brief Fill the whole transaction, in the order the struct declares it. */
+/** @brief Fill the whole transaction from the root's members, in the order the struct declares. */
 static arnm_result read_complete_transaction(
-    grdr_complete_transaction *tx, arnm_json_reader *reader
+    grdr_complete_transaction *tx, arnm_json_value *const *root
 ) {
-  tx->tx_nr = arnm_json_reader_get_uint64(reader, GRDM_JSON_KEY_TX_NR);
-  read_timestamp(&tx->confirmed_at, reader, GRDM_JSON_KEY_CONFIRMED_AT);
-  read_timestamp(&tx->created_at, reader, GRDM_JSON_KEY_CREATED_AT);
-
-  arnm_result result = read_uuid(reader, GRDM_JSON_KEY_TX_COMMUNITY_UUID, tx->tx_community_uuid);
+  arnm_result result = read_uint64(&tx->tx_nr, root[ROOT_FIELD_TX_NR]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_timestamp(&tx->confirmed_at, root[ROOT_FIELD_CONFIRMED_AT]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_timestamp(&tx->created_at, root[ROOT_FIELD_CREATED_AT]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_uuid(root[ROOT_FIELD_TX_COMMUNITY_UUID], tx->tx_community_uuid);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_ledger_anchor(&tx->ledger_anchor, root[ROOT_FIELD_LEDGER_ANCHOR]);
   if (ARNM_SUCCESS != result) { return result; }
 
-  arnm_json_value *outer = arnm_json_reader_enter(reader, GRDM_JSON_KEY_LEDGER_ANCHOR);
-  result = read_ledger_anchor(&tx->ledger_anchor, reader);
-  arnm_json_reader_leave(reader, outer);
+  const char *transaction_name = NULL;
+  result = read_enum_name(&transaction_name, root[ROOT_FIELD_TRANSACTION_TYPE]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = transaction_from_string(&tx->transaction_type, transaction_name);
   if (ARNM_SUCCESS != result) { return result; }
 
-  const char *transaction_name = read_enum_name(reader, GRDM_JSON_KEY_TRANSACTION_TYPE);
-  if (transaction_name) {
-    result = transaction_from_string(&tx->transaction_type, transaction_name);
-    if (ARNM_SUCCESS != result) { return result; }
-  }
-
-  const char *derivation_name = read_enum_name(reader, GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE);
-  if (derivation_name) {
-    result = balance_derivation_from_string(&tx->balance_derivation_type, derivation_name);
-    if (ARNM_SUCCESS != result) { return result; }
-  }
-
-  result =
-      read_hex_fixed(reader, GRDM_JSON_KEY_TX_RUNNING_HASH, tx->tx_running_hash, GENERIC_HASH_SIZE);
+  const char *derivation_name = NULL;
+  result = read_enum_name(&derivation_name, root[ROOT_FIELD_BALANCE_DERIVATION_TYPE]);
+  if (ARNM_SUCCESS != result) { return result; }
+  result = balance_derivation_from_string(&tx->balance_derivation_type, derivation_name);
   if (ARNM_SUCCESS != result) { return result; }
 
-  // a document the reader has already refused reads as zeros from here on, and a zero
-  // transaction type has no branch -- so the type's own layout is only asked for while the
-  // document still speaks
-  if (ARNM_SUCCESS != arnm_json_reader_status(reader)) { return ARNM_SUCCESS; }
-
-  result = read_transaction_detail(tx, reader);
+  result = read_hex_fixed(root[ROOT_FIELD_TX_RUNNING_HASH], tx->tx_running_hash, GENERIC_HASH_SIZE);
   if (ARNM_SUCCESS != result) { return result; }
 
-  result = read_arrays(tx, reader);
+  result = read_transaction_detail(tx, root);
   if (ARNM_SUCCESS != result) { return result; }
 
-  result = read_cross_group(tx, reader);
+  result = read_account_balances(tx, present(root[ROOT_FIELD_ACCOUNT_BALANCES]));
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_encrypted_memos(tx, present(root[ROOT_FIELD_ENCRYPTED_MEMOS]));
+  if (ARNM_SUCCESS != result) { return result; }
+  result = read_signature_pairs(tx, present(root[ROOT_FIELD_SIGNATURE_PAIRS]));
   if (ARNM_SUCCESS != result) { return result; }
 
-  return read_hex_block(&tx->body_bytes, reader, GRDM_JSON_KEY_BODY_BYTES, &tx->memory_area);
+  result = read_cross_group(tx, root);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  return read_hex_block(&tx->body_bytes, root[ROOT_FIELD_BODY_BYTES], &tx->memory_area);
 }
 
 arnm_result grdm_complete_transaction_from_json(
@@ -647,23 +1207,17 @@ arnm_result grdm_complete_transaction_from_json(
   if (ARNM_SUCCESS == result) {
     grdr_complete_transaction_release(tx);
 
-    uint32_t memory_size = 0;
-    result = calculate_memory_size(&memory_size, &reader);
-    // the sizing pass reads nothing, but a document strange enough to make it record something
-    // would leave every later reading empty. Cleared here so the fill pass below meets the
-    // document as it is and records its own verdict.
-    arnm_json_reader_clear_error(&reader);
+    // one walk over the root, and every member this mapping wants is in hand; nothing below
+    // searches the document again
+    arnm_json_value *root[ROOT_FIELD_COUNT];
+    result = collect_members(arnm_json_reader_root(&reader), root, ROOT_FIELD_COUNT, root_field_of);
 
+    uint32_t memory_size = 0;
+    if (ARNM_SUCCESS == result) { result = calculate_memory_size(&memory_size, root); }
     if (ARNM_SUCCESS == result && memory_size) {
       result = arnm_init_arena(&tx->memory_area, memory_size);
     }
-    if (ARNM_SUCCESS == result) { result = read_complete_transaction(tx, &reader); }
-
-    // the reader's own first refusal outranks anything decided above it: a member that was
-    // missing or of the wrong type is why the fields after it read as zeros, and naming that is
-    // more use than naming what the zeros then failed to be
-    const arnm_result status = arnm_json_reader_status(&reader);
-    if (ARNM_SUCCESS != status) { result = status; }
+    if (ARNM_SUCCESS == result) { result = read_complete_transaction(tx, root); }
     if (ARNM_SUCCESS != result) { grdr_complete_transaction_release(tx); }
   }
 

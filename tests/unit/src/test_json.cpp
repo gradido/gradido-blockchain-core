@@ -286,8 +286,10 @@ void expectSame(const grdr_complete_transaction &a, const grdr_complete_transact
 
 /** Write, read back, compare -- and hand the text out for whoever wants to look at it too. */
 std::string roundTrip(grdr_complete_transaction &source, arnm_json_write_flags flags = 0) {
+  // generous on purpose: it has to hold the document being built, the rendered text and the
+  // parse of it again, for the widest fixture any test here builds
   arnm scratch{};
-  EXPECT_EQ(ARNM_SUCCESS, arnm_init_arena(&scratch, 64 * 1024));
+  EXPECT_EQ(ARNM_SUCCESS, arnm_init_arena(&scratch, 1024 * 1024));
 
   arnm_memory_block text{};
   const arnm_result written = grdm_json_from_complete_transaction(&text, &source, &scratch, flags);
@@ -474,6 +476,76 @@ TEST(JsonMappingTest, Pretty_ReadsBackTheSame) {
   EXPECT_NE(std::string::npos, json.find('\n'));
 }
 
+TEST(JsonMappingTest, ManyElements_EveryOneInItsOwnPlace) {
+  // The single-element arrays above would let a walk that never advances, or one that reads the
+  // same element every time, pass unnoticed. Here every element carries a different seed, so a
+  // walk that slips by one or stalls shows up as a mismatch at the element it slipped on.
+  constexpr uint32_t kBalances = 64;
+  constexpr uint32_t kMemos = 8;
+  constexpr uint32_t kSignatures = 32;
+
+  Transaction source(256 * 1024);
+  fillEnvelope(source.get(), GRDT_TRANSACTION_TRANSFER);
+  fillBytes(source->transfer.sender_pubkey, SIGN_PUBLIC_KEY_SIZE, 0x24);
+  fillBytes(source->transfer.recipient_pubkey, SIGN_PUBLIC_KEY_SIZE, 0x25);
+  source->transfer.amount = 42;
+  fillBytes(source->transfer.coin_community_uuid, ARNM_UUID_BINARY_SIZE, 0x26);
+
+  ASSERT_EQ(
+      ARNM_SUCCESS, arnm_alloc(
+                        (uint8_t **)&source->account_balances,
+                        kBalances * sizeof(grdw_account_balance), &source->memory_area
+                    )
+  );
+  for (uint32_t i = 0; i < kBalances; ++i) {
+    fillBytes(source->account_balances[i].pubkey, SIGN_PUBLIC_KEY_SIZE, (uint8_t)(0x80 + i));
+    source->account_balances[i].balance = -1000 - (int64_t)i;
+    fillBytes(
+        source->account_balances[i].community_uuid, ARNM_UUID_BINARY_SIZE, (uint8_t)(0xc0 + i)
+    );
+  }
+  source->account_balances_count = kBalances;
+
+  ASSERT_EQ(
+      ARNM_SUCCESS, arnm_alloc(
+                        (uint8_t **)&source->encrypted_memos, kMemos * sizeof(grdw_encrypted_memo),
+                        &source->memory_area
+                    )
+  );
+  for (uint32_t i = 0; i < kMemos; ++i) {
+    // memos of different lengths as well as different content: the sizing pass adds each one up
+    // on its own, and a walk that mispairs a length with an element would open too small an arena
+    source->encrypted_memos[i].type =
+        (0 == i % 2) ? GRDT_MEMO_KEY_PLAIN : GRDT_MEMO_KEY_COMMUNITY_SECRET;
+    ASSERT_EQ(
+        ARNM_SUCCESS,
+        arnm_memory_block_alloc(&source->encrypted_memos[i].memo, 8 + i * 13, &source->memory_area)
+    );
+    fillBytes(
+        source->encrypted_memos[i].memo.data, source->encrypted_memos[i].memo.size,
+        (uint8_t)(0x11 + i)
+    );
+  }
+  source->encrypted_memos_count = kMemos;
+
+  ASSERT_EQ(
+      ARNM_SUCCESS, arnm_alloc(
+                        (uint8_t **)&source->signature_pairs,
+                        kSignatures * sizeof(grdw_signature_pair), &source->memory_area
+                    )
+  );
+  for (uint32_t i = 0; i < kSignatures; ++i) {
+    fillBytes(source->signature_pairs[i].public_key, SIGN_PUBLIC_KEY_SIZE, (uint8_t)(0x33 + i));
+    fillBytes(source->signature_pairs[i].signature, SIGN_SIGNATURE_SIZE, (uint8_t)(0x55 + i));
+  }
+  source->signature_pairs_count = kSignatures;
+
+  ASSERT_EQ(ARNM_SUCCESS, arnm_memory_block_alloc(&source->body_bytes, 200, &source->memory_area));
+  fillBytes(source->body_bytes.data, source->body_bytes.size, 0x99);
+
+  roundTrip(source.get());
+}
+
 TEST(JsonMappingTest, HostAllocator_LeavesNothingBehind) {
   // the arena paths above give everything back in one stroke; with the host there is no such
   // stroke, so this is the run that shows the writer and the reader hand back what they took.
@@ -627,6 +699,41 @@ TEST(JsonMappingTest, Refuses_MissingMember) {
 
 TEST(JsonMappingTest, Refuses_MemberOfTheWrongType) {
   EXPECT_NE(ARNM_SUCCESS, readVerdict(transferDocument("\"amount\":6", "\"amount\":\"six\"")));
+}
+
+TEST(JsonMappingTest, Accepts_OptionalMembersWrittenAsNull) {
+  // arnm counts a null member and an absent one as the same thing, and the reader keeps that:
+  // the arrays and the two pairing members are optional, so a document that spells them out as
+  // null says the same as one that leaves them out.
+  EXPECT_EQ(
+      ARNM_SUCCESS,
+      readVerdict(transferDocument("\"account_balances\":[]", "\"account_balances\":null"))
+  );
+  EXPECT_EQ(
+      ARNM_SUCCESS,
+      readVerdict(transferDocument("\"signature_pairs\":[]", "\"signature_pairs\":null"))
+  );
+}
+
+TEST(JsonMappingTest, Refuses_ArrayThatIsNoArray) {
+  // an optional member is allowed to be missing, not to be something else
+  EXPECT_EQ(
+      ARNM_ERROR_INVALID_ENUM_TYPE,
+      readVerdict(transferDocument("\"account_balances\":[]", "\"account_balances\":7"))
+  );
+}
+
+TEST(JsonMappingTest, ReadsMembersInWhateverOrderTheDocumentPutThem) {
+  // A JSON object promises no order, and this mapping needs transaction_type before it can know
+  // which detail member matters. The walk collects first and decides afterwards, so a document
+  // that puts the type last has to read exactly like one that puts it first.
+  std::string reordered = transferDocument();
+  const std::string type_member = ",\"transaction_type\":\"GRDT_TRANSACTION_TRANSFER\"";
+  const size_t at = reordered.find(type_member.substr(1));
+  ASSERT_NE(std::string::npos, at);
+  reordered.erase(at - 1, type_member.size());
+  reordered.insert(reordered.size() - 1, type_member);
+  EXPECT_EQ(ARNM_SUCCESS, readVerdict(reordered)) << reordered;
 }
 
 TEST(JsonMappingTest, Refuses_NullArgumentsAndEmptyInput) {

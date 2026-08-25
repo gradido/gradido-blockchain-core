@@ -28,10 +28,13 @@ extern "C" {
  *
  *  A member that is absent is a member left at zero -- the same state
  *  @c grdr_complete_transaction_init() leaves. That covers the fields a transaction type does
- *  not own (a transfer has no @c target_date) and the two cross-group members, which are only
- *  ever there on a transaction that is not local. Everything a type does own is required, and
- *  a missing one is refused rather than defaulted, because a silent zero in a public key or an
- *  amount is the expensive kind of forgiveness.
+ *  not own (a transfer has no @c target_date), the three arrays, and the two cross-group
+ *  members, which are only ever there on a transaction that is not local. Those optional
+ *  members may also be spelled out as the literal @c null, which says the same as leaving them
+ *  out -- the reading a mapper wants, and the one arnm's own reader takes.
+ *
+ *  Everything a type does own is required, and a missing one is refused rather than defaulted,
+ *  because a silent zero in a public key or an amount is the expensive kind of forgiveness.
  *
  *  ### Where the memory comes from
  *
@@ -53,10 +56,15 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * than leaked; on any failure it is released again and left as
  * @c grdr_complete_transaction_init() leaves it, holding nothing.
  *
- * The reading runs to the end before it is judged. arnm's reader keeps the first refusal and
- * the field it happened at and answers empty for everything after, so a document missing a
- * member in the middle is not read half way and abandoned -- it is read through, and asked
- * about once. What comes back is that first refusal.
+ * Each object is walked once rather than asked for its members by name -- a JSON object keeps
+ * its members in a chain, so asking it n questions walks it n times. The walk files every
+ * member under the field its key names, and the reading that follows is array indexing. That
+ * also makes member order irrelevant: `transaction_type` decides which detail member matters,
+ * and a document is free to put it last.
+ *
+ * The reading stops at the first thing it cannot accept and answers that. Nothing is written
+ * into @p tx that a later refusal would leave behind, because @p tx is released again on any
+ * failure.
  *
  * @param[out]    tx          Transaction to fill; not NULL. Every field is written and none is
  *                            read, so uninitialised storage is a valid input.
@@ -72,13 +80,15 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * @retval ARNM_ERROR_NULL_POINTER         @p tx or @p json is NULL.
  * @retval ARNM_ERROR_INVALID_PARAM        @p json_length is 0, or @p flags holds a bit arnm
  *                                         does not define.
- * @retval ARNM_ERROR_DECODE_FAILED        The text is not JSON, or a hex string is not an even
- *                                         number of hex digits, or one standing for a
- *                                         fixed-size field is not exactly twice its length, or
- *                                         a uuid is not the canonical 36 characters.
+ * @retval ARNM_ERROR_DECODE_FAILED        The text is not JSON, or a required member is
+ *                                         missing, or a hex string is not an even number of
+ *                                         hex digits, or one standing for a fixed-size field
+ *                                         is not exactly twice its length, or a uuid is not
+ *                                         the canonical 36 characters.
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE    A member is there but is of another JSON type than
  *                                         the field it names -- a number where a string
- *                                         belongs, an object where an array belongs.
+ *                                         belongs, an object where an array belongs -- or the
+ *                                         root is no object at all.
  * @retval ARNM_ERROR_ENUM_UNKNOWN         An enumeration member spells no enumerator this
  *                                         library has.
  * @retval ARNM_ERROR_ENUM_UNHANDLED       @c transaction_type names a transaction this mapping

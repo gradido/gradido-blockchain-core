@@ -36,15 +36,20 @@ rather than a patch because the public surface grew, not because anything in it 
   copied -- the same shape `grdm_complete_transaction_from_wire()` has always had.
 - **`test_json`**, a googletest binary that builds its fixtures rather than decoding them and
   therefore needs no libsodium: every branch of both unions written, read and compared, plus
-  what a malformed document is refused for. `test_runtime` gains one case that puts a
-  transaction which really came off the wire through the same passage.
+  what a malformed document is refused for; one case whose arrays are wide enough -- 64
+  balances, 8 memos of differing lengths, 32 signatures -- that a walk which stalls or slips by
+  one cannot pass it; and one that shuffles `transaction_type` to the end of the document.
+  `test_runtime` gains one case that puts a transaction which really came off the wire through
+  the same passage.
 - **`bench_json`**, which carries one transfer in all three shapes -- protobuf, minified JSON,
   pretty JSON -- and prints their sizes beside the cost of moving between them. It needs no
   libsodium either, so it builds wherever the library does. The protobuf row is a ruler rather
   than a competitor: it ends in the same `grdm_complete_transaction_from_wire()` and opens its
   runtime arena from the host exactly as the JSON reader does, so the two reads are directly
-  comparable. Two fixtures, because the fixed fields of a transaction and its payload scale
-  differently and the gap between them is where the hex lives.
+  comparable. Three fixtures: a small transfer, a large one whose payload is what it mostly
+  costs, and a wide one -- 200 balances, 200 signatures, no memo -- that is no transaction
+  anyone will see and exists only to isolate what a document's element count, rather than its
+  payload, is worth.
 
 ### Notes
 
@@ -59,13 +64,38 @@ rather than a patch because the public surface grew, not because anything in it 
   second table. A name added to an enum is therefore readable the moment it is spelled there,
   and there is no second list to fall out of step with the first.
 - **What a document may leave out** is what the transaction does not own: a transfer has no
-  `target_date`, and a local transaction has neither pairing member. Everything a type does own
-  is required, and a missing one is refused rather than defaulted -- a silent zero in a public
-  key or an amount is the expensive kind of forgiveness.
+  `target_date`, a local transaction has neither pairing member, and the three arrays may be
+  absent as well as empty. Any of those may also be written as the literal `null`, which says
+  the same as leaving it out. Everything a type does own is required, and a missing one is
+  refused rather than defaulted -- a silent zero in a public key or an amount is the expensive
+  kind of forgiveness.
 - The 0.17.0 note that "nothing of this project includes a JSON header" no longer holds: the
   two headers above include `arnm/json_writer.h` and `arnm/json_reader.h`. The half of that
   note that still stands is the one that mattered -- no installed header names yyjson, and
   nothing of yyjson reaches a consumer.
+- **The reader walks every object once instead of asking it for members by name.** A JSON
+  object keeps its members in a chain, so `arnm_json_reader_get_*(reader, key)` walks that
+  chain until the key turns up, and asking one object for all of its keys walks it once per
+  question. The root object carries twenty-odd members and this mapping wants nearly all of
+  them, which is the worst shape that arithmetic has. Now each object is walked once, every key
+  is handed to a recogniser that answers what it is with a `switch` on its length and at most
+  one `memcmp`, and the value is filed in a slot indexed by field -- the shape
+  `geo_address_search_c` uses on planet dumps. Reading afterwards is array indexing with no
+  searching left in it.
+  - Measured on this machine, zig `ReleaseFast`, the read of one transaction: **small transfer
+    1.3 us → 923 ns (−29 %)**, **large transfer 3.7 → 3.2 us (−15 %)**, **wide transfer 38.4 →
+    35.3 us (−8 %)**. The small one gains most because it is nearly all root lookups; the wide
+    one least because its time is mostly the hex of 400 elements, which this does not touch.
+    The writer has no such cost -- it appends and never looks anything up.
+  - Falling out of it: **member order stopped mattering**. The walk collects first and decides
+    afterwards, so a document that puts `transaction_type` after the detail member it governs
+    reads like one that puts it first. A `null` written in place of an optional member counts
+    as absent, the same reading arnm's own reader takes.
+  - Every `case` label is `KEY_LEN(GRDM_JSON_KEY_X)`, worked out by the compiler from the key's
+    own literal. Hand-counted lengths were tried first and four of them were wrong, silently --
+    a mistyped length simply never matches, and the member then reads as absent. Derived from
+    the literal it cannot drift, and two keys of equal length become a duplicate `case`, which
+    is a compile error exactly where a second look at the first byte is needed.
 - **Writing costs more than reading on a transaction that is nearly all payload**, and
   `bench_json` is where that is visible: a 7.3 KB document takes about 5 us to write and just
   under 4 us to read in a zig ReleaseFast build, against 1.1 us for the same transaction
