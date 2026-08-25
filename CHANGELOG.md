@@ -12,6 +12,74 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.18.0 -- 2026-08-25
+
+`grdr_complete_transaction` gains a second pair of banks. It could already be built from the
+wire and it can now be written as JSON and read back from it, through arnm's `json_writer.h`
+and `json_reader.h` -- the same yyjson that has been compiled into this library since 0.17.0
+without anything reaching for it.
+
+Nothing that was there moved. Two headers, two translation units, one test binary and one
+benchmark are added; no existing signature, result code or field changed. This is a minor
+rather than a patch because the public surface grew, not because anything in it shifted.
+
+### Added
+
+- **`mapping/json_from_runtime.h` -- `grdm_json_from_complete_transaction()`.** Writes a whole
+  runtime transaction as one JSON object into a block the caller owns. Takes an allocator and
+  the `ARNM_JSON_WRITE_*` flags, so the same call serves a minified payload and the pretty form
+  a person reads.
+- **`mapping/runtime_from_json.h` -- `grdm_complete_transaction_from_json()`.** The way back,
+  and an exact inverse: every field the writer sets down is read here, including the ones the
+  transaction type in hand does not use, so a round trip is a copy and not a reconstruction.
+  The transaction's arena is sized in one pass over the parsed document before a byte of it is
+  copied -- the same shape `grdm_complete_transaction_from_wire()` has always had.
+- **`test_json`**, a googletest binary that builds its fixtures rather than decoding them and
+  therefore needs no libsodium: every branch of both unions written, read and compared, plus
+  what a malformed document is refused for. `test_runtime` gains one case that puts a
+  transaction which really came off the wire through the same passage.
+- **`bench_json`**, which carries one transfer in all three shapes -- protobuf, minified JSON,
+  pretty JSON -- and prints their sizes beside the cost of moving between them. It needs no
+  libsodium either, so it builds wherever the library does. The protobuf row is a ruler rather
+  than a competitor: it ends in the same `grdm_complete_transaction_from_wire()` and opens its
+  runtime arena from the host exactly as the JSON reader does, so the two reads are directly
+  comparable. Two fixtures, because the fixed fields of a transaction and its payload scale
+  differently and the gap between them is where the hex lives.
+
+### Notes
+
+- **The document's shape.** Binary travels as lowercase hex -- `arnm_binary_to_hex()`, two
+  characters a byte, no separators -- because base64 in this project needs libsodium and the
+  mapping has to hold in a build without it. Community uuids take the canonical 8-4-4-4-12
+  form. Enumerations are written as their enumerator's own spelling,
+  `"GRDT_TRANSACTION_TRANSFER"` rather than `2`, so a value inserted into an enum cannot
+  silently change what an old document means. The full shape is documented at
+  `grdm_json_from_runtime`.
+- **Reading an enumerator back walks `grdt_*_to_string()` in reverse** rather than carrying a
+  second table. A name added to an enum is therefore readable the moment it is spelled there,
+  and there is no second list to fall out of step with the first.
+- **What a document may leave out** is what the transaction does not own: a transfer has no
+  `target_date`, and a local transaction has neither pairing member. Everything a type does own
+  is required, and a missing one is refused rather than defaulted -- a silent zero in a public
+  key or an amount is the expensive kind of forgiveness.
+- The 0.17.0 note that "nothing of this project includes a JSON header" no longer holds: the
+  two headers above include `arnm/json_writer.h` and `arnm/json_reader.h`. The half of that
+  note that still stands is the one that mattered -- no installed header names yyjson, and
+  nothing of yyjson reaches a consumer.
+- **Writing costs more than reading on a transaction that is nearly all payload**, and
+  `bench_json` is where that is visible: a 7.3 KB document takes about 5 us to write and just
+  under 4 us to read in a zig ReleaseFast build, against 1.1 us for the same transaction
+  arriving as protobuf. The reason is the second copy in `add_hex_block()` -- memo and body
+  bytes are hexed into scratch and then copied into the document. Borrowing instead would mean
+  keeping every such block alive until the render and freeing it after, bookkeeping this
+  mapping does not carry today; the trade is written down at the function rather than left to
+  be rediscovered.
+- Not verified: MSVC and Windows, neither of which can be built from this checkout. The zig
+  build (`x86_64-linux-gnu`) and the CMake build were both run, the latter also with
+  `-DENABLE_SANITIZERS=ON`; UBSan and ASan with leak detection are clean over the new tests.
+  The benchmark figures above are one machine's, in a zig `ReleaseFast` build; the CMake build
+  puts the same rows further apart, not closer.
+
 ## 0.17.1 -- 2026-08-24
 
 `-Wall -Wextra -Wconversion` on the C this project owns, in both builds, and the tree is clean
