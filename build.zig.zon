@@ -1,6 +1,6 @@
 .{
     .name = .blockchain_core,
-    .version = "0.18.0",
+    .version = "0.19.0",
     .dependencies = .{
         .googletest = .{
             .url = "git+https://github.com/allyourcodebase/googletest#e2affdd13730f800aa63772039f2adfa971461b6",
@@ -17,8 +17,8 @@
             .hash = "zig_compile_commands-0.0.1-OZg5-e_JAAAGg1WHAePtq4l4Uvjs34BexnFFCZk63EaG",
         },
         .arnm = .{
-            .url = "https://github.com/gradido/arnm/archive/refs/tags/v0.7.2.tar.gz",
-            .hash = "arnm-0.7.2-ZdhGsCwFGgA0uOWsPFL1vPE1tCGvc2TkG-A5oUQrPVgw",
+            .url = "https://github.com/gradido/arnm/archive/refs/tags/v0.7.3.tar.gz",
+            .hash = "arnm-0.7.3-ZdhGsODNGgDeunNj3WBVTgZUsnBZChW4KlmUQS0ljn6m",
         },
     },
     .paths = .{""},

@@ -239,6 +239,9 @@ pub fn build(b: *std.Build) void {
       processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = enable_sodium, .name = "bench_json", .srcs = &.{"bench_json.c"} }, path);
       if (enable_sodium) {
         processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_crypto", .srcs = &.{"bench_crypto.c"} }, path);
+        // Puts arnm's base64 -- the pair the JSON mapping uses -- next to libsodium's, so
+        // needs sodium even though nothing of the mapping does.
+        processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_base64", .srcs = &.{"bench_base64.c"} }, path);
       }
     }
 

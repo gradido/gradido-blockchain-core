@@ -22,11 +22,24 @@ extern "C" {
  *
  *  ### Where binary becomes text
  *
- *  Public keys, hashes, signatures, the encrypted memos and `body_bytes` are written as
- *  lowercase hex, two characters per byte and no separators -- @c arnm_binary_to_hex(). Hex
- *  rather than base64, because base64 in this project needs libsodium and the mapping has to
- *  hold in a build without it. Community uuids take the canonical 8-4-4-4-12 form instead,
- *  which is how a uuid is read everywhere else.
+ *  Two alphabets, and which one a field takes is a question about its reader rather than about
+ *  its bytes.
+ *
+ *  Public keys, hashes and signatures are **lowercase hex**, two characters per byte and no
+ *  separators -- @c arnm_json_writer_add_hex(). These are the values a person compares against
+ *  another tool's output, and hex is the form every other tool prints them in.
+ *
+ *  The encrypted memos and `body_bytes` are **base64**, the standard alphabet with padding --
+ *  @c arnm_json_writer_add_base64(). Nobody reads those by eye; they are payloads, and their
+ *  length is what matters. Four characters per three bytes instead of two per one takes a third
+ *  off the two fields that are by far the longest in the document.
+ *
+ *  Both come from arnm and neither needs libsodium, so the mapping still holds in a build
+ *  without it. Both are written where they will be read from, already quoted, so the serializer
+ *  is asked for one byte a character rather than the six it reserves against escaping.
+ *
+ *  Community uuids take the canonical 8-4-4-4-12 form instead, which is how a uuid is read
+ *  everywhere else.
  *
  *  Enumerations are written as their enumerator's own spelling --
  *  @c "GRDT_TRANSACTION_TRANSFER", not @c 2. A number would tie the document to the order the
@@ -92,8 +105,9 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  *                                        @ref grdm_complete_transaction_from_wire answers for
  *                                        the same types.
  * @retval ARNM_ERROR_RESOURCE_SIZE_EXCEED A memo or @c body_bytes is longer than half of
- *                                        @ref ARNM_MAX_ALLOC_SIZE, so its hex could not be
- *                                        counted without wrapping.
+ *                                        @ref ARNM_MAX_ALLOC_SIZE, so its base64 and the
+ *                                        quotes around it could not be counted without
+ *                                        wrapping.
  * @retval ARNM_ERROR_OUT_OF_MEMORY       @p allocator had nothing left.
  *
  * @note Failure leaves @p out exactly as the caller had it, so uninitialised storage is a

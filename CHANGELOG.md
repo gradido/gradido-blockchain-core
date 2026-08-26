@@ -12,6 +12,113 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.19.0 -- 2026-08-26
+
+The JSON write of a transaction needs a little over half the arena it needed yesterday, and the
+document it produces is smaller. Every binary field goes in through one of the three calls arnm
+0.7.3 added for it, and the writer is told how big the document will be before it starts.
+
+**The document format changed**, which is what moves the minor number: `body_bytes` and the
+encrypted memos are base64 now where they were hex. Everything else in the document is byte for
+byte what it was.
+
+**A document written by 0.18.0 will not always be refused by this release.** Every hex digit is
+also a base64 character, so a hex payload whose length happens to be a multiple of four decodes
+without complaint -- to different bytes. `body_bytes` of an even number of bytes is exactly that
+case, which is most of them. Nothing in the document tells the two apart and this release does
+not add anything that would; a document stored by 0.18.0 has to be read by 0.18.0.
+
+**This release needs arnm 0.7.3.** It is the first thing here that does not build against
+0.7.2 -- the three calls and the hint are all new, so arnm carries them as a patch, but they
+have to be there.
+
+### Changed
+
+- **`body_bytes` and the encrypted memos are base64**, through
+  `arnm_json_writer_add_base64()`; public keys, hashes and signatures stay hex, through
+  `arnm_json_writer_add_hex()`. Which alphabet a field takes is a question about its reader:
+  hex for the values a person compares against another tool's output, base64 for the payloads
+  nobody reads by eye and whose length is what matters. Four characters per three bytes instead
+  of two per one takes a third off the two longest fields in the document.
+  - Both come from arnm, so the mapping still holds in a build without libsodium -- which is
+    what kept it on hex until now. `bench_base64` measures arnm's pair against libsodium's:
+    same text out of both, arnm's around eight times faster, because libsodium's runs in
+    constant time and arnm's reads a table. Neither of these two payloads needs that property.
+  - **`Base64Test` in `test_converter` crosses arnm's pair against libsodium's**, which is what
+    makes "this is base64" more than arnm agreeing with itself: every length from 1 to 200
+    encoded by both and compared, then each one's output read back by the other, plus the six
+    vectors RFC 4648 prints pinned against both. Deliberately mutating a single character of
+    arnm's alphabet fails two of those tests and a single entry of its decode table fails a
+    third, so they are known to be load bearing rather than merely green.
+    - Where the two differ is pinned as well: libsodium takes an `ignore` set and skips what it
+      names, arnm takes none and refuses anything outside the alphabet. Both are defensible and
+      only one of them is what this project writes.
+  - `grdm_complete_transaction_from_json()` follows, and so do both of its sizing passes.
+    `base64_binary_size()` is the one place that answers how long a decoded payload is, because
+    a sizing that came out under what the read then writes is an arena the read runs past.
+- **The local `add_hex_fixed()` and `add_hex_block()` are gone**, and with them the buffers they
+  formatted in. What that is worth, measured over
+  48762 real transactions of the Gradido Akademie ledger, on the one whose document is the
+  largest at 3382 bytes:
+  - The arena a write needs at its peak falls from **24208 to 10448 bytes**, and what one
+    still holds after the call from 11888 to 6944. Of the 13760 that went, base64 carries
+    1232, the pool hint 1968, and the two hex calls the rest.
+  - **The document itself is 17 percent shorter**: the largest of the ledger goes from 3382 to
+    2792 bytes, which is `body_bytes` and one memo losing a third of their length each. Most of what went is the serializer's working buffer: it reserves
+    `str_len * 6 + 16` before writing a string, against the possibility that every byte escapes
+    to `\uXXXX`, and hex escapes to nothing. `add_hex()` puts the text in already quoted, as a
+    raw value, which is reserved for at `str_len + 2`. On that document the old buffer grew to
+    12320 bytes for a text of 3382.
+  - Of what an arena still holds after the call, 1792 are
+    the scratch that `add_hex_block()` used to hex into: it was allocated, copied out of, and
+    handed back -- and an arena never took it, because the document's own copy of the same
+    characters was allocated on top of it. There is no scratch and no copy now; the digits are
+    formatted straight into the document.
+  - The peak scales with the longest field rather than with the document, so the further a
+    transaction is from average the more this is worth. A 2 KiB memo used to ask for about
+    24 KiB of working buffer on its own.
+- **Community uuids are written with `arnm_json_writer_add_uuid()`,** and the local
+  `add_uuid()` goes with the hex helpers. That was the last stack buffer in the file and the
+  last copy out of one; `arnm/converter.h` is no longer included here, nothing in the mapping
+  reaching for it any more.
+  - It does not move the peak on this ledger, and is not expected to: a uuid renders as 36
+    characters and `body_bytes` as 982, so it is the hex field that decides how far the
+    serializer's buffer grows. What it removes is the pessimistic reservation of `36 * 6 + 16`
+    per uuid, which is the deciding one on a document with no long hex field in it -- a
+    register-address or a community-root transaction with no memo.
+
+- **The writer is told how big the document will be before it starts.** A walk over the
+  transaction counts the values it will hold and the bytes its copied strings will take, and
+  hands both to `arnm_json_writer_init()` as an `arnm_json_writer_hint`. yyjson's two pools then
+  open once at that size instead of doubling their way there and keeping every chunk they
+  outgrew -- which on the largest transaction of this ledger was 1968 bytes of the 6712 the
+  document occupied.
+  - The walk is exact: it was checked against the real node count of all 48762 documents of the
+    Gradido Akademie ledger, with no disagreement, and predicted the 1968 bytes to the byte.
+  - It does not have to stay exact, and that is deliberate. A field added to the writer and
+    forgotten in the walk costs one extra chunk -- the growth that would have happened anyway --
+    so this is not a second place where a field can be got wrong, only one where it can be got
+    cheap.
+
+- The four branch writers and `add_arrays()` return nothing now. Each of them only ever passed
+  on what the hex helpers answered, and those answers are the writer's own to keep since it is
+  the writer that formats; `grdm_json_from_complete_transaction()` reads them off it at
+  `arnm_json_writer_write()`, which it already did for every field added without a test.
+  `add_transaction_detail()` still answers, for the transaction type it has no layout for.
+- The arnm dependency moves from 0.7.2 to 0.7.3, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of
+  `build.zig.zon`. Each pins the release archive by URL and by hash, so a moved tag or a
+  regenerated archive is caught rather than taken.
+
+### Notes
+
+- No signature, result code or field changed, and neither did a single byte of any document
+  this writes -- `grdm_complete_transaction_from_json()` reads what it read before. A caller
+  updates nothing. What a caller may want to revisit is the size of the arena it hands in.
+- `ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL` is no longer among the answers: it came from
+  `add_hex_fixed()` checking a field against its stack buffer, and there is no stack buffer
+  left to outgrow. It was never named in the public header.
+
 ## 0.18.0 -- 2026-08-25
 
 `grdr_complete_transaction` gains a second pair of banks. It could already be built from the

@@ -20,9 +20,9 @@ extern "C" {
  *  inferred and nothing is recomputed -- what the text carries is what the transaction gets,
  *  which is what makes a round trip a copy rather than a reconstruction.
  *
- *  The document's shape, the hex for binary and the enumerator names for enumerations are all
- *  documented once, at @ref grdm_json_from_runtime. Read that for what a document looks like;
- *  read this for what happens to one that is not quite right.
+ *  The document's shape, the two alphabets binary arrives in and the enumerator names for
+ *  enumerations are all documented once, at @ref grdm_json_from_runtime. Read that for what a
+ * document looks like; read this for what happens to one that is not quite right.
  *
  *  ### What a document may leave out
  *
@@ -83,8 +83,10 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * @retval ARNM_ERROR_DECODE_FAILED        The text is not JSON, or a required member is
  *                                         missing, or a hex string is not an even number of
  *                                         hex digits, or one standing for a fixed-size field
- *                                         is not exactly twice its length, or a uuid is not
- *                                         the canonical 36 characters.
+ *                                         is not exactly twice its length, or a base64 string
+ *                                         is not a whole number of four character groups or
+ *                                         holds a character outside the standard alphabet, or
+ *                                         a uuid is not the canonical 36 characters.
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE    A member is there but is of another JSON type than
  *                                         the field it names -- a number where a string
  *                                         belongs, an object where an array belongs -- or the

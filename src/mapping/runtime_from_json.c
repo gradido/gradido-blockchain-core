@@ -612,7 +612,33 @@ static arnm_result read_uuid(const arnm_json_value *value, uint8_t *out) {
 }
 
 /**
- * @brief Read a hex string of any length into a block drawn from @p memory.
+ * @brief Bytes a base64 string of @p length characters decodes to, padding taken off.
+ *
+ * The one place that answers this, because three callers have to agree on it: the pass that
+ * sizes the arena, the pass that sizes a memo inside it, and the read that fills the block.
+ * A sizing that comes out under what the read then writes is an arena the read runs past.
+ *
+ * @param[in]  text   The string; not NULL. Only its last two characters are looked at.
+ * @param[in]  length Characters in @p text, terminator not counted.
+ * @param[out] size   Receives the decoded length. Untouched unless the call succeeds.
+ * @retval ARNM_SUCCESS             @p size holds what a decode would write.
+ * @retval ARNM_ERROR_DECODE_FAILED @p length is not a multiple of four.
+ */
+static arnm_result base64_binary_size(const char *text, uint32_t length, uint32_t *size) {
+  // four characters make three bytes, so anything else was never base64
+  if (length % 4u) { return ARNM_ERROR_DECODE_FAILED; }
+  if (!length) {
+    *size = 0;
+    return ARNM_SUCCESS;
+  }
+  uint32_t padding = 0;
+  if ('=' == text[length - 1u]) { padding = ('=' == text[length - 2u]) ? 2u : 1u; }
+  *size = ARNM_BASE64_BINARY_SIZE(length) - padding;
+  return ARNM_SUCCESS;
+}
+
+/**
+ * @brief Read a base64 string of any length into a block drawn from @p memory.
  *
  * @p out is cleared first, so an empty string leaves the empty block the writer produced it
  * from. Only bytes that are really there cost an allocation.
@@ -621,27 +647,36 @@ static arnm_result read_uuid(const arnm_json_value *value, uint8_t *out) {
  * @param[in]     value  Member to read, or NULL where the object did not carry it.
  * @param[in,out] memory Where the bytes come from -- the transaction's own arena.
  * @retval ARNM_SUCCESS                 The bytes are in @p out, or there were none to take.
- * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent, or is not an even run of hex digits.
+ * @retval ARNM_ERROR_DECODE_FAILED     @p value is absent, or is not base64.
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p value is there and is no string.
  * @retval Anything arnm_memory_block_alloc() can return.
  */
-static arnm_result read_hex_block(
+static arnm_result read_base64_block(
     arnm_memory_block *out, const arnm_json_value *value, arnm *memory
 ) {
   out->data = NULL;
   out->size = 0;
   if (!value) { return ARNM_ERROR_DECODE_FAILED; }
 
-  const char *hex = NULL;
+  const char *text = NULL;
   uint32_t length = 0;
-  arnm_result result = arnm_json_read_string(value, &hex, &length);
+  arnm_result result = arnm_json_read_string(value, &text, &length);
   if (ARNM_SUCCESS != result) { return result; }
-  if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
-  if (!length) { return ARNM_SUCCESS; }
 
-  result = arnm_memory_block_alloc(out, length / 2u, memory);
+  uint32_t size = 0;
+  result = base64_binary_size(text, length, &size);
   if (ARNM_SUCCESS != result) { return result; }
-  return arnm_binary_from_hex(out->data, hex);
+  if (!size) { return ARNM_SUCCESS; }
+
+  result = arnm_memory_block_alloc(out, size, memory);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  uint32_t written = 0;
+  result = arnm_binary_from_base64(out->data, &written, text);
+  if (ARNM_SUCCESS != result) { return result; }
+  // the block was reserved from the same answer, so a disagreement is this file contradicting
+  // itself rather than a document being wrong
+  return (written == size) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
 }
 
 /**
@@ -908,7 +943,7 @@ static arnm_result array_length(uint32_t *out, const arnm_json_value *value) {
  * @brief Bytes the memo payloads of @p array will occupy, aligned the way an arena charges.
  *
  * The one array whose elements have to be looked at before the arena exists: a balance and a
- * signature are as long as their types say, a memo is as long as its own hex. Which is why this
+ * signature are as long as their types say, a memo is as long as its own base64. Which is why this
  * is the only array walked twice -- once here for its lengths, once below for its bytes.
  */
 static arnm_result memo_payload_size(uint64_t *total, const arnm_json_value *array) {
@@ -923,12 +958,14 @@ static arnm_result memo_payload_size(uint64_t *total, const arnm_json_value *arr
     if (ARNM_SUCCESS != result) { return result; }
     if (!member[MEMO_FIELD_MEMO]) { return ARNM_ERROR_DECODE_FAILED; }
 
-    const char *hex = NULL;
+    const char *text = NULL;
     uint32_t length = 0;
-    const arnm_result read = arnm_json_read_string(member[MEMO_FIELD_MEMO], &hex, &length);
+    const arnm_result read = arnm_json_read_string(member[MEMO_FIELD_MEMO], &text, &length);
     if (ARNM_SUCCESS != read) { return read; }
-    if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
-    *total += ARNM_ALIGN8((uint64_t)(length / 2u));
+    uint32_t size = 0;
+    const arnm_result sized = base64_binary_size(text, length, &size);
+    if (ARNM_SUCCESS != sized) { return sized; }
+    *total += ARNM_ALIGN8((uint64_t)size);
   }
   return ARNM_SUCCESS;
 }
@@ -976,12 +1013,14 @@ static arnm_result calculate_memory_size(uint32_t *out, arnm_json_value *const *
   }
 
   if (root[ROOT_FIELD_BODY_BYTES]) {
-    const char *hex = NULL;
+    const char *text = NULL;
     uint32_t length = 0;
-    result = arnm_json_read_string(root[ROOT_FIELD_BODY_BYTES], &hex, &length);
+    result = arnm_json_read_string(root[ROOT_FIELD_BODY_BYTES], &text, &length);
     if (ARNM_SUCCESS != result) { return result; }
-    if (length % 2u) { return ARNM_ERROR_DECODE_FAILED; }
-    total += ARNM_ALIGN8((uint64_t)(length / 2u));
+    uint32_t size = 0;
+    result = base64_binary_size(text, length, &size);
+    if (ARNM_SUCCESS != result) { return result; }
+    total += ARNM_ALIGN8((uint64_t)size);
   }
 
   // the counts and the lengths came out of a document, and a document may claim more than a
@@ -1065,7 +1104,7 @@ static arnm_result read_encrypted_memos(
     if (ARNM_SUCCESS != result) { return result; }
     result = memo_key_from_string(&memo->type, type_name);
     if (ARNM_SUCCESS != result) { return result; }
-    result = read_hex_block(&memo->memo, member[MEMO_FIELD_MEMO], &tx->memory_area);
+    result = read_base64_block(&memo->memo, member[MEMO_FIELD_MEMO], &tx->memory_area);
     if (ARNM_SUCCESS != result) { return result; }
     ++filled;
   }
@@ -1186,7 +1225,7 @@ static arnm_result read_complete_transaction(
   result = read_cross_group(tx, root);
   if (ARNM_SUCCESS != result) { return result; }
 
-  return read_hex_block(&tx->body_bytes, root[ROOT_FIELD_BODY_BYTES], &tx->memory_area);
+  return read_base64_block(&tx->body_bytes, root[ROOT_FIELD_BODY_BYTES], &tx->memory_area);
 }
 
 arnm_result grdm_complete_transaction_from_json(
