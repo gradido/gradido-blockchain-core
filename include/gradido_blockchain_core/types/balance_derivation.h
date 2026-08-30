@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_TYPES_BALANCE_DERIVATION_H
 #define GRADIDO_BLOCKCHAIN_CORE_TYPES_BALANCE_DERIVATION_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,6 +22,9 @@ typedef enum grdt_balance_derivation {
 } grdt_balance_derivation;
 
 const char *grdt_balance_derivation_to_string(grdt_balance_derivation balance_derivation);
+grdt_balance_derivation grdt_balance_derivation_from_string(
+    const char *balance_derivation_string, size_t string_size
+);
 
 #ifdef __cplusplus
 }

@@ -268,3 +268,114 @@ TEST(TimestampArithmetic, ToleratesNullOperands) {
     EXPECT_EQ(r.nanos, 0);
   }
 }
+
+// ********** the enumerations of types/, read back through the names they were written by *****
+
+#include "gradido_blockchain_core/types/address.h"
+#include "gradido_blockchain_core/types/balance_derivation.h"
+#include "gradido_blockchain_core/types/cross_group.h"
+#include "gradido_blockchain_core/types/ledger_anchor.h"
+#include "gradido_blockchain_core/types/memo_key.h"
+#include "gradido_blockchain_core/types/transaction.h"
+
+#include <cstring>
+
+// to_string() and from_string() are each other's inverse, so every enumerator has to survive the
+// trip through its own spelling. A name that maps back to something else is a value silently
+// changed; a name that maps back to the fallback is a value silently lost.
+#define EXPECT_ROUND_TRIP(from_string, to_string, value)                                           \
+  do {                                                                                             \
+    const char *spelled = to_string(value);                                                        \
+    EXPECT_EQ(value, from_string(spelled, strlen(spelled))) << spelled;                            \
+  } while (0)
+
+TEST(EnumFromString, Address_RoundTrip) {
+  for (int value = GRDT_ADDRESS_NONE; value <= GRDT_ADDRESS_DEFERRED_TRANSFER; ++value) {
+    EXPECT_ROUND_TRIP(grdt_address_from_string, grdt_address_to_string, (grdt_address)value);
+  }
+}
+
+TEST(EnumFromString, BalanceDerivation_RoundTrip) {
+  for (int value = GRDT_BALANCE_DERIVATION_UNSPECIFIED; value <= GRDT_BALANCE_DERIVATION_EXTERN;
+       ++value) {
+    EXPECT_ROUND_TRIP(
+        grdt_balance_derivation_from_string, grdt_balance_derivation_to_string,
+        (grdt_balance_derivation)value
+    );
+  }
+}
+
+TEST(EnumFromString, CrossGroup_RoundTrip) {
+  for (int value = GRDT_CROSS_GROUP_LOCAL; value <= GRDT_CROSS_GROUP_NONE; ++value) {
+    EXPECT_ROUND_TRIP(
+        grdt_cross_group_from_string, grdt_cross_group_to_string, (grdt_cross_group)value
+    );
+  }
+}
+
+TEST(EnumFromString, LedgerAnchor_RoundTrip) {
+  // the enumerators are not contiguous -- 1 was an iota message id and cannot come back
+  const grdt_ledger_anchor values[] = {
+      GRDT_LEDGER_ANCHOR_UNSPECIFIED,
+      GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID,
+      GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID,
+      GRDT_LEDGER_ANCHOR_NODE_TRIGGER_TRANSACTION_ID,
+      GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_COMMUNITY_ID,
+      GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_USER_ID,
+      GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_CONTRIBUTION_ID,
+      GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_LINK_ID
+  };
+  for (grdt_ledger_anchor value : values) {
+    EXPECT_ROUND_TRIP(grdt_ledger_anchor_from_string, grdt_ledger_anchor_to_string, value);
+  }
+}
+
+TEST(EnumFromString, MemoKey_RoundTrip) {
+  for (int value = GRDT_MEMO_KEY_SHARED_SECRET; value <= GRDT_MEMO_KEY_NONE; ++value) {
+    EXPECT_ROUND_TRIP(grdt_memo_key_from_string, grdt_memo_key_to_string, (grdt_memo_key)value);
+  }
+}
+
+TEST(EnumFromString, Transaction_RoundTrip) {
+  for (int value = GRDT_TRANSACTION_NONE; value < GRDT_TRANSACTION_COUNT; ++value) {
+    EXPECT_ROUND_TRIP(
+        grdt_transaction_from_string, grdt_transaction_to_string, (grdt_transaction)value
+    );
+  }
+}
+
+TEST(EnumFromString, UnknownNameAnswersTheValueThatMeansNone) {
+  const char unknown[] = "GRDT_SOMETHING_THAT_WAS_NEVER_WRITTEN";
+  const size_t size = strlen(unknown);
+  EXPECT_EQ(GRDT_ADDRESS_NONE, grdt_address_from_string(unknown, size));
+  EXPECT_EQ(
+      GRDT_BALANCE_DERIVATION_UNSPECIFIED, grdt_balance_derivation_from_string(unknown, size)
+  );
+  EXPECT_EQ(GRDT_TRANSACTION_NONE, grdt_transaction_from_string(unknown, size));
+  // these two have their none past the protobuf range, because zero is a value of their own
+  EXPECT_EQ(GRDT_CROSS_GROUP_NONE, grdt_cross_group_from_string(unknown, size));
+  EXPECT_EQ(GRDT_MEMO_KEY_NONE, grdt_memo_key_from_string(unknown, size));
+  // and this one has no none to give: "unspecified" is an anchor type a transaction may carry,
+  // so an unknown name and the real thing are the same answer here
+  EXPECT_EQ(GRDT_LEDGER_ANCHOR_UNSPECIFIED, grdt_ledger_anchor_from_string(unknown, size));
+}
+
+TEST(EnumFromString, TheValueThatMeansNoneIsNotTheValueThatIsZero) {
+  // the whole point of adding these two: an unrecognised name must not read as a local
+  // transaction or a shared secret memo, which are the enumerators the wire calls zero
+  EXPECT_NE(GRDT_CROSS_GROUP_LOCAL, GRDT_CROSS_GROUP_NONE);
+  EXPECT_NE(GRDT_MEMO_KEY_SHARED_SECRET, GRDT_MEMO_KEY_NONE);
+  const char local[] = "GRDT_CROSS_GROUP_LOCAL";
+  EXPECT_EQ(GRDT_CROSS_GROUP_LOCAL, grdt_cross_group_from_string(local, strlen(local)));
+  const char shared[] = "GRDT_MEMO_KEY_SHARED_SECRET";
+  EXPECT_EQ(GRDT_MEMO_KEY_SHARED_SECRET, grdt_memo_key_from_string(shared, strlen(shared)));
+}
+
+TEST(EnumFromString, PrefixOfANameIsNotThatName) {
+  // GRDU_STRING_EQUALS matches the length before the bytes, so a name that merely starts like
+  // another one is not it
+  const char prefix[] = "GRDT_TRANSACTION_TRANSFE";
+  EXPECT_EQ(GRDT_TRANSACTION_NONE, grdt_transaction_from_string(prefix, strlen(prefix)));
+  const char longer[] = "GRDT_TRANSACTION_TRANSFER_AND_MORE";
+  EXPECT_EQ(GRDT_TRANSACTION_NONE, grdt_transaction_from_string(longer, strlen(longer)));
+}

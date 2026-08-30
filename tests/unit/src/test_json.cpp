@@ -684,6 +684,34 @@ TEST(JsonMappingTest, Refuses_UnknownEnumeratorName) {
   );
 }
 
+TEST(JsonMappingTest, Refuses_UnknownBalanceDerivationName) {
+  // GRDT_BALANCE_DERIVATION_UNSPECIFIED means none, so a name that is not one of the others is
+  // a name this document had no business carrying
+  EXPECT_EQ(
+      ARNM_ERROR_ENUM_UNKNOWN,
+      readVerdict(
+          transferDocument("GRDT_BALANCE_DERIVATION_NODE", "GRDT_BALANCE_DERIVATION_SOMETHING")
+      )
+  );
+}
+
+TEST(JsonMappingTest, Refuses_UnknownCrossGroupName) {
+  // GRDT_CROSS_GROUP_NONE sits past the protobuf range precisely so that this can be told from a
+  // local transaction, which is the value the wire calls zero
+  EXPECT_EQ(
+      ARNM_ERROR_ENUM_UNKNOWN,
+      readVerdict(transferDocument("GRDT_CROSS_GROUP_LOCAL", "GRDT_CROSS_GROUP_SOMETHING"))
+  );
+}
+
+TEST(JsonMappingTest, Accepts_TheCrossGroupNamesThatAreOnes) {
+  for (const char *name :
+       {"GRDT_CROSS_GROUP_LOCAL", "GRDT_CROSS_GROUP_INBOUND", "GRDT_CROSS_GROUP_OUTBOUND",
+        "GRDT_CROSS_GROUP_CROSS"}) {
+    EXPECT_EQ(ARNM_SUCCESS, readVerdict(transferDocument("GRDT_CROSS_GROUP_LOCAL", name))) << name;
+  }
+}
+
 TEST(JsonMappingTest, Refuses_TransactionTypeWithoutALayout) {
   EXPECT_EQ(
       ARNM_ERROR_ENUM_UNHANDLED,

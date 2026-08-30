@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_TYPES_ADDRESS_TYPE_H
 #define GRADIDO_BLOCKCHAIN_CORE_TYPES_ADDRESS_TYPE_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,6 +19,7 @@ typedef enum grdt_address {
 } grdt_address;
 
 const char *grdt_address_to_string(grdt_address address);
+grdt_address grdt_address_from_string(const char *address_string, size_t string_size);
 
 #ifdef __cplusplus
 }
