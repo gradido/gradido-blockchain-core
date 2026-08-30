@@ -300,7 +300,7 @@ std::string roundTrip(grdr_complete_transaction &source, arnm_json_write_flags f
 
   Transaction target;
   const arnm_result read = grdm_complete_transaction_from_json(
-      &target.get(), json.c_str(), (uint32_t)json.size(), &scratch, ARNM_JSON_READ_DEFAULT
+      &target.get(), json.c_str(), (uint32_t)json.size(), &scratch
   );
   EXPECT_EQ(ARNM_SUCCESS, read) << grd_result_to_string(read);
   if (ARNM_SUCCESS == read) { expectSame(source, target.get()); }
@@ -564,10 +564,9 @@ TEST(JsonMappingTest, HostAllocator_LeavesNothingBehind) {
 
   Transaction target;
   ASSERT_EQ(
-      ARNM_SUCCESS,
-      grdm_complete_transaction_from_json(
-          &target.get(), (const char *)text.data, text.size - 1, nullptr, ARNM_JSON_READ_DEFAULT
-      )
+      ARNM_SUCCESS, grdm_complete_transaction_from_json(
+                        &target.get(), (const char *)text.data, text.size - 1, nullptr
+                    )
   );
   expectSame(source.get(), target.get());
   EXPECT_EQ(ARNM_SUCCESS, arnm_memory_block_free(&text, nullptr));
@@ -593,10 +592,9 @@ TEST(JsonMappingTest, ReusedTarget_IsReleasedNotLeaked) {
   Transaction target;
   for (int round = 0; round < 3; ++round) {
     ASSERT_EQ(
-        ARNM_SUCCESS,
-        grdm_complete_transaction_from_json(
-            &target.get(), json.c_str(), (uint32_t)json.size(), &scratch, ARNM_JSON_READ_DEFAULT
-        )
+        ARNM_SUCCESS, grdm_complete_transaction_from_json(
+                          &target.get(), json.c_str(), (uint32_t)json.size(), &scratch
+                      )
     );
     expectSame(source.get(), target.get());
   }
@@ -611,7 +609,7 @@ namespace {
 arnm_result readVerdict(const std::string &json) {
   Transaction target;
   return grdm_complete_transaction_from_json(
-      &target.get(), json.c_str(), (uint32_t)json.size(), nullptr, ARNM_JSON_READ_DEFAULT
+      &target.get(), json.c_str(), (uint32_t)json.size(), nullptr
   );
 }
 
@@ -730,7 +728,7 @@ TEST(JsonMappingTest, Refuses_MemberOfTheWrongType) {
 }
 
 TEST(JsonMappingTest, Accepts_OptionalMembersWrittenAsNull) {
-  // arnm counts a null member and an absent one as the same thing, and the reader keeps that:
+  // a null member and an absent one say the same thing to a mapper, and the reader keeps that:
   // the arrays and the two pairing members are optional, so a document that spells them out as
   // null says the same as one that leaves them out.
   EXPECT_EQ(
@@ -741,12 +739,21 @@ TEST(JsonMappingTest, Accepts_OptionalMembersWrittenAsNull) {
       ARNM_SUCCESS,
       readVerdict(transferDocument("\"signature_pairs\":[]", "\"signature_pairs\":null"))
   );
+  EXPECT_EQ(
+      ARNM_SUCCESS, readVerdict(transferDocument(
+                        "\"cross_group_type\":\"GRDT_CROSS_GROUP_LOCAL\"",
+                        "\"cross_group_type\":\"GRDT_CROSS_GROUP_LOCAL\","
+                        "\"tx_pairing_community_uuid\":null,\"pairing_ledger_anchor\":null"
+                    ))
+  );
 }
 
-TEST(JsonMappingTest, Refuses_ArrayThatIsNoArray) {
-  // an optional member is allowed to be missing, not to be something else
+TEST(JsonMappingTest, Reads_AnOptionalMemberOfTheWrongTypeAsAbsent) {
+  // arnm 0.7.5 cannot be asked what a value is, so null and a number in place of an array are
+  // the same answer from the read that wanted one -- and for an optional member that answer is
+  // taken as "nothing here" rather than as a refusal. Only optional members are read that way.
   EXPECT_EQ(
-      ARNM_ERROR_INVALID_ENUM_TYPE,
+      ARNM_SUCCESS,
       readVerdict(transferDocument("\"account_balances\":[]", "\"account_balances\":7"))
   );
 }
@@ -767,17 +774,14 @@ TEST(JsonMappingTest, ReadsMembersInWhateverOrderTheDocumentPutThem) {
 TEST(JsonMappingTest, Refuses_NullArgumentsAndEmptyInput) {
   Transaction target;
   EXPECT_EQ(
+      ARNM_ERROR_NULL_POINTER, grdm_complete_transaction_from_json(nullptr, "{}", 2, nullptr)
+  );
+  EXPECT_EQ(
       ARNM_ERROR_NULL_POINTER,
-      grdm_complete_transaction_from_json(nullptr, "{}", 2, nullptr, ARNM_JSON_READ_DEFAULT)
+      grdm_complete_transaction_from_json(&target.get(), nullptr, 2, nullptr)
   );
   EXPECT_EQ(
-      ARNM_ERROR_NULL_POINTER, grdm_complete_transaction_from_json(
-                                   &target.get(), nullptr, 2, nullptr, ARNM_JSON_READ_DEFAULT
-                               )
-  );
-  EXPECT_EQ(
-      ARNM_ERROR_INVALID_PARAM,
-      grdm_complete_transaction_from_json(&target.get(), "{}", 0, nullptr, ARNM_JSON_READ_DEFAULT)
+      ARNM_ERROR_INVALID_PARAM, grdm_complete_transaction_from_json(&target.get(), "{}", 0, nullptr)
   );
 
   arnm_memory_block text{};

@@ -12,6 +12,57 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.20.0 -- 2026-08-30
+
+`src/mapping/runtime_from_json.c` is written again from the ground up, against the JSON reader
+arnm 0.7.5 replaced its old one with. **This release needs arnm 0.7.5** and does not build against
+0.7.4 or anything before it: the reader lost every call this mapping used to reach for.
+
+**`grdm_complete_transaction_from_json()` lost its `flags` parameter**, which is what moves the
+minor number. arnm 0.7.5 compiles yyjson with the non-standard extensions taken out rather than
+defaulted off, so there is no switch left to pass: comments, trailing commas, `Infinity`, `NaN` and
+a byte order mark are refused whatever a caller would have asked for, and strict RFC 8259 is the
+only reading there is. Callers drop the last argument; nothing else about the call changed.
+
+**The document format did not change.** A document written by 0.19.0 reads here byte for byte the
+way it did there, and this release writes the same one.
+
+### Changed
+
+- **An optional member of the wrong type is read as absent.** arnm 0.7.5 hands a value out only as
+  a handle and has no call that says what one is, so the literal `null` and a number in place of an
+  array are the same answer from the read that wanted an array -- `ARNM_ERROR_INVALID_ENUM_TYPE`,
+  with nothing to tell the two apart. For the three arrays and the two pairing members that answer
+  is now taken as "nothing here", which is the reading `null` has always had here and is the price
+  of keeping it. `"account_balances": 7` is therefore passed over where 0.19.0 refused it.
+  `Refuses_ArrayThatIsNoArray` becomes `Reads_AnOptionalMemberOfTheWrongTypeAsAbsent` and says so.
+  - Only optional members are read that way. Everything a transaction type owns is still required
+    and still refused where it is missing or of the wrong type.
+- **The root walk converts where it can, instead of collecting handles and reading afterwards.** A
+  table converts a member where it stands and cannot convert one later, so `tx_nr`, the community
+  uuid and the running hash go straight into the transaction as the walk meets them, and only the
+  objects and arrays are filed as handles for the walk of their own that follows.
+- **The three context scalars are asked for in a walk of their own.** `target_date`,
+  `timeout_duration` and `previous_tx` share a union and only `transaction_type` says which of them
+  a document owns, so they are left out of the root table and the one that matters is read by a
+  one-field walk of the root once the type is known. That is one extra pass over the root's member
+  chain for the four transaction types that carry such a scalar, and it stops at the key it wants.
+  The same shape reads the pairing community uuid, and only where the root walk found it -- a local
+  transaction never carries one and never pays for it.
+- **An array's elements are taken all at once, into a buffer of handles.** `arnm_json_read_array()`
+  replaced the iterator, and it fills a buffer or refuses -- it does not say how long an array was
+  that did not fit. Each of the three arrays is read into sixteen handles on the stack, and the one
+  that outgrows them is read again into a buffer sized by the document's node count, which no array
+  of it can pass. A transaction of a real ledger does not reach the second read; the benchmark's
+  200-balance transaction does, and the buffer comes back to the caller's allocator from its tail.
+- **base64 is decoded over the document's own characters.** The reader has no field type that
+  decodes base64 any more, so the memo payloads and `body_bytes` are borrowed as strings and spent
+  by `arnm_binary_from_base64_insitu()`, then copied into the transaction's arena. Nothing is
+  written into the arena that a refusal would have to take back, and a string that decodes to no
+  bytes leaves an empty block rather than asking the arena for nothing.
+- The arnm dependency moves from 0.7.3 to 0.7.5, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of `build.zig.zon`.
+
 ## 0.19.0 -- 2026-08-26
 
 The JSON write of a transaction needs a little over half the arena it needed yesterday, and the

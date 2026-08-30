@@ -252,7 +252,7 @@ static void step_from_json(int step_count) {
     must(
         grdm_complete_transaction_from_json(
             &tx, (const char *)current->json_minified.data, current->json_minified.size - 1u,
-            &bench_arena, ARNM_JSON_READ_DEFAULT
+            &bench_arena
         ),
         "read minified json"
     );
@@ -268,7 +268,7 @@ static void step_from_json_pretty(int step_count) {
     must(
         grdm_complete_transaction_from_json(
             &tx, (const char *)current->json_pretty.data, current->json_pretty.size - 1u,
-            &bench_arena, ARNM_JSON_READ_DEFAULT
+            &bench_arena
         ),
         "read pretty json"
     );

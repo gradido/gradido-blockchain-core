@@ -29,9 +29,13 @@ extern "C" {
  *  A member that is absent is a member left at zero -- the same state
  *  @c grdr_complete_transaction_init() leaves. That covers the fields a transaction type does
  *  not own (a transfer has no @c target_date), the three arrays, and the two cross-group
- *  members, which are only ever there on a transaction that is not local. Those optional
- *  members may also be spelled out as the literal @c null, which says the same as leaving them
- *  out -- the reading a mapper wants, and the one arnm's own reader takes.
+ *  members, which are only ever there on a transaction that is not local.
+ *
+ *  An optional member that is there but does not read as its shape is taken as absent too. arnm
+ *  cannot be asked what a value is, so the literal @c null and a number in place of an array are
+ *  the same answer from here, and both say "nothing here" -- which is the reading a mapper wants
+ *  for @c null and the price of it for the other. Only optional members are read that way; a
+ *  member of the wrong type anywhere else is refused.
  *
  *  Everything a type does own is required, and a missing one is refused rather than defaulted,
  *  because a silent zero in a public key or an amount is the expensive kind of forgiveness.
@@ -57,10 +61,10 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * @c grdr_complete_transaction_init() leaves it, holding nothing.
  *
  * Each object is walked once rather than asked for its members by name -- a JSON object keeps
- * its members in a chain, so asking it n questions walks it n times. The walk files every
- * member under the field its key names, and the reading that follows is array indexing. That
- * also makes member order irrelevant: `transaction_type` decides which detail member matters,
- * and a document is free to put it last.
+ * its members in a chain, so asking it n questions walks it n times. One walk converts every
+ * member it can where it stands and files the objects and arrays for the reading that follows.
+ * That also makes member order irrelevant: `transaction_type` decides which detail member
+ * matters, and a document is free to put it last.
  *
  * The reading stops at the first thing it cannot accept and answers that. Nothing is written
  * into @p tx that a later refusal would leave behind, because @p tx is released again on any
@@ -74,12 +78,9 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * @param[in,out] allocator   Where the parsed document comes from, or NULL for the host. It
  *                            carries nothing once the call returns; the transaction's own
  *                            arena is opened from the host either way.
- * @param[in]     flags       Bit set of @c ARNM_JSON_READ_* , or @ref ARNM_JSON_READ_DEFAULT
- *                            for strict RFC 8259.
  * @retval ARNM_SUCCESS                    @p tx holds the transaction the document described.
  * @retval ARNM_ERROR_NULL_POINTER         @p tx or @p json is NULL.
- * @retval ARNM_ERROR_INVALID_PARAM        @p json_length is 0, or @p flags holds a bit arnm
- *                                         does not define.
+ * @retval ARNM_ERROR_INVALID_PARAM        @p json_length is 0.
  * @retval ARNM_ERROR_DECODE_FAILED        The text is not JSON, or a required member is
  *                                         missing, or a hex string is not an even number of
  *                                         hex digits, or one standing for a fixed-size field
@@ -87,10 +88,10 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  *                                         is not a whole number of four character groups or
  *                                         holds a character outside the standard alphabet, or
  *                                         a uuid is not the canonical 36 characters.
- * @retval ARNM_ERROR_INVALID_ENUM_TYPE    A member is there but is of another JSON type than
- *                                         the field it names -- a number where a string
- *                                         belongs, an object where an array belongs -- or the
- *                                         root is no object at all.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE    A required member is there but is of another JSON
+ *                                         type than the field it names -- a number where a
+ *                                         string belongs, an object where an array belongs --
+ *                                         or the root is no object at all.
  * @retval ARNM_ERROR_ENUM_UNKNOWN         An enumeration member spells no enumerator this
  *                                         library has.
  * @retval ARNM_ERROR_ENUM_UNHANDLED       @c transaction_type names a transaction this mapping
@@ -107,11 +108,7 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
  * @whisper Words settle back into bytes, and the ledger remembers what it always was
  */
 arnm_result grdm_complete_transaction_from_json(
-    grdr_complete_transaction *tx,
-    const char *json,
-    uint32_t json_length,
-    arnm *allocator,
-    arnm_json_read_flags flags
+    grdr_complete_transaction *tx, const char *json, uint32_t json_length, arnm *allocator
 );
 
 /** @} */

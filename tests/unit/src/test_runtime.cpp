@@ -127,9 +127,7 @@ TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_ToJson_AndBack) {
   grdr_complete_transaction from_json;
   grdr_complete_transaction_init(&from_json);
   ASSERT_EQ(
-      grdm_complete_transaction_from_json(
-          &from_json, (const char *)text.data, text.size - 1, &mem, ARNM_JSON_READ_DEFAULT
-      ),
+      grdm_complete_transaction_from_json(&from_json, (const char *)text.data, text.size - 1, &mem),
       ARNM_SUCCESS
   );
 
