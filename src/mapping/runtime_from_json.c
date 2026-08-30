@@ -232,22 +232,16 @@ static arnm_result read_register_address(grdr_complete_transaction *tx, arnm_jso
   arnm_memory_block name_hash = ARNM_JSON_BLOCK_OF(tx->register_address.name_hash);
   arnm_memory_block account_public_key =
       ARNM_JSON_BLOCK_OF(tx->register_address.account_public_key);
-  arnm_memory_block address_name = {NULL, 0};
   arnm_json_field fields[] = {
       ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_USER_PUBLIC_KEY, &user_public_key),
       ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_NAME_HASH, &name_hash),
       ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY, &account_public_key),
-      // the second union, not the one above: same transaction, other half of the struct
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_ADDRESS_TYPE, &address_name),
-      ARNM_JSON_FIELD_UINT32(GRDM_JSON_KEY_DERIVATION_INDEX, &tx->derivation_index)
   };
   uint64_t seen = 0;
-  const arnm_result result = arnm_json_read_object(object, fields, 5u, &seen);
+  const arnm_result result = arnm_json_read_object(object, fields, 3u, &seen);
   if (ARNM_SUCCESS != result) { return result; }
-  if (ALL_SEEN(5) != seen) { return ARNM_ERROR_DECODE_FAILED; }
-
-  tx->address_type = grdt_address_from_string(chars(&address_name), address_name.size);
-  return (GRDT_ADDRESS_NONE == tx->address_type) ? ARNM_ERROR_ENUM_UNKNOWN : ARNM_SUCCESS;
+  if (ALL_SEEN(3) != seen) { return ARNM_ERROR_DECODE_FAILED; }
+  return ARNM_SUCCESS;
 }
 
 /** @brief Read the community-root branch: the community key and its two account keys. */
@@ -267,64 +261,8 @@ static arnm_result read_community_root(grdr_complete_transaction *tx, arnm_json_
   return (ALL_SEEN(3) == seen) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
 }
 
-/**
- * @brief Read one member of the root, named by a table of exactly one field.
- *
- * The way a scalar the transaction's type owns is read: it cannot be converted from a handle the
- * root walk filed, and only the type knows which of the three is wanted, so the one that is asked
- * for is asked for here. The walk stops at the key it names, and a document that does not carry it
- * is a document missing something its type promised.
- *
- * @param[in]     root  The root object; not NULL.
- * @param[in,out] field A table of one entry, built by an ARNM_JSON_FIELD_* macro.
- * @retval ARNM_ERROR_DECODE_FAILED The member is not there.
- */
-static arnm_result read_lone_member(arnm_json_value *root, arnm_json_field *field) {
-  uint64_t seen = 0;
-  const arnm_result result = arnm_json_read_object(root, field, 1u, &seen);
-  if (ARNM_SUCCESS != result) { return result; }
-  return (ALL_SEEN(1) == seen) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
-}
-
 // ********** the root, walked once **********************************************************
 
-/**
- * @brief The members of the root object this mapping wants, in the order a document writes them.
- *
- * The order is what the walk is paid in: it starts each key at the lowest entry it has not filled
- * yet, so a table in the document's own order is met one comparison per member. The three context
- * scalars are not here on purpose -- see @ref read_lone_member().
- */
-typedef enum root_field {
-  ROOT_FIELD_TX_NR = 0,
-  ROOT_FIELD_CONFIRMED_AT,
-  ROOT_FIELD_CREATED_AT,
-  ROOT_FIELD_TX_COMMUNITY_UUID,
-  ROOT_FIELD_LEDGER_ANCHOR,
-  ROOT_FIELD_TRANSACTION_TYPE,
-  ROOT_FIELD_BALANCE_DERIVATION_TYPE,
-  ROOT_FIELD_CROSS_GROUP_TYPE,
-  ROOT_FIELD_TX_RUNNING_HASH,
-  ROOT_FIELD_TRANSFER,
-  ROOT_FIELD_REGISTER_ADDRESS,
-  ROOT_FIELD_COMMUNITY_ROOT,
-  ROOT_FIELD_ACCOUNT_BALANCES,
-  ROOT_FIELD_ENCRYPTED_MEMOS,
-  ROOT_FIELD_SIGNATURE_PAIRS,
-  ROOT_FIELD_TX_PAIRING_COMMUNITY_UUID,
-  ROOT_FIELD_PAIRING_LEDGER_ANCHOR,
-  ROOT_FIELD_BODY_BYTES,
-  ROOT_FIELD_COUNT
-} root_field;
-
-/**
- * @brief What every document carries, whatever its transaction type.
- *
- * The envelope through the running hash, and the body bytes at the end. What a type owns is
- * required too, but which member that is only the type says, so those are asked for where the
- * branch is taken rather than counted here.
- */
-#define ROOT_REQUIRED (ALL_SEEN(ROOT_FIELD_TRANSFER) | SEEN(ROOT_FIELD_BODY_BYTES))
 
 /**
  * @brief What the root walk leaves for the reading that follows it.
@@ -345,7 +283,7 @@ typedef struct root_view {
   arnm_json_value *account_balances;
   arnm_json_value *encrypted_memos;
   arnm_json_value *signature_pairs;
-  arnm_json_value *tx_pairing_community_uuid;
+  arnm_memory_block tx_pairing_community_uuid;
   arnm_json_value *pairing_ledger_anchor;
   arnm_memory_block transaction_type;
   arnm_memory_block balance_derivation_type;
@@ -364,39 +302,93 @@ typedef struct root_view {
  *                                      than the field it names.
  */
 static arnm_result read_root(
-    root_view *view, grdr_complete_transaction *tx, arnm_json_value *root
+    root_view *view,
+    grdr_complete_transaction *tx,
+    arnm_json_value *root,
+    grdt_transaction transaction_type
 ) {
-  memset(view, 0, sizeof(*view));
   view->root = root;
 
   arnm_memory_block tx_community_uuid = ARNM_JSON_BLOCK_OF(tx->tx_community_uuid);
   arnm_memory_block tx_running_hash = ARNM_JSON_BLOCK_OF(tx->tx_running_hash);
-  arnm_json_field fields[] = {
-      ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CREATED_AT, &view->created_at),
-      ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_COMMUNITY_UUID, &tx_community_uuid),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_LEDGER_ANCHOR, &view->ledger_anchor),
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type),
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE, &view->balance_derivation_type),
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_CROSS_GROUP_TYPE, &view->cross_group_type),
-      ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_TX_RUNNING_HASH, &tx_running_hash),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_TRANSFER, &view->transfer),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_REGISTER_ADDRESS, &view->register_address),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_COMMUNITY_ROOT, &view->community_root),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ACCOUNT_BALANCES, &view->account_balances),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_SIGNATURE_PAIRS, &view->signature_pairs),
-      ARNM_JSON_FIELD_VALUE(
-          GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &view->tx_pairing_community_uuid
-      ),
-      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, &view->pairing_ledger_anchor),
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BODY_BYTES, &view->body_bytes)
-  };
+  arnm_memory_block address_name = {NULL, 0};
+  uint8_t field_count = 0;
+  arnm_json_field fields[18];
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr);
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at);
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CREATED_AT, &view->created_at);
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_COMMUNITY_UUID, &tx_community_uuid);
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_LEDGER_ANCHOR, &view->ledger_anchor);
+  if (GRDT_TRANSACTION_TRANSFER == transaction_type ||
+      GRDT_TRANSACTION_CREATION == transaction_type ||
+      GRDT_TRANSACTION_DEFERRED_TRANSFER == transaction_type ||
+      GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER == transaction_type) {
+    fields[field_count++] =
+        (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_TRANSFER, &view->transfer);
+  } else if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
+    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
+        GRDM_JSON_KEY_REGISTER_ADDRESS, &view->register_address
+    );
+  } else if (GRDT_TRANSACTION_COMMUNITY_ROOT == transaction_type) {
+    fields[field_count++] =
+        (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_COMMUNITY_ROOT, &view->community_root);
+  }
+
+  if (GRDT_TRANSACTION_CREATION == transaction_type) {
+    fields[field_count++] =
+        (arnm_json_field)ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TARGET_DATE, &tx->target_date);
+  } else if (GRDT_TRANSACTION_DEFERRED_TRANSFER == transaction_type) {
+    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_INT64(
+        GRDM_JSON_KEY_TIMEOUT_DURATION, &tx->timeout_duration
+    );
+  } else if (
+      GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER == transaction_type ||
+      GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER == transaction_type) {
+    fields[field_count++] =
+        (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_PREVIOUS_TX, &tx->previous_tx);
+  } else if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
+    fields[field_count++] =
+        (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_ADDRESS_TYPE, &address_name);
+    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT32(
+        GRDM_JSON_KEY_DERIVATION_INDEX, &tx->derivation_index
+    );
+  }
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
+      GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE, &view->balance_derivation_type
+  );
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_TX_RUNNING_HASH, &tx_running_hash);
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
+      GRDM_JSON_KEY_ACCOUNT_BALANCES, &view->account_balances
+  );
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos);
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_SIGNATURE_PAIRS, &view->signature_pairs);
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
+      GRDM_JSON_KEY_CROSS_GROUP_TYPE, &view->cross_group_type
+  );
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
+      GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &view->tx_pairing_community_uuid
+  );
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
+      GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, &view->pairing_ledger_anchor
+  );
+  fields[field_count++] =
+      (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BODY_BYTES, &view->body_bytes);
+
   uint64_t seen = 0;
-  const arnm_result result = arnm_json_read_object(root, fields, ROOT_FIELD_COUNT, &seen);
+  const arnm_result result = arnm_json_read_object(root, fields, field_count, &seen);
   if (ARNM_SUCCESS != result) { return result; }
-  return (ROOT_REQUIRED == (seen & ROOT_REQUIRED)) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
+  if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
+    tx->address_type = grdt_address_from_string((const char *)address_name.data, address_name.size);
+    if (GRDT_ADDRESS_NONE == tx->address_type) return ARNM_ERROR_ENUM_UNKNOWN;
+  }
+  return (field_count == (seen & field_count)) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
 }
 
 /**
@@ -407,44 +399,18 @@ static arnm_result read_root(
  * grdm_complete_transaction_from_wire() answers for the same types.
  */
 static arnm_result read_transaction_detail(grdr_complete_transaction *tx, const root_view *view) {
-  arnm_result result = ARNM_SUCCESS;
   switch (tx->transaction_type) {
   case GRDT_TRANSACTION_TRANSFER:
+  case GRDT_TRANSACTION_CREATION:
+  case GRDT_TRANSACTION_DEFERRED_TRANSFER:
+  case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER:
     return read_transfer(tx, view->transfer);
-  case GRDT_TRANSACTION_CREATION: {
-    result = read_transfer(tx, view->transfer);
-    if (ARNM_SUCCESS != result) { return result; }
-    arnm_json_field target_date[] = {
-        ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TARGET_DATE, &tx->target_date)
-    };
-    return read_lone_member(view->root, target_date);
-  }
   case GRDT_TRANSACTION_REGISTER_ADDRESS:
     return read_register_address(tx, view->register_address);
-  case GRDT_TRANSACTION_DEFERRED_TRANSFER: {
-    result = read_transfer(tx, view->transfer);
-    if (ARNM_SUCCESS != result) { return result; }
-    arnm_json_field timeout_duration[] = {
-        ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TIMEOUT_DURATION, &tx->timeout_duration)
-    };
-    return read_lone_member(view->root, timeout_duration);
-  }
-  case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER: {
-    result = read_transfer(tx, view->transfer);
-    if (ARNM_SUCCESS != result) { return result; }
-    arnm_json_field previous_tx[] = {
-        ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_PREVIOUS_TX, &tx->previous_tx)
-    };
-    return read_lone_member(view->root, previous_tx);
-  }
-  case GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER: {
-    arnm_json_field previous_tx[] = {
-        ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_PREVIOUS_TX, &tx->previous_tx)
-    };
-    return read_lone_member(view->root, previous_tx);
-  }
   case GRDT_TRANSACTION_COMMUNITY_ROOT:
     return read_community_root(tx, view->community_root);
+  case GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER:
+    return ARNM_SUCCESS;
   default:
     return ARNM_ERROR_ENUM_UNHANDLED;
   }
@@ -461,7 +427,7 @@ static arnm_result read_transaction_detail(grdr_complete_transaction *tx, const 
  * reaches the second read, and small enough that three of these on the stack are a few hundred
  * bytes.
  */
-#define ELEMENTS_INLINE 16u
+#define ELEMENTS_INLINE 5u
 
 /** @brief One array's elements: handles, how many, and where they are kept. */
 typedef struct element_list {
@@ -521,34 +487,30 @@ static void release_elements(element_list *list, arnm *allocator) {
   init_elements(list);
 }
 
-// ********** sizing the transaction's own arena *********************************************
+/** @brief Read the memos, each into a block of its own. */
+static arnm_result read_encrypted_memos(grdw_encrypted_memo *memos, const element_list *list) {
+  if (!list->count) { return ARNM_SUCCESS; }
 
-/**
- * @brief Bytes the memo payloads of @p memos will occupy, aligned the way an arena charges.
- *
- * The one array whose elements have to be looked at before the arena exists: a balance and a
- * signature are as long as their types say, a memo is as long as its own base64. Which is why this
- * is the only array walked twice -- once here for its lengths, once below for its bytes.
- */
-static arnm_result memo_payload_size(uint64_t *total, const element_list *memos) {
-  for (uint32_t i = 0; i < memos->count; ++i) {
-    // only the payload is wanted here; the type this element also carries is read on the second
-    // walk, where the bytes it names actually go
-    arnm_memory_block text = {NULL, 0};
-    arnm_json_field fields[] = {ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_MEMO, &text)};
+  for (uint32_t i = 0; i < list->count; ++i) {
+    grdw_encrypted_memo *memo = &memos[i];
+    memo->memo.data = NULL;
+    memo->memo.size = 0;
+    arnm_memory_block type_name = {NULL, 0};
+    arnm_json_field fields[] = {
+        ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TYPE, &type_name),
+        ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_MEMO, &memo->memo)
+    };
     uint64_t seen = 0;
-    const arnm_result walked = arnm_json_read_object(memos->values[i], fields, 1u, &seen);
-    if (ARNM_SUCCESS != walked) { return walked; }
-    if (ALL_SEEN(1) != seen) { return ARNM_ERROR_DECODE_FAILED; }
-
-    uint32_t size = 0;
-    const arnm_result sized = arnm_base64_binary_size(chars(&text), text.size, &size);
-    if (ARNM_SUCCESS != sized) { return sized; }
-    *total += ARNM_ALIGN8((uint64_t)size);
+    arnm_result result = arnm_json_read_object(list->values[i], fields, 2u, &seen);
+    if (ARNM_SUCCESS != result) { return result; }
+    if (ALL_SEEN(2) != seen) { return ARNM_ERROR_DECODE_FAILED; }
+    memo->type = grdt_memo_key_from_string(chars(&type_name), type_name.size);
+    if (GRDT_MEMO_KEY_NONE == memo->type) { return ARNM_ERROR_ENUM_UNKNOWN; }
   }
   return ARNM_SUCCESS;
 }
 
+// ********** sizing the transaction's own arena *********************************************
 /**
  * @brief Bytes the arrays and the byte blocks of this document will occupy.
  *
@@ -571,28 +533,36 @@ static arnm_result memo_payload_size(uint64_t *total, const element_list *memos)
  */
 static arnm_result calculate_memory_size(
     uint32_t *out,
+    grdw_encrypted_memo* encrypted_memos,
     const root_view *view,
     const element_list *balances,
     const element_list *memos,
-    const element_list *signatures,
-    bool has_pairing_uuid,
-    bool has_pairing_anchor
+    const element_list *signatures
 ) {
   uint64_t total = 0;
   total += ARNM_ALIGN8((uint64_t)balances->count * sizeof(grdw_account_balance));
   total += ARNM_ALIGN8((uint64_t)memos->count * sizeof(grdw_encrypted_memo));
   if (memos->count) {
-    const arnm_result result = memo_payload_size(&total, memos);
+    arnm_result result = read_encrypted_memos(encrypted_memos, memos);
     if (ARNM_SUCCESS != result) { return result; }
+    for (uint32_t i = 0; i < memos->count; i++) {
+      arnm_memory_block* m = &encrypted_memos[i].memo;
+      uint32_t memo_size = 0;
+      result = arnm_base64_binary_size((const char*)m->data, m->size, &memo_size);
+      if (ARNM_SUCCESS != result) { return result; }
+      total += ARNM_ALIGN8((uint64_t)memo_size);
+    }
   }
   total += ARNM_ALIGN8((uint64_t)signatures->count * sizeof(grdw_signature_pair));
 
-  if (has_pairing_uuid) { total += ARNM_ALIGN8((uint64_t)ARNM_UUID_BINARY_SIZE); }
-  if (has_pairing_anchor) { total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor)); }
+  if (ARNM_UUID_BINARY_SIZE == view->tx_pairing_community_uuid.size) {
+    total += ARNM_ALIGN8((uint64_t)ARNM_UUID_BINARY_SIZE);
+  }
+  if (view->pairing_ledger_anchor) { total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor)); }
 
   uint32_t body_size = 0;
   const arnm_result sized =
-      arnm_base64_binary_size(chars(&view->body_bytes), view->body_bytes.size, &body_size);
+      arnm_base64_binary_size((const char*)view->body_bytes.data, view->body_bytes.size, &body_size);
   if (ARNM_SUCCESS != sized) { return sized; }
   total += ARNM_ALIGN8((uint64_t)body_size);
 
@@ -661,34 +631,24 @@ static arnm_result read_account_balances(grdr_complete_transaction *tx, const el
 }
 
 /** @brief Read the memos, each into a block of its own. */
-static arnm_result read_encrypted_memos(grdr_complete_transaction *tx, const element_list *list) {
-  if (!list->count) { return ARNM_SUCCESS; }
-  arnm_result result = arnm_alloc(
-      (uint8_t **)&tx->encrypted_memos, (uint32_t)(list->count * sizeof(grdw_encrypted_memo)),
-      &tx->memory_area
-  );
+static arnm_result deserialize_encrypted_memos(grdr_complete_transaction *tx, grdw_encrypted_memo *memos, uint32_t memos_count) {
+  if (!memos_count) { return ARNM_SUCCESS; }
+
+  tx->encrypted_memos_count = memos_count;
+  arnm_result result = arnm_alloc((uint8_t **)&tx->encrypted_memos, sizeof(grdw_encrypted_memo) * memos_count, &tx->memory_area);
   if (ARNM_SUCCESS != result) { return result; }
 
-  for (uint32_t i = 0; i < list->count; ++i) {
-    grdw_encrypted_memo *memo = &tx->encrypted_memos[i];
-    memo->memo.data = NULL;
-    memo->memo.size = 0;
-    arnm_memory_block type_name = {NULL, 0};
-    arnm_memory_block text = {NULL, 0};
-    arnm_json_field fields[] = {
-        ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TYPE, &type_name),
-        ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_MEMO, &text)
-    };
-    uint64_t seen = 0;
-    result = arnm_json_read_object(list->values[i], fields, 2u, &seen);
+  for (uint32_t i = 0; i < memos_count; ++i) {
+    grdw_encrypted_memo *in = &memos[i];
+    grdw_encrypted_memo *out = &tx->encrypted_memos[i];
+    out->type = in->type;
+    uint32_t memo_buffer_size = 0;
+    result = arnm_base64_binary_size((const char*)in->memo.data, in->memo.size, &memo_buffer_size);
     if (ARNM_SUCCESS != result) { return result; }
-    if (ALL_SEEN(2) != seen) { return ARNM_ERROR_DECODE_FAILED; }
-
-    memo->type = grdt_memo_key_from_string(chars(&type_name), type_name.size);
-    if (GRDT_MEMO_KEY_NONE == memo->type) { return ARNM_ERROR_ENUM_UNKNOWN; }
-    result = read_base64_block(&memo->memo, &text, &tx->memory_area);
+    result = arnm_memory_block_alloc(&out->memo, memo_buffer_size, &tx->memory_area);
     if (ARNM_SUCCESS != result) { return result; }
-    tx->encrypted_memos_count = (size_t)i + 1u;
+    result = arnm_binary_from_base64(out->memo.data, &memo_buffer_size, (const char*)in->memo.data);
+    if (ARNM_SUCCESS != result) { return result; }
   }
   return ARNM_SUCCESS;
 }
@@ -719,58 +679,6 @@ static arnm_result read_signature_pairs(grdr_complete_transaction *tx, const ele
   return ARNM_SUCCESS;
 }
 
-// ********** the two members only a transaction that is not local carries *******************
-
-/**
- * @brief Read the pairing community uuid, in a walk of the root of its own.
- *
- * A uuid is a string, and a string can only be decoded where a table names it -- so the member the
- * root walk filed as a handle is asked for a second time, and only where that walk found it. A
- * local transaction never carries it and never pays for this.
- *
- * @param[out] uuid    The sixteen bytes; written only where @p present comes back true.
- * @param[out] present Whether the document carried a uuid here.
- * @param[in]  root    The root object; not NULL.
- * @retval ARNM_ERROR_DECODE_FAILED The member is a string and is not the canonical 36 characters.
- */
-static arnm_result read_pairing_uuid(
-    uint8_t uuid[ARNM_UUID_BINARY_SIZE], bool *present, arnm_json_value *root
-) {
-  *present = false;
-  arnm_memory_block block = {uuid, (uint32_t)ARNM_UUID_BINARY_SIZE};
-  arnm_json_field fields[] = {
-      ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &block)
-  };
-  uint64_t seen = 0;
-  const arnm_result result = arnm_json_read_object(root, fields, 1u, &seen);
-  // an optional member that is no string carries nothing to read; `null` is the case that matters
-  if (ARNM_ERROR_INVALID_ENUM_TYPE == result) { return ARNM_SUCCESS; }
-  if (ARNM_SUCCESS != result) { return result; }
-  *present = (ALL_SEEN(1) == seen);
-  return ARNM_SUCCESS;
-}
-
-/**
- * @brief Read the pairing anchor into storage of the caller's, before any arena exists.
- *
- * @param[out] anchor  The anchor; written only where @p present comes back true.
- * @param[out] present Whether the document carried an anchor here.
- * @param[in]  value   The member as the root walk filed it, or NULL where it was absent.
- */
-static arnm_result read_pairing_anchor(
-    grdw_ledger_anchor *anchor, bool *present, arnm_json_value *value
-) {
-  *present = false;
-  if (!value) { return ARNM_SUCCESS; }
-  const arnm_result result = read_ledger_anchor(anchor, value);
-  // no object here is no anchor here, which for an optional member is nothing to read. An object
-  // that is one and is wrong about itself stays a refusal.
-  if (ARNM_ERROR_INVALID_ENUM_TYPE == result) { return ARNM_SUCCESS; }
-  if (ARNM_SUCCESS != result) { return result; }
-  *present = true;
-  return ARNM_SUCCESS;
-}
-
 // ********** the whole transaction **********************************************************
 
 /**
@@ -782,30 +690,14 @@ static arnm_result read_pairing_anchor(
 static arnm_result read_complete_transaction(
     grdr_complete_transaction *tx,
     root_view *view,
+    grdw_encrypted_memo* encrypted_memos,
     const element_list *balances,
     const element_list *memos,
     const element_list *signatures
 ) {
-  // the two pairing members go into storage of this frame's first, because the arena they end up
-  // in cannot be opened before it is known whether they are there at all
-  uint8_t pairing_uuid[ARNM_UUID_BINARY_SIZE];
-  bool has_pairing_uuid = false;
-  if (view->tx_pairing_community_uuid) {
-    const arnm_result result = read_pairing_uuid(pairing_uuid, &has_pairing_uuid, view->root);
-    if (ARNM_SUCCESS != result) { return result; }
-  }
-  grdw_ledger_anchor pairing_anchor;
-  bool has_pairing_anchor = false;
-  {
-    const arnm_result result =
-        read_pairing_anchor(&pairing_anchor, &has_pairing_anchor, view->pairing_ledger_anchor);
-    if (ARNM_SUCCESS != result) { return result; }
-  }
 
   uint32_t memory_size = 0;
-  arnm_result result = calculate_memory_size(
-      &memory_size, view, balances, memos, signatures, has_pairing_uuid, has_pairing_anchor
-  );
+  arnm_result result = calculate_memory_size(&memory_size, encrypted_memos, view, balances, memos, signatures);
   if (ARNM_SUCCESS != result) { return result; }
   if (memory_size) {
     result = arnm_init_arena(&tx->memory_area, memory_size);
@@ -824,28 +716,34 @@ static arnm_result read_complete_transaction(
 
   result = read_account_balances(tx, balances);
   if (ARNM_SUCCESS != result) { return result; }
-  result = read_encrypted_memos(tx, memos);
+  result = deserialize_encrypted_memos(tx, encrypted_memos, memos->count);
   if (ARNM_SUCCESS != result) { return result; }
   result = read_signature_pairs(tx, signatures);
   if (ARNM_SUCCESS != result) { return result; }
 
-  if (has_pairing_uuid) {
+  if (ARNM_UUID_BINARY_SIZE == view->tx_pairing_community_uuid.size) {
     result = arnm_alloc(&tx->tx_pairing_community_uuid, ARNM_UUID_BINARY_SIZE, &tx->memory_area);
     if (ARNM_SUCCESS != result) { return result; }
-    memcpy(tx->tx_pairing_community_uuid, pairing_uuid, ARNM_UUID_BINARY_SIZE);
+    result = arnm_binary_from_hex_with_known_hex_size(
+        tx->tx_pairing_community_uuid, (const char *)view->tx_pairing_community_uuid.data,
+        view->tx_pairing_community_uuid.size
+    );
+    if (ARNM_SUCCESS != result) { return result; }
   }
-  if (has_pairing_anchor) {
+  if (view->pairing_ledger_anchor) {
     result = arnm_alloc(
         (uint8_t **)&tx->pairing_ledger_anchor, (uint32_t)sizeof(grdw_ledger_anchor),
         &tx->memory_area
     );
     if (ARNM_SUCCESS != result) { return result; }
-    *tx->pairing_ledger_anchor = pairing_anchor;
+    result = read_ledger_anchor(tx->pairing_ledger_anchor, view->pairing_ledger_anchor);
+    if (ARNM_SUCCESS != result) { return result; }
   }
 
   return read_base64_block(&tx->body_bytes, &view->body_bytes, &tx->memory_area);
 }
 
+#define DEFAULT_MAX_MEMOS_COUNT 4u
 /**
  * @brief Read the document from its root: the walk, the enumerations, the arrays, the rest.
  *
@@ -857,17 +755,29 @@ static arnm_result read_complete_transaction(
 static arnm_result read_document(
     grdr_complete_transaction *tx, arnm_json_value *root, uint32_t node_count, arnm *allocator
 ) {
-  root_view view;
-  arnm_result result = read_root(&view, tx, root);
+
+  // read transaction type first hand, lesser misses as asking for incomplete set of keys
+  arnm_memory_block transaction_type_string = {0};
+  arnm_json_field transaction_type_field[] = {
+      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TRANSACTION_TYPE, &transaction_type_string)
+  };
+  arnm_result result = arnm_json_read_object(root, transaction_type_field, 1, NULL);
+  if (ARNM_SUCCESS != result) { return result; }
+  if (!transaction_type_string.size) { return ARNM_ERROR_DECODE_FAILED; }
+  tx->transaction_type = grdt_transaction_from_string(
+      (const char *)transaction_type_string.data, transaction_type_string.size
+  );
+  if (GRDT_TRANSACTION_NONE == tx->transaction_type) { return ARNM_ERROR_ENUM_UNKNOWN; }
+
+  root_view view = {0};
+  result = read_root(&view, tx, root, tx->transaction_type);
   if (ARNM_SUCCESS != result) { return result; }
 
   // the three enumerations first: the transaction type decides which detail member matters, and a
   // walk cannot promise to have met it before the members it decides for. Each name is turned into
   // a value by the grdt_*_from_string() of the type that owns it, so no enumerator is spelled in
   // this file and there is no second table to fall out of step with the first.
-  tx->transaction_type =
-      grdt_transaction_from_string(chars(&view.transaction_type), view.transaction_type.size);
-  if (GRDT_TRANSACTION_NONE == tx->transaction_type) { return ARNM_ERROR_ENUM_UNKNOWN; }
+
   tx->balance_derivation_type = grdt_balance_derivation_from_string(
       chars(&view.balance_derivation_type), view.balance_derivation_type.size
   );
@@ -885,20 +795,28 @@ static arnm_result read_document(
   init_elements(&balances);
   init_elements(&memos);
   init_elements(&signatures);
+  grdw_encrypted_memo static_encrypted_memos[DEFAULT_MAX_MEMOS_COUNT];
+  grdw_encrypted_memo* encrypted_memos = static_encrypted_memos;
 
   result = read_elements(&balances, view.account_balances, node_count, allocator);
   if (ARNM_SUCCESS == result) {
     result = read_elements(&memos, view.encrypted_memos, node_count, allocator);
+    if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
+      result = arnm_alloc(&encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+    }
   }
   if (ARNM_SUCCESS == result) {
     result = read_elements(&signatures, view.signature_pairs, node_count, allocator);
   }
   if (ARNM_SUCCESS == result) {
-    result = read_complete_transaction(tx, &view, &balances, &memos, &signatures);
+    result = read_complete_transaction(tx, &view, encrypted_memos, &balances, &memos, &signatures);
   }
 
   // given back in the order they were taken, so an arena gets each one from its own tail
   release_elements(&signatures, allocator);
+  if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
+    arnm_free(encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+  }
   release_elements(&memos, allocator);
   release_elements(&balances, allocator);
   return result;

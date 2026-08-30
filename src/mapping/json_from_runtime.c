@@ -268,15 +268,17 @@ static arnm_result add_complete_transaction(
 ) {
   arnm_json_writer_begin_object(writer);
 
+  // change the order as seen in struct to speed up parsing json, with transaction type as first, it
+  // can walk the second time with exact the expected keys
+  arnm_json_writer_add_string(
+      writer, GRDM_JSON_KEY_TRANSACTION_TYPE, grdt_transaction_to_string(tx->transaction_type)
+  );
   arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_TX_NR, tx->tx_nr);
   add_timestamp(writer, GRDM_JSON_KEY_CONFIRMED_AT, &tx->confirmed_at);
   add_timestamp(writer, GRDM_JSON_KEY_CREATED_AT, &tx->created_at);
   arnm_json_writer_add_uuid(writer, GRDM_JSON_KEY_TX_COMMUNITY_UUID, tx->tx_community_uuid);
   add_ledger_anchor(writer, GRDM_JSON_KEY_LEDGER_ANCHOR, &tx->ledger_anchor);
 
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_TRANSACTION_TYPE, grdt_transaction_to_string(tx->transaction_type)
-  );
   arnm_json_writer_add_string(
       writer, GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE,
       grdt_balance_derivation_to_string(tx->balance_derivation_type)
