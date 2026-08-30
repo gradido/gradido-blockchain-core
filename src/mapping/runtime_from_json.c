@@ -2,6 +2,7 @@
 
 #include "arnm/arena.h"
 #include "arnm/converter.h"
+#include "arnm/json_reader.h"
 #include "arnm/memory.h"
 #include "arnm/memory_block.h"
 #include "arnm/result.h"
@@ -301,6 +302,9 @@ typedef struct root_view {
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE The root is no object, or a member is of another JSON type
  *                                      than the field it names.
  */
+
+#define MAX_FIELD_COUNT 20
+
 static arnm_result read_root(
     root_view *view,
     grdr_complete_transaction *tx,
@@ -313,7 +317,9 @@ static arnm_result read_root(
   arnm_memory_block tx_running_hash = ARNM_JSON_BLOCK_OF(tx->tx_running_hash);
   arnm_memory_block address_name = {NULL, 0};
   uint8_t field_count = 0;
-  arnm_json_field fields[18];
+  arnm_json_field fields[MAX_FIELD_COUNT];
+  // read again, to have the key consumed, to prevent compare it again on every walk step
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type);
   fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr);
   fields[field_count++] =
       (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at);
