@@ -196,6 +196,10 @@ static arnm_result add_transaction_detail(
     break;
   case GRDT_TRANSACTION_REGISTER_ADDRESS:
     add_register_address(writer, tx);
+    arnm_json_writer_add_string(
+        writer, GRDM_JSON_KEY_ADDRESS_TYPE, grdt_address_to_string(tx->address_type)
+    );
+    arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_DERIVATION_INDEX, tx->derivation_index);
     break;
   case GRDT_TRANSACTION_DEFERRED_TRANSFER:
     add_transfer(writer, tx);
@@ -275,22 +279,22 @@ static arnm_result add_complete_transaction(
   arnm_json_writer_add_uuid(writer, GRDM_JSON_KEY_TX_COMMUNITY_UUID, tx->tx_community_uuid);
   add_ledger_anchor(writer, GRDM_JSON_KEY_LEDGER_ANCHOR, &tx->ledger_anchor);
 
+  const arnm_result result = add_transaction_detail(writer, tx);
+  if (ARNM_SUCCESS != result) { return result; }
+
   arnm_json_writer_add_string(
       writer, GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE,
       grdt_balance_derivation_to_string(tx->balance_derivation_type)
   );
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_CROSS_GROUP_TYPE, grdt_cross_group_to_string(tx->cross_group_type)
-  );
-
   arnm_json_writer_add_hex(
       writer, GRDM_JSON_KEY_TX_RUNNING_HASH, tx->tx_running_hash, GENERIC_HASH_SIZE
   );
 
-  const arnm_result result = add_transaction_detail(writer, tx);
-  if (ARNM_SUCCESS != result) { return result; }
-
   add_arrays(writer, tx);
+
+  arnm_json_writer_add_string(
+      writer, GRDM_JSON_KEY_CROSS_GROUP_TYPE, grdt_cross_group_to_string(tx->cross_group_type)
+  );
 
   // the two cross-group members are written only where they are set: on a local transaction
   // they are NULL, and a document that carried them as null would say something the wire never
