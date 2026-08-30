@@ -802,7 +802,7 @@ static arnm_result read_document(
   if (ARNM_SUCCESS == result) {
     result = read_elements(&memos, view.encrypted_memos, node_count, allocator);
     if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
-      result = arnm_alloc(&encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+      result = arnm_alloc((uint8_t**)&encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
     }
   }
   if (ARNM_SUCCESS == result) {
@@ -815,7 +815,7 @@ static arnm_result read_document(
   // given back in the order they were taken, so an arena gets each one from its own tail
   release_elements(&signatures, allocator);
   if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
-    arnm_free(encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+    arnm_free((uint8_t*)encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
   }
   release_elements(&memos, allocator);
   release_elements(&balances, allocator);
