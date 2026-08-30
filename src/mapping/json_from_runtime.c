@@ -157,10 +157,6 @@ static void add_register_address(arnm_json_writer *writer, const grdr_complete_t
       writer, GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY, tx->register_address.account_public_key,
       SIGN_PUBLIC_KEY_SIZE
   );
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_ADDRESS_TYPE, grdt_address_to_string(tx->address_type)
-  );
-  arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_DERIVATION_INDEX, tx->derivation_index);
   arnm_json_writer_close(writer);
 }
 
