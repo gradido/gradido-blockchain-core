@@ -78,12 +78,11 @@ std::string SodiumEncode(const std::vector<uint8_t> &bytes) {
   return out;
 }
 
-/** arnm's base64 of @p bytes. An empty block is refused rather than encoded, so it answers "". */
+/** arnm's base64 of @p bytes. Since arnm 0.8.0 an empty run is encoded as "" rather than
+ *  refused, so there is no length this has to step around. */
 std::string ArnmEncode(const std::vector<uint8_t> &bytes) {
-  if (bytes.empty()) { return {}; }
   std::string out(ARNM_BASE64_STRING_LENGTH(bytes.size()) + 1u, '\0');
-  const arnm_memory_block block{const_cast<uint8_t *>(bytes.data()), (uint32_t)bytes.size()};
-  EXPECT_EQ(arnm_binary_to_base64(out.data(), &block), ARNM_SUCCESS);
+  EXPECT_EQ(arnm_binary_to_base64(out.data(), bytes.data(), (uint32_t)bytes.size()), ARNM_SUCCESS);
   out.resize(std::strlen(out.c_str()));
   return out;
 }
@@ -192,7 +191,10 @@ TEST(HexTest, SecretVariantsAnswerExactlyLikeTheFastOnes) {
 
       char fast[sizeof(payload) * 2 + 1];
       char secret[sizeof(payload) * 2 + 1];
-      ASSERT_EQ(arnm_binary_to_hex(fast, &block), grdu_secret_to_hex(secret, &block));
+      ASSERT_EQ(
+          arnm_binary_to_hex(fast, payload, static_cast<uint32_t>(length)),
+          grdu_secret_to_hex(secret, &block)
+      );
       ASSERT_STREQ(fast, secret) << "value " << value << " length " << length;
 
       uint8_t from_fast[sizeof(payload)];

@@ -17,6 +17,7 @@
 #include "gradido_blockchain_core/types/transaction.h"
 
 #include <stdint.h>
+#include <string.h>
 
 /**
  * @brief What one hex field of @p size bytes takes in the document's string pool.
@@ -60,18 +61,49 @@ static uint32_t anchor_values(const grdw_ledger_anchor *anchor) {
 }
 
 /**
+ * @brief Write an enumerator's own spelling under @p key.
+ *
+ * arnm 0.8.0 wants a length beside every string, and grdt_*_to_string() answers a pointer into a
+ * static table with no length beside it -- so the walk the writer no longer makes happens here
+ * instead. It is one strlen() over some twenty characters of source, per enum field; the keys,
+ * which are the far more numerous half, cost nothing at all now.
+ *
+ * The name is a literal either way, so it goes in borrowed and unescaped, as
+ * @c arnm_json_writer_add_string() does by default.
+ *
+ * @param[in,out] writer     Writer to add to.
+ * @param[in]     key        Field name.
+ * @param[in]     key_length Bytes of @p key.
+ * @param[in]     escape_key Whether @p key has to be escaped; false for every key in this file.
+ * @param[in]     name       NUL terminated spelling; not NULL.
+ */
+static void add_enum_string(
+    arnm_json_writer *writer, const char *key, size_t key_length, bool escape_key, const char *name
+) {
+  arnm_json_writer_add_string(writer, key, key_length, escape_key, name, strlen(name));
+}
+
+/**
  * @brief Write a timestamp as an object of whole seconds and the nanoseconds beside them.
  *
- * @param[in,out] writer    Writer to add to.
- * @param[in]     key       Field name.
- * @param[in]     timestamp Seconds since the Unix epoch and the nanos within the second.
+ * @param[in,out] writer     Writer to add to.
+ * @param[in]     key        Field name.
+ * @param[in]     key_length Bytes of @p key.
+ * @param[in]     escape_key Whether @p key has to be escaped; false for every key in this file.
+ * @param[in]     timestamp  Seconds since the Unix epoch and the nanos within the second.
  */
 static void add_timestamp(
-    arnm_json_writer *writer, const char *key, const grdd_timestamp *timestamp
+    arnm_json_writer *writer,
+    const char *key,
+    size_t key_length,
+    bool escape_key,
+    const grdd_timestamp *timestamp
 ) {
-  arnm_json_writer_open_object(writer, key);
-  arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_SECONDS, timestamp->seconds);
-  arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_NANOS, timestamp->nanos);
+  arnm_json_writer_open_object(writer, key, key_length, escape_key);
+  arnm_json_writer_add_int64(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_SECONDS), timestamp->seconds
+  );
+  arnm_json_writer_add_int64(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_NANOS), timestamp->nanos);
   arnm_json_writer_close(writer);
 }
 
@@ -82,34 +114,49 @@ static void add_timestamp(
  * number, and the unspecified one carries nothing at all -- the union is written the way it is
  * read, one branch of it and no more.
  *
- * @param[in,out] writer Writer to add to.
- * @param[in]     key    Field name, or NULL for an element of the current array.
- * @param[in]     anchor Anchor to write; not NULL.
+ * @param[in,out] writer     Writer to add to.
+ * @param[in]     key        Field name, or NULL for an element of the current array.
+ * @param[in]     key_length Bytes of @p key; ignored when @p key is NULL.
+ * @param[in]     escape_key Whether @p key has to be escaped; false for every key in this file.
+ * @param[in]     anchor     Anchor to write; not NULL.
  */
 static void add_ledger_anchor(
-    arnm_json_writer *writer, const char *key, const grdw_ledger_anchor *anchor
+    arnm_json_writer *writer,
+    const char *key,
+    size_t key_length,
+    bool escape_key,
+    const grdw_ledger_anchor *anchor
 ) {
-  arnm_json_writer_open_object(writer, key);
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_TYPE, grdt_ledger_anchor_to_string(anchor->type)
+  arnm_json_writer_open_object(writer, key, key_length, escape_key);
+  add_enum_string(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TYPE), grdt_ledger_anchor_to_string(anchor->type)
   );
   switch (anchor->type) {
   case GRDT_LEDGER_ANCHOR_UNSPECIFIED:
     break;
   case GRDT_LEDGER_ANCHOR_HIERO_TRANSACTION_ID: {
     const grdw_hiero_transaction_id *hiero = &anchor->hiero_transaction_id;
-    arnm_json_writer_open_object(writer, GRDM_JSON_KEY_HIERO_TRANSACTION_ID);
-    add_timestamp(writer, GRDM_JSON_KEY_TRANSACTION_VALID_START, &hiero->transactionValidStart);
-    arnm_json_writer_open_object(writer, GRDM_JSON_KEY_ACCOUNT_ID);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_SHARD_NUM, hiero->accountID.shardNum);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_REALM_NUM, hiero->accountID.realmNum);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_ACCOUNT_NUM, hiero->accountID.accountNum);
+    arnm_json_writer_open_object(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_HIERO_TRANSACTION_ID));
+    add_timestamp(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TRANSACTION_VALID_START),
+        &hiero->transactionValidStart
+    );
+    arnm_json_writer_open_object(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ACCOUNT_ID));
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_SHARD_NUM), hiero->accountID.shardNum
+    );
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_REALM_NUM), hiero->accountID.realmNum
+    );
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ACCOUNT_NUM), hiero->accountID.accountNum
+    );
     arnm_json_writer_close(writer);
     arnm_json_writer_close(writer);
     break;
   }
   default:
-    arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_ID, anchor->id);
+    arnm_json_writer_add_uint64(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ID), anchor->id);
     break;
   }
   arnm_json_writer_close(writer);
@@ -123,16 +170,21 @@ static void add_ledger_anchor(
  * back different.
  */
 static void add_transfer(arnm_json_writer *writer, const grdr_complete_transaction *tx) {
-  arnm_json_writer_open_object(writer, GRDM_JSON_KEY_TRANSFER);
+  arnm_json_writer_open_object(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TRANSFER));
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_SENDER_PUBKEY, tx->transfer.sender_pubkey, SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_SENDER_PUBKEY), tx->transfer.sender_pubkey,
+      SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_RECIPIENT_PUBKEY, tx->transfer.recipient_pubkey, SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_RECIPIENT_PUBKEY), tx->transfer.recipient_pubkey,
+      SIGN_PUBLIC_KEY_SIZE
   );
-  arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_AMOUNT, tx->transfer.amount);
+  arnm_json_writer_add_int64(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_AMOUNT), tx->transfer.amount
+  );
   arnm_json_writer_add_uuid(
-      writer, GRDM_JSON_KEY_COIN_COMMUNITY_UUID, tx->transfer.coin_community_uuid
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_COIN_COMMUNITY_UUID),
+      tx->transfer.coin_community_uuid
   );
   arnm_json_writer_close(writer);
 }
@@ -145,32 +197,36 @@ static void add_transfer(arnm_json_writer *writer, const grdr_complete_transacti
  * than the struct it describes.
  */
 static void add_register_address(arnm_json_writer *writer, const grdr_complete_transaction *tx) {
-  arnm_json_writer_open_object(writer, GRDM_JSON_KEY_REGISTER_ADDRESS);
+  arnm_json_writer_open_object(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_REGISTER_ADDRESS));
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_USER_PUBLIC_KEY, tx->register_address.user_public_key,
-      SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_USER_PUBLIC_KEY),
+      tx->register_address.user_public_key, SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_NAME_HASH, tx->register_address.name_hash, GENERIC_HASH_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_NAME_HASH), tx->register_address.name_hash,
+      GENERIC_HASH_SIZE
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY, tx->register_address.account_public_key,
-      SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ACCOUNT_PUBLIC_KEY),
+      tx->register_address.account_public_key, SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_close(writer);
 }
 
 /** @brief Write the community-root branch: the community key and its two account keys. */
 static void add_community_root(arnm_json_writer *writer, const grdr_complete_transaction *tx) {
-  arnm_json_writer_open_object(writer, GRDM_JSON_KEY_COMMUNITY_ROOT);
+  arnm_json_writer_open_object(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_COMMUNITY_ROOT));
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_PUBLIC_KEY, tx->community_root.public_key, SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PUBLIC_KEY), tx->community_root.public_key,
+      SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_GMW_PUBLIC_KEY, tx->community_root.gmw_public_key, SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_GMW_PUBLIC_KEY), tx->community_root.gmw_public_key,
+      SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_AUF_PUBLIC_KEY, tx->community_root.auf_public_key, SIGN_PUBLIC_KEY_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_AUF_PUBLIC_KEY), tx->community_root.auf_public_key,
+      SIGN_PUBLIC_KEY_SIZE
   );
   arnm_json_writer_close(writer);
 }
@@ -192,25 +248,36 @@ static arnm_result add_transaction_detail(
     break;
   case GRDT_TRANSACTION_CREATION:
     add_transfer(writer, tx);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_TARGET_DATE, tx->target_date);
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TARGET_DATE), tx->target_date
+    );
     break;
   case GRDT_TRANSACTION_REGISTER_ADDRESS:
     add_register_address(writer, tx);
-    arnm_json_writer_add_string(
-        writer, GRDM_JSON_KEY_ADDRESS_TYPE, grdt_address_to_string(tx->address_type)
+    add_enum_string(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ADDRESS_TYPE),
+        grdt_address_to_string(tx->address_type)
     );
-    arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_DERIVATION_INDEX, tx->derivation_index);
+    arnm_json_writer_add_uint64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_DERIVATION_INDEX), tx->derivation_index
+    );
     break;
   case GRDT_TRANSACTION_DEFERRED_TRANSFER:
     add_transfer(writer, tx);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_TIMEOUT_DURATION, tx->timeout_duration);
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TIMEOUT_DURATION), tx->timeout_duration
+    );
     break;
   case GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER:
     add_transfer(writer, tx);
-    arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_PREVIOUS_TX, tx->previous_tx);
+    arnm_json_writer_add_uint64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PREVIOUS_TX), tx->previous_tx
+    );
     break;
   case GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER:
-    arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_PREVIOUS_TX, tx->previous_tx);
+    arnm_json_writer_add_uint64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PREVIOUS_TX), tx->previous_tx
+    );
     break;
   case GRDT_TRANSACTION_COMMUNITY_ROOT:
     add_community_root(writer, tx);
@@ -228,35 +295,48 @@ static arnm_result add_transaction_detail(
  * have to mean the same thing to whoever reads the document next.
  */
 static void add_arrays(arnm_json_writer *writer, const grdr_complete_transaction *tx) {
-  arnm_json_writer_open_array(writer, GRDM_JSON_KEY_ACCOUNT_BALANCES);
+  arnm_json_writer_open_array(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ACCOUNT_BALANCES));
   for (size_t i = 0; i < tx->account_balances_count; ++i) {
     const grdw_account_balance *balance = &tx->account_balances[i];
-    arnm_json_writer_open_object(writer, NULL);
-    arnm_json_writer_add_hex(writer, GRDM_JSON_KEY_PUBKEY, balance->pubkey, SIGN_PUBLIC_KEY_SIZE);
-    arnm_json_writer_add_int64(writer, GRDM_JSON_KEY_BALANCE, balance->balance);
-    arnm_json_writer_add_uuid(writer, GRDM_JSON_KEY_COMMUNITY_UUID, balance->community_uuid);
+    arnm_json_writer_open_object(writer, NULL, 0, false);
+    arnm_json_writer_add_hex(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PUBKEY), balance->pubkey, SIGN_PUBLIC_KEY_SIZE
+    );
+    arnm_json_writer_add_int64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_BALANCE), balance->balance
+    );
+    arnm_json_writer_add_uuid(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_COMMUNITY_UUID), balance->community_uuid
+    );
     arnm_json_writer_close(writer);
   }
   arnm_json_writer_close(writer);
 
-  arnm_json_writer_open_array(writer, GRDM_JSON_KEY_ENCRYPTED_MEMOS);
+  arnm_json_writer_open_array(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_ENCRYPTED_MEMOS));
   for (size_t i = 0; i < tx->encrypted_memos_count; ++i) {
     const grdw_encrypted_memo *memo = &tx->encrypted_memos[i];
-    arnm_json_writer_open_object(writer, NULL);
-    arnm_json_writer_add_string(writer, GRDM_JSON_KEY_TYPE, grdt_memo_key_to_string(memo->type));
-    arnm_json_writer_add_base64(writer, GRDM_JSON_KEY_MEMO, memo->memo.data, memo->memo.size);
+    arnm_json_writer_open_object(writer, NULL, 0, false);
+    add_enum_string(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TYPE), grdt_memo_key_to_string(memo->type)
+    );
+    arnm_json_writer_add_base64(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_MEMO), memo->memo.data, memo->memo.size
+    );
     arnm_json_writer_close(writer);
   }
   arnm_json_writer_close(writer);
 
-  arnm_json_writer_open_array(writer, GRDM_JSON_KEY_SIGNATURE_PAIRS);
+  arnm_json_writer_open_array(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_SIGNATURE_PAIRS));
   for (size_t i = 0; i < tx->signature_pairs_count; ++i) {
     const grdw_signature_pair *pair = &tx->signature_pairs[i];
-    arnm_json_writer_open_object(writer, NULL);
+    arnm_json_writer_open_object(writer, NULL, 0, false);
     arnm_json_writer_add_hex(
-        writer, GRDM_JSON_KEY_PUBLIC_KEY, pair->public_key, SIGN_PUBLIC_KEY_SIZE
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PUBLIC_KEY), pair->public_key,
+        SIGN_PUBLIC_KEY_SIZE
     );
-    arnm_json_writer_add_hex(writer, GRDM_JSON_KEY_SIGNATURE, pair->signature, SIGN_SIGNATURE_SIZE);
+    arnm_json_writer_add_hex(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_SIGNATURE), pair->signature, SIGN_SIGNATURE_SIZE
+    );
     arnm_json_writer_close(writer);
   }
   arnm_json_writer_close(writer);
@@ -270,30 +350,35 @@ static arnm_result add_complete_transaction(
 
   // change the order as seen in struct to speed up parsing json, with transaction type as first, it
   // can walk the second time with exact the expected keys
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_TRANSACTION_TYPE, grdt_transaction_to_string(tx->transaction_type)
+  add_enum_string(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TRANSACTION_TYPE),
+      grdt_transaction_to_string(tx->transaction_type)
   );
-  arnm_json_writer_add_uint64(writer, GRDM_JSON_KEY_TX_NR, tx->tx_nr);
-  add_timestamp(writer, GRDM_JSON_KEY_CONFIRMED_AT, &tx->confirmed_at);
-  add_timestamp(writer, GRDM_JSON_KEY_CREATED_AT, &tx->created_at);
-  arnm_json_writer_add_uuid(writer, GRDM_JSON_KEY_TX_COMMUNITY_UUID, tx->tx_community_uuid);
-  add_ledger_anchor(writer, GRDM_JSON_KEY_LEDGER_ANCHOR, &tx->ledger_anchor);
+  arnm_json_writer_add_uint64(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_NR), tx->tx_nr);
+  add_timestamp(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_CONFIRMED_AT), &tx->confirmed_at);
+  add_timestamp(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_CREATED_AT), &tx->created_at);
+  arnm_json_writer_add_uuid(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_COMMUNITY_UUID), tx->tx_community_uuid
+  );
+  add_ledger_anchor(writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_LEDGER_ANCHOR), &tx->ledger_anchor);
 
   const arnm_result result = add_transaction_detail(writer, tx);
   if (ARNM_SUCCESS != result) { return result; }
 
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE,
+  add_enum_string(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE),
       grdt_balance_derivation_to_string(tx->balance_derivation_type)
   );
   arnm_json_writer_add_hex(
-      writer, GRDM_JSON_KEY_TX_RUNNING_HASH, tx->tx_running_hash, GENERIC_HASH_SIZE
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_RUNNING_HASH), tx->tx_running_hash,
+      GENERIC_HASH_SIZE
   );
 
   add_arrays(writer, tx);
 
-  arnm_json_writer_add_string(
-      writer, GRDM_JSON_KEY_CROSS_GROUP_TYPE, grdt_cross_group_to_string(tx->cross_group_type)
+  add_enum_string(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_CROSS_GROUP_TYPE),
+      grdt_cross_group_to_string(tx->cross_group_type)
   );
 
   // the two cross-group members are written only where they are set: on a local transaction
@@ -301,15 +386,19 @@ static arnm_result add_complete_transaction(
   // said
   if (tx->tx_pairing_community_uuid) {
     arnm_json_writer_add_uuid(
-        writer, GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, tx->tx_pairing_community_uuid
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID),
+        tx->tx_pairing_community_uuid
     );
   }
   if (tx->pairing_ledger_anchor) {
-    add_ledger_anchor(writer, GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, tx->pairing_ledger_anchor);
+    add_ledger_anchor(
+        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR), tx->pairing_ledger_anchor
+    );
   }
 
   arnm_json_writer_add_base64(
-      writer, GRDM_JSON_KEY_BODY_BYTES, tx->body_bytes.data, tx->body_bytes.size
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_BODY_BYTES), tx->body_bytes.data,
+      tx->body_bytes.size
   );
   return ARNM_SUCCESS;
 }
@@ -420,9 +509,11 @@ arnm_result grdm_json_from_complete_transaction(
     result = arnm_json_writer_write(&writer, allocator, out, NULL);
   }
 
-  // the document goes back before the text does, so an arena reclaims it from its tail; where
-  // it cannot, the bytes wait for the reset and the caller is told, because that is the
-  // caller's arena and the caller's rhythm
+  // the text was drawn from the same allocator and sits on top of the document, so an arena does
+  // not end where the document began and cannot take the whole run back in one step -- arnm
+  // 0.8.0's fast path is not open to this order of calls, and the document recedes chunk by
+  // chunk as it did before. What an arena cannot reclaim waits for the reset and the caller is
+  // told, because that is the caller's arena and the caller's rhythm
   const arnm_result reclaim = arnm_json_writer_release(&writer);
   if (ARNM_SUCCESS == result && ARNM_SUCCESS != reclaim) { return reclaim; }
   return result;

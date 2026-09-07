@@ -218,8 +218,9 @@ static void test_binary_to_hex_secret(int stepCount) {
 }
 
 static void test_binary_to_hex(int stepCount) {
-  arnm_memory_block block = {hexSampleBinary, HEX_SAMPLE_BYTES};
-  for (int i = 0; i < stepCount; ++i) { arnm_binary_to_hex(benchHexString, &block); }
+  for (int i = 0; i < stepCount; ++i) {
+    arnm_binary_to_hex(benchHexString, hexSampleBinary, HEX_SAMPLE_BYTES);
+  }
 }
 
 static void test_binary_from_hex_secret(int stepCount) {

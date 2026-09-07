@@ -59,9 +59,8 @@ static uint8_t binary_buffer[LARGEST_SIZE];
 static uint64_t sink;
 
 static void encode_arnm(uint32_t size, int steps) {
-  const arnm_memory_block block = {payload, size};
   for (int i = 0; i < steps; ++i) {
-    if (ARNM_SUCCESS != arnm_binary_to_base64(text_buffer, &block)) { abort(); }
+    if (ARNM_SUCCESS != arnm_binary_to_base64(text_buffer, payload, size)) { abort(); }
     sink += (uint8_t)text_buffer[0];
   }
 }
@@ -160,8 +159,7 @@ static void prepare_test_data(void) {
   };
 
   for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); ++c) {
-    const arnm_memory_block block = {payload, cases[c].size};
-    if (ARNM_SUCCESS != arnm_binary_to_base64(cases[c].out, &block)) { abort(); }
+    if (ARNM_SUCCESS != arnm_binary_to_base64(cases[c].out, payload, cases[c].size)) { abort(); }
 
     char reference[ARNM_BASE64_STRING_LENGTH(LARGEST_SIZE) + 1u];
     if (!sodium_bin2base64(

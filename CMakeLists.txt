@@ -85,11 +85,11 @@ endif()
 # directory that holds no CMakeLists, which is the documented way to say populate only. Point
 # it at the real thing instead if this project ever wants that target.
 FetchContent_Declare(arnm
-  URL https://github.com/gradido/arnm/archive/refs/tags/v0.7.5.tar.gz
+  URL https://github.com/gradido/arnm/archive/refs/tags/v0.8.0.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=fb91279d3efff732b922b87ebab55ea36d778c9aaa92af6b008bad2ce5b29ccc
+  URL_HASH SHA256=6d544586682d303231d07192ca7129713c960b594e521aaa76688b55b0728df0
   SOURCE_SUBDIR do-not-add-subdirectory
 )
 FetchContent_MakeAvailable(arnm)
@@ -202,6 +202,19 @@ add_library(${PROJECT_NAME} STATIC ${GRADIDO_BLOCKCHAIN_CORE_SRC} ${GRADIDO_BLOC
 # PRIVATE: a consumer of the installed library picks its own warning level. arnm's sources are
 # compiled into this target and are clean under these flags, which is why they are not exempted.
 target_compile_options(${PROJECT_NAME} PRIVATE ${GRADIDO_WARNING_FLAGS})
+
+# The same three yyjson features arnm's own build takes out, so this build of arnm's sources and
+# the one `zig build` makes read the same document the same way. Without them a CMake build
+# accepted comments, trailing commas, Infinity, NaN and a byte order mark that the zig build
+# refuses -- the strict RFC 8259 reading CHANGELOG 0.20.0 describes was only ever half true here.
+# YYJSON_DISABLE_UTF8_VALIDATION is deliberately not among them: arnm 0.8.0 dropped it, so a
+# document whose bytes are not UTF-8 is refused in both builds now.
+# PRIVATE, and not part of the install interface: no installed header names yyjson.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+  YYJSON_DISABLE_INCR_READER=1
+  YYJSON_DISABLE_UTILS=1
+  YYJSON_DISABLE_NON_STANDARD=1
+)
 
 # Two source sets this project does not get to keep clean. A source property is appended after
 # the target options, so the last word on those translation units is the one below.

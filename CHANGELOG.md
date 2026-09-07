@@ -12,6 +12,59 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.21.0 -- 2026-09-07
+
+**This release needs arnm 0.8.0** and does not build against 0.7.5: every adder of
+`arnm/json_writer.h` grew a `size_t key_length, bool escape_key` beside its key, and
+`arnm_binary_to_hex()` and `arnm_binary_to_base64()` take a pointer and a size where they took an
+`arnm_memory_block *`. Both are compile errors at every call site, which is the cheap half of an
+upgrade. What moves the minor number is the half the compiler has nothing to say about: what a
+document is now allowed to hold.
+
+**The document format did not change.** A document written by 0.20.0 reads here byte for byte the
+way it did there, and this release writes the same one.
+
+### Changed
+
+- **A document whose bytes are not UTF-8 is refused.** arnm 0.8.0 stopped compiling yyjson with
+  `YYJSON_DISABLE_UTF8_VALIDATION`, so `grdm_complete_transaction_from_json()` answers
+  `ARNM_ERROR_DECODE_FAILED` for an overlong form, a surrogate half or a code point past U+10FFFF,
+  where the bytes used to be carried through unexamined. What passes is unchanged, byte for byte:
+  nothing is replaced or normalized.
+  - New for `zig build`, which takes arnm's own build of yyjson. A CMake build has been validating
+    all along without meaning to, because it compiles arnm's sources with its own flag set and
+    that flag was never among them -- the other side of the gap the next bullet closes.
+  - The write side is deliberately not symmetric, and it is worth knowing which way round that
+    falls. A string this mapping writes is borrowed and unescaped, which is what makes it free, so
+    malformed bytes would go out with `ARNM_SUCCESS`. Every string it writes is either an
+    enumerator's own spelling from source or hex, base64 or a uuid this project produced, so there
+    is nothing here that could be malformed -- but a mapping that ever writes a name from input
+    needs `ARNM_JSON_WRITER_STRING_ESCAPE`, or `arnm/utf8.h` at the door.
+- **The CMake build compiles arnm's yyjson with the same features taken out that `zig build`
+  does.** `YYJSON_DISABLE_INCR_READER`, `YYJSON_DISABLE_UTILS` and `YYJSON_DISABLE_NON_STANDARD`
+  are set on the library target. Until now only the zig build set them -- arnm defines them in its
+  own CMakeLists, which this project deliberately does not `add_subdirectory()` -- so a CMake build
+  quietly accepted comments, trailing commas, `Infinity`, `NaN` and a byte order mark that the zig
+  build refused. The strict RFC 8259 reading 0.20.0 describes is now true of both.
+- **Every key of `src/mapping/json_from_runtime.c` is spelled `ARNM_JSON_WRITER_KEY(...)`.** The
+  macro hands the adder the key, the length the compiler already knows and `false` for the escaping
+  pass, so nothing walks a key any more -- 51 keys' worth of `strlen`, of the measuring walk that
+  0.7.5 made beside it, and of the serializer's escaping pass, over names that are literals in
+  `complete_transaction_json.h`.
+  - The enum spellings are the one string left that arrives without a length: `grdt_*_to_string()`
+    answers a pointer into a static table and nothing beside it. `add_enum_string()` is where that
+    one `strlen` happens, once per enum field, so it is named in one place rather than repeated at
+    six call sites.
+- **What did not change, named because arnm's own changelog reads as though it did.** arnm 0.8.0
+  can hand a whole document back to an arena in one `arnm_free()`, but only where the arena still
+  ends where the document began. `grdm_json_from_complete_transaction()` draws the finished text
+  from the same allocator before it releases, so the text sits on top of the document and that
+  fast path is not open to this order of calls -- the document recedes chunk by chunk exactly as
+  it did under 0.7.5, and `ARNM_WARNING_ARENA_MEMORY_NOT_RECLAIMED` reaches the caller under the
+  same conditions as before. Nothing about how a caller holds its arena has to change.
+- The arnm dependency moves from 0.7.5 to 0.8.0, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of `build.zig.zon`.
+
 ## 0.20.0 -- 2026-08-30
 
 `src/mapping/runtime_from_json.c` is written again from the ground up, against the JSON reader

@@ -264,7 +264,6 @@ static arnm_result read_community_root(grdr_complete_transaction *tx, arnm_json_
 
 // ********** the root, walked once **********************************************************
 
-
 /**
  * @brief What the root walk leaves for the reading that follows it.
  *
@@ -319,7 +318,9 @@ static arnm_result read_root(
   uint8_t field_count = 0;
   arnm_json_field fields[MAX_FIELD_COUNT];
   // read again, to have the key consumed, to prevent compare it again on every walk step
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type);
+  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
+      GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type
+  );
   fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr);
   fields[field_count++] =
       (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at);
@@ -539,7 +540,7 @@ static arnm_result read_encrypted_memos(grdw_encrypted_memo *memos, const elemen
  */
 static arnm_result calculate_memory_size(
     uint32_t *out,
-    grdw_encrypted_memo* encrypted_memos,
+    grdw_encrypted_memo *encrypted_memos,
     const root_view *view,
     const element_list *balances,
     const element_list *memos,
@@ -552,9 +553,9 @@ static arnm_result calculate_memory_size(
     arnm_result result = read_encrypted_memos(encrypted_memos, memos);
     if (ARNM_SUCCESS != result) { return result; }
     for (uint32_t i = 0; i < memos->count; i++) {
-      arnm_memory_block* m = &encrypted_memos[i].memo;
+      arnm_memory_block *m = &encrypted_memos[i].memo;
       uint32_t memo_size = 0;
-      result = arnm_base64_binary_size((const char*)m->data, m->size, &memo_size);
+      result = arnm_base64_binary_size((const char *)m->data, m->size, &memo_size);
       if (ARNM_SUCCESS != result) { return result; }
       total += ARNM_ALIGN8((uint64_t)memo_size);
     }
@@ -567,8 +568,9 @@ static arnm_result calculate_memory_size(
   if (view->pairing_ledger_anchor) { total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor)); }
 
   uint32_t body_size = 0;
-  const arnm_result sized =
-      arnm_base64_binary_size((const char*)view->body_bytes.data, view->body_bytes.size, &body_size);
+  const arnm_result sized = arnm_base64_binary_size(
+      (const char *)view->body_bytes.data, view->body_bytes.size, &body_size
+  );
   if (ARNM_SUCCESS != sized) { return sized; }
   total += ARNM_ALIGN8((uint64_t)body_size);
 
@@ -637,11 +639,15 @@ static arnm_result read_account_balances(grdr_complete_transaction *tx, const el
 }
 
 /** @brief Read the memos, each into a block of its own. */
-static arnm_result deserialize_encrypted_memos(grdr_complete_transaction *tx, grdw_encrypted_memo *memos, uint32_t memos_count) {
+static arnm_result deserialize_encrypted_memos(
+    grdr_complete_transaction *tx, grdw_encrypted_memo *memos, uint32_t memos_count
+) {
   if (!memos_count) { return ARNM_SUCCESS; }
 
   tx->encrypted_memos_count = memos_count;
-  arnm_result result = arnm_alloc((uint8_t **)&tx->encrypted_memos, sizeof(grdw_encrypted_memo) * memos_count, &tx->memory_area);
+  arnm_result result = arnm_alloc(
+      (uint8_t **)&tx->encrypted_memos, sizeof(grdw_encrypted_memo) * memos_count, &tx->memory_area
+  );
   if (ARNM_SUCCESS != result) { return result; }
 
   for (uint32_t i = 0; i < memos_count; ++i) {
@@ -649,11 +655,12 @@ static arnm_result deserialize_encrypted_memos(grdr_complete_transaction *tx, gr
     grdw_encrypted_memo *out = &tx->encrypted_memos[i];
     out->type = in->type;
     uint32_t memo_buffer_size = 0;
-    result = arnm_base64_binary_size((const char*)in->memo.data, in->memo.size, &memo_buffer_size);
+    result = arnm_base64_binary_size((const char *)in->memo.data, in->memo.size, &memo_buffer_size);
     if (ARNM_SUCCESS != result) { return result; }
     result = arnm_memory_block_alloc(&out->memo, memo_buffer_size, &tx->memory_area);
     if (ARNM_SUCCESS != result) { return result; }
-    result = arnm_binary_from_base64(out->memo.data, &memo_buffer_size, (const char*)in->memo.data);
+    result =
+        arnm_binary_from_base64(out->memo.data, &memo_buffer_size, (const char *)in->memo.data);
     if (ARNM_SUCCESS != result) { return result; }
   }
   return ARNM_SUCCESS;
@@ -696,14 +703,15 @@ static arnm_result read_signature_pairs(grdr_complete_transaction *tx, const ele
 static arnm_result read_complete_transaction(
     grdr_complete_transaction *tx,
     root_view *view,
-    grdw_encrypted_memo* encrypted_memos,
+    grdw_encrypted_memo *encrypted_memos,
     const element_list *balances,
     const element_list *memos,
     const element_list *signatures
 ) {
 
   uint32_t memory_size = 0;
-  arnm_result result = calculate_memory_size(&memory_size, encrypted_memos, view, balances, memos, signatures);
+  arnm_result result =
+      calculate_memory_size(&memory_size, encrypted_memos, view, balances, memos, signatures);
   if (ARNM_SUCCESS != result) { return result; }
   if (memory_size) {
     result = arnm_init_arena(&tx->memory_area, memory_size);
@@ -802,13 +810,15 @@ static arnm_result read_document(
   init_elements(&memos);
   init_elements(&signatures);
   grdw_encrypted_memo static_encrypted_memos[DEFAULT_MAX_MEMOS_COUNT];
-  grdw_encrypted_memo* encrypted_memos = static_encrypted_memos;
+  grdw_encrypted_memo *encrypted_memos = static_encrypted_memos;
 
   result = read_elements(&balances, view.account_balances, node_count, allocator);
   if (ARNM_SUCCESS == result) {
     result = read_elements(&memos, view.encrypted_memos, node_count, allocator);
     if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
-      result = arnm_alloc((uint8_t**)&encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+      result = arnm_alloc(
+          (uint8_t **)&encrypted_memos, sizeof(grdw_encrypted_memo) * memos.count, allocator
+      );
     }
   }
   if (ARNM_SUCCESS == result) {
@@ -821,7 +831,7 @@ static arnm_result read_document(
   // given back in the order they were taken, so an arena gets each one from its own tail
   release_elements(&signatures, allocator);
   if (memos.count > DEFAULT_MAX_MEMOS_COUNT) {
-    arnm_free((uint8_t*)encrypted_memos, sizeof(grdw_encrypted_memo)*memos.count, allocator);
+    arnm_free((uint8_t *)encrypted_memos, sizeof(grdw_encrypted_memo) * memos.count, allocator);
   }
   release_elements(&memos, allocator);
   release_elements(&balances, allocator);
