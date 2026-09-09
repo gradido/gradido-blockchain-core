@@ -12,6 +12,344 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## 0.21.0 -- 2026-09-09
+
+**This release needs arnm 0.8.1** and does not build against 0.7.5: every adder of
+`arnm/json_writer.h` grew a `size_t key_length, bool escape_key` beside its key, and
+`arnm_binary_to_hex()` and `arnm_binary_to_base64()` take a pointer and a size where they took an
+`arnm_memory_block *`, and 0.8.1 added an element type to `arnm_json_read_array()`. All three are
+compile errors at every call site, which is the cheap half of an upgrade. What moves the minor
+number is the half the compiler has nothing to say about: what a document is now allowed to hold,
+and what one now carries.
+
+**The document format changed, in one direction only.** A document written by 0.20.0 reads here
+exactly as it did there. One written *here* does not read in 0.20.0: a local transaction now
+carries `"tx_pairing_community_uuid": null` and `"pairing_ledger_anchor": null`, which 0.20.0
+refuses because arnm 0.7.5 met a `null` in a typed field with `ARNM_ERROR_INVALID_ENUM_TYPE`.
+Nothing else about a document moved -- no member was renamed, reordered against the members it
+already stood beside, or written differently.
+
+### Changed
+
+- **A document whose bytes are not UTF-8 is refused.** arnm 0.8.0 stopped compiling yyjson with
+  `YYJSON_DISABLE_UTF8_VALIDATION`, so `grdm_complete_transaction_from_json()` answers
+  `ARNM_ERROR_DECODE_FAILED` for an overlong form, a surrogate half or a code point past U+10FFFF,
+  where the bytes used to be carried through unexamined. What passes is unchanged, byte for byte:
+  nothing is replaced or normalized.
+  - New for `zig build`, which takes arnm's own build of yyjson. A CMake build has been validating
+    all along without meaning to, because it compiles arnm's sources with its own flag set and
+    that flag was never among them -- the other side of the gap the next bullet closes.
+  - The write side is deliberately not symmetric, and it is worth knowing which way round that
+    falls. A string this mapping writes is borrowed and unescaped, which is what makes it free, so
+    malformed bytes would go out with `ARNM_SUCCESS`. Every string it writes is either an
+    enumerator's own spelling from source or hex, base64 or a uuid this project produced, so there
+    is nothing here that could be malformed -- but a mapping that ever writes a name from input
+    needs `ARNM_JSON_WRITER_STRING_ESCAPE`, or `arnm/utf8.h` at the door.
+- **The CMake build compiles arnm's yyjson with the same features taken out that `zig build`
+  does.** `YYJSON_DISABLE_INCR_READER`, `YYJSON_DISABLE_UTILS` and `YYJSON_DISABLE_NON_STANDARD`
+  are set on the library target. Until now only the zig build set them -- arnm defines them in its
+  own CMakeLists, which this project deliberately does not `add_subdirectory()` -- so a CMake build
+  quietly accepted comments, trailing commas, `Infinity`, `NaN` and a byte order mark that the zig
+  build refused. The strict RFC 8259 reading 0.20.0 describes is now true of both.
+- **Every key of `src/mapping/json_from_runtime.c` is spelled `ARNM_JSON_WRITER_KEY(...)`.** The
+  macro hands the adder the key, the length the compiler already knows and `false` for the escaping
+  pass, so nothing walks a key any more -- 51 keys' worth of `strlen`, of the measuring walk that
+  0.7.5 made beside it, and of the serializer's escaping pass, over names that are literals in
+  `complete_transaction_json.h`.
+  - The enum spellings are the one string left that arrives without a length: `grdt_*_to_string()`
+    answers a pointer into a static table and nothing beside it. `add_enum_string()` is where that
+    one `strlen` happens, once per enum field, so it is named in one place rather than repeated at
+    six call sites.
+- **What did not change, named because arnm's own changelog reads as though it did.** arnm 0.8.0
+  can hand a whole document back to an arena in one `arnm_free()`, but only where the arena still
+  ends where the document began. `grdm_json_from_complete_transaction()` draws the finished text
+  from the same allocator before it releases, so the text sits on top of the document and that
+  fast path is not open to this order of calls -- the document recedes chunk by chunk exactly as
+  it did under 0.7.5, and `ARNM_WARNING_ARENA_MEMORY_NOT_RECLAIMED` reaches the caller under the
+  same conditions as before. Nothing about how a caller holds its arena has to change.
+- **`null` is a member's own way of saying it is empty, on both banks.** arnm 0.8.1 meets a
+  `null` in a typed field entry by leaving the target as the caller had it, leaving the entry's
+  bit clear in the mask, and carrying on -- where 0.8.0 answered `ARNM_ERROR_INVALID_ENUM_TYPE`
+  and left every field behind it in the table unread. So `grdm_complete_transaction_from_json()`
+  reads `"tx_pairing_community_uuid": null` as the member not being there, which is what it
+  means, and the members after it are read rather than lost.
+  - `grdm_json_from_complete_transaction()` now writes both cross-group members on every
+    transaction, `null` where it is local. An omitted member reads the same, so this is not about
+    what a document says but about how it is read: a member that is there closes its table entry
+    whether it held a value or a `null`, so the walk's lowest open entry keeps step with the
+    document and every member after it costs one key comparison. Left out, the two entries were
+    carried along and compared against every member behind them. Every document this pair
+    produces now holds the same members in the same order as the table built for its transaction
+    type -- 16 for a transfer, 17 with a context scalar, 18 for a register address.
+  - **A pairing uuid of the wrong length is refused rather than dropped.** It is read by
+    `ARNM_JSON_FIELD_UUID` now, like every other uuid in that file, and presence comes from the
+    walk's mask instead of from a string length. `"tx_pairing_community_uuid": "not-a-uuid"` used
+    to be passed over as though the member were absent, which turned a cross-group transaction
+    into a local one without saying so; it now answers `ARNM_ERROR_DECODE_FAILED`.
+- **`arnm_json_read_array()` takes the element type its buffer holds.**
+  `arnm_json_read_array(array, list->values, room, &count)` is
+  `arnm_json_read_array(array, ARNM_JSON_FIELD_TYPE_VALUE, list->values, room, &count)`. A
+  compile error at both call sites in `runtime_from_json.c` and nothing more -- the three arrays
+  are read as handles here, which is the type named.
+- The arnm dependency moves from 0.7.5 to 0.8.1, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of `build.zig.zon`.
+
+## 0.20.0 -- 2026-08-30
+
+`src/mapping/runtime_from_json.c` is written again from the ground up, against the JSON reader
+arnm 0.7.5 replaced its old one with. **This release needs arnm 0.7.5** and does not build against
+0.7.4 or anything before it: the reader lost every call this mapping used to reach for.
+
+**`grdm_complete_transaction_from_json()` lost its `flags` parameter**, which is what moves the
+minor number. arnm 0.7.5 compiles yyjson with the non-standard extensions taken out rather than
+defaulted off, so there is no switch left to pass: comments, trailing commas, `Infinity`, `NaN` and
+a byte order mark are refused whatever a caller would have asked for, and strict RFC 8259 is the
+only reading there is. Callers drop the last argument; nothing else about the call changed.
+
+**The document format did not change.** A document written by 0.19.0 reads here byte for byte the
+way it did there, and this release writes the same one.
+
+### Changed
+
+- **An optional member of the wrong type is read as absent.** arnm 0.7.5 hands a value out only as
+  a handle and has no call that says what one is, so the literal `null` and a number in place of an
+  array are the same answer from the read that wanted an array -- `ARNM_ERROR_INVALID_ENUM_TYPE`,
+  with nothing to tell the two apart. For the three arrays and the two pairing members that answer
+  is now taken as "nothing here", which is the reading `null` has always had here and is the price
+  of keeping it. `"account_balances": 7` is therefore passed over where 0.19.0 refused it.
+  `Refuses_ArrayThatIsNoArray` becomes `Reads_AnOptionalMemberOfTheWrongTypeAsAbsent` and says so.
+  - Only optional members are read that way. Everything a transaction type owns is still required
+    and still refused where it is missing or of the wrong type.
+- **The root walk converts where it can, instead of collecting handles and reading afterwards.** A
+  table converts a member where it stands and cannot convert one later, so `tx_nr`, the community
+  uuid and the running hash go straight into the transaction as the walk meets them, and only the
+  objects and arrays are filed as handles for the walk of their own that follows.
+- **The three context scalars are asked for in a walk of their own.** `target_date`,
+  `timeout_duration` and `previous_tx` share a union and only `transaction_type` says which of them
+  a document owns, so they are left out of the root table and the one that matters is read by a
+  one-field walk of the root once the type is known. That is one extra pass over the root's member
+  chain for the four transaction types that carry such a scalar, and it stops at the key it wants.
+  The same shape reads the pairing community uuid, and only where the root walk found it -- a local
+  transaction never carries one and never pays for it.
+- **An array's elements are taken all at once, into a buffer of handles.** `arnm_json_read_array()`
+  replaced the iterator, and it fills a buffer or refuses -- it does not say how long an array was
+  that did not fit. Each of the three arrays is read into sixteen handles on the stack, and the one
+  that outgrows them is read again into a buffer sized by the document's node count, which no array
+  of it can pass. A transaction of a real ledger does not reach the second read; the benchmark's
+  200-balance transaction does, and the buffer comes back to the caller's allocator from its tail.
+- **base64 is decoded over the document's own characters.** The reader has no field type that
+  decodes base64 any more, so the memo payloads and `body_bytes` are borrowed as strings and spent
+  by `arnm_binary_from_base64_insitu()`, then copied into the transaction's arena. Nothing is
+  written into the arena that a refusal would have to take back, and a string that decodes to no
+  bytes leaves an empty block rather than asking the arena for nothing.
+- The arnm dependency moves from 0.7.3 to 0.7.5, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of `build.zig.zon`.
+
+## 0.19.0 -- 2026-08-26
+
+The JSON write of a transaction needs a little over half the arena it needed yesterday, and the
+document it produces is smaller. Every binary field goes in through one of the three calls arnm
+0.7.3 added for it, and the writer is told how big the document will be before it starts.
+
+**The document format changed**, which is what moves the minor number: `body_bytes` and the
+encrypted memos are base64 now where they were hex. Everything else in the document is byte for
+byte what it was.
+
+**A document written by 0.18.0 will not always be refused by this release.** Every hex digit is
+also a base64 character, so a hex payload whose length happens to be a multiple of four decodes
+without complaint -- to different bytes. `body_bytes` of an even number of bytes is exactly that
+case, which is most of them. Nothing in the document tells the two apart and this release does
+not add anything that would; a document stored by 0.18.0 has to be read by 0.18.0.
+
+**This release needs arnm 0.7.3.** It is the first thing here that does not build against
+0.7.2 -- the three calls and the hint are all new, so arnm carries them as a patch, but they
+have to be there.
+
+### Changed
+
+- **`body_bytes` and the encrypted memos are base64**, through
+  `arnm_json_writer_add_base64()`; public keys, hashes and signatures stay hex, through
+  `arnm_json_writer_add_hex()`. Which alphabet a field takes is a question about its reader:
+  hex for the values a person compares against another tool's output, base64 for the payloads
+  nobody reads by eye and whose length is what matters. Four characters per three bytes instead
+  of two per one takes a third off the two longest fields in the document.
+  - Both come from arnm, so the mapping still holds in a build without libsodium -- which is
+    what kept it on hex until now. `bench_base64` measures arnm's pair against libsodium's:
+    same text out of both, arnm's around eight times faster, because libsodium's runs in
+    constant time and arnm's reads a table. Neither of these two payloads needs that property.
+  - **`Base64Test` in `test_converter` crosses arnm's pair against libsodium's**, which is what
+    makes "this is base64" more than arnm agreeing with itself: every length from 1 to 200
+    encoded by both and compared, then each one's output read back by the other, plus the six
+    vectors RFC 4648 prints pinned against both. Deliberately mutating a single character of
+    arnm's alphabet fails two of those tests and a single entry of its decode table fails a
+    third, so they are known to be load bearing rather than merely green.
+    - Where the two differ is pinned as well: libsodium takes an `ignore` set and skips what it
+      names, arnm takes none and refuses anything outside the alphabet. Both are defensible and
+      only one of them is what this project writes.
+  - `grdm_complete_transaction_from_json()` follows, and so do both of its sizing passes.
+    `base64_binary_size()` is the one place that answers how long a decoded payload is, because
+    a sizing that came out under what the read then writes is an arena the read runs past.
+- **The local `add_hex_fixed()` and `add_hex_block()` are gone**, and with them the buffers they
+  formatted in. What that is worth, measured over
+  48762 real transactions of the Gradido Akademie ledger, on the one whose document is the
+  largest at 3382 bytes:
+  - The arena a write needs at its peak falls from **24208 to 10448 bytes**, and what one
+    still holds after the call from 11888 to 6944. Of the 13760 that went, base64 carries
+    1232, the pool hint 1968, and the two hex calls the rest.
+  - **The document itself is 17 percent shorter**: the largest of the ledger goes from 3382 to
+    2792 bytes, which is `body_bytes` and one memo losing a third of their length each. Most of what went is the serializer's working buffer: it reserves
+    `str_len * 6 + 16` before writing a string, against the possibility that every byte escapes
+    to `\uXXXX`, and hex escapes to nothing. `add_hex()` puts the text in already quoted, as a
+    raw value, which is reserved for at `str_len + 2`. On that document the old buffer grew to
+    12320 bytes for a text of 3382.
+  - Of what an arena still holds after the call, 1792 are
+    the scratch that `add_hex_block()` used to hex into: it was allocated, copied out of, and
+    handed back -- and an arena never took it, because the document's own copy of the same
+    characters was allocated on top of it. There is no scratch and no copy now; the digits are
+    formatted straight into the document.
+  - The peak scales with the longest field rather than with the document, so the further a
+    transaction is from average the more this is worth. A 2 KiB memo used to ask for about
+    24 KiB of working buffer on its own.
+- **Community uuids are written with `arnm_json_writer_add_uuid()`,** and the local
+  `add_uuid()` goes with the hex helpers. That was the last stack buffer in the file and the
+  last copy out of one; `arnm/converter.h` is no longer included here, nothing in the mapping
+  reaching for it any more.
+  - It does not move the peak on this ledger, and is not expected to: a uuid renders as 36
+    characters and `body_bytes` as 982, so it is the hex field that decides how far the
+    serializer's buffer grows. What it removes is the pessimistic reservation of `36 * 6 + 16`
+    per uuid, which is the deciding one on a document with no long hex field in it -- a
+    register-address or a community-root transaction with no memo.
+
+- **The writer is told how big the document will be before it starts.** A walk over the
+  transaction counts the values it will hold and the bytes its copied strings will take, and
+  hands both to `arnm_json_writer_init()` as an `arnm_json_writer_hint`. yyjson's two pools then
+  open once at that size instead of doubling their way there and keeping every chunk they
+  outgrew -- which on the largest transaction of this ledger was 1968 bytes of the 6712 the
+  document occupied.
+  - The walk is exact: it was checked against the real node count of all 48762 documents of the
+    Gradido Akademie ledger, with no disagreement, and predicted the 1968 bytes to the byte.
+  - It does not have to stay exact, and that is deliberate. A field added to the writer and
+    forgotten in the walk costs one extra chunk -- the growth that would have happened anyway --
+    so this is not a second place where a field can be got wrong, only one where it can be got
+    cheap.
+
+- The four branch writers and `add_arrays()` return nothing now. Each of them only ever passed
+  on what the hex helpers answered, and those answers are the writer's own to keep since it is
+  the writer that formats; `grdm_json_from_complete_transaction()` reads them off it at
+  `arnm_json_writer_write()`, which it already did for every field added without a test.
+  `add_transaction_detail()` still answers, for the transaction type it has no layout for.
+- The arnm dependency moves from 0.7.2 to 0.7.3, in both places that name it: the
+  `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of
+  `build.zig.zon`. Each pins the release archive by URL and by hash, so a moved tag or a
+  regenerated archive is caught rather than taken.
+
+### Notes
+
+- No signature, result code or field changed, and neither did a single byte of any document
+  this writes -- `grdm_complete_transaction_from_json()` reads what it read before. A caller
+  updates nothing. What a caller may want to revisit is the size of the arena it hands in.
+- `ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL` is no longer among the answers: it came from
+  `add_hex_fixed()` checking a field against its stack buffer, and there is no stack buffer
+  left to outgrow. It was never named in the public header.
+
+## 0.18.0 -- 2026-08-25
+
+`grdr_complete_transaction` gains a second pair of banks. It could already be built from the
+wire and it can now be written as JSON and read back from it, through arnm's `json_writer.h`
+and `json_reader.h` -- the same yyjson that has been compiled into this library since 0.17.0
+without anything reaching for it.
+
+Nothing that was there moved. Two headers, two translation units, one test binary and one
+benchmark are added; no existing signature, result code or field changed. This is a minor
+rather than a patch because the public surface grew, not because anything in it shifted.
+
+### Added
+
+- **`mapping/json_from_runtime.h` -- `grdm_json_from_complete_transaction()`.** Writes a whole
+  runtime transaction as one JSON object into a block the caller owns. Takes an allocator and
+  the `ARNM_JSON_WRITE_*` flags, so the same call serves a minified payload and the pretty form
+  a person reads.
+- **`mapping/runtime_from_json.h` -- `grdm_complete_transaction_from_json()`.** The way back,
+  and an exact inverse: every field the writer sets down is read here, including the ones the
+  transaction type in hand does not use, so a round trip is a copy and not a reconstruction.
+  The transaction's arena is sized in one pass over the parsed document before a byte of it is
+  copied -- the same shape `grdm_complete_transaction_from_wire()` has always had.
+- **`test_json`**, a googletest binary that builds its fixtures rather than decoding them and
+  therefore needs no libsodium: every branch of both unions written, read and compared, plus
+  what a malformed document is refused for; one case whose arrays are wide enough -- 64
+  balances, 8 memos of differing lengths, 32 signatures -- that a walk which stalls or slips by
+  one cannot pass it; and one that shuffles `transaction_type` to the end of the document.
+  `test_runtime` gains one case that puts a transaction which really came off the wire through
+  the same passage.
+- **`bench_json`**, which carries one transfer in all three shapes -- protobuf, minified JSON,
+  pretty JSON -- and prints their sizes beside the cost of moving between them. It needs no
+  libsodium either, so it builds wherever the library does. The protobuf row is a ruler rather
+  than a competitor: it ends in the same `grdm_complete_transaction_from_wire()` and opens its
+  runtime arena from the host exactly as the JSON reader does, so the two reads are directly
+  comparable. Three fixtures: a small transfer, a large one whose payload is what it mostly
+  costs, and a wide one -- 200 balances, 200 signatures, no memo -- that is no transaction
+  anyone will see and exists only to isolate what a document's element count, rather than its
+  payload, is worth.
+
+### Notes
+
+- **The document's shape.** Binary travels as lowercase hex -- `arnm_binary_to_hex()`, two
+  characters a byte, no separators -- because base64 in this project needs libsodium and the
+  mapping has to hold in a build without it. Community uuids take the canonical 8-4-4-4-12
+  form. Enumerations are written as their enumerator's own spelling,
+  `"GRDT_TRANSACTION_TRANSFER"` rather than `2`, so a value inserted into an enum cannot
+  silently change what an old document means. The full shape is documented at
+  `grdm_json_from_runtime`.
+- **Reading an enumerator back walks `grdt_*_to_string()` in reverse** rather than carrying a
+  second table. A name added to an enum is therefore readable the moment it is spelled there,
+  and there is no second list to fall out of step with the first.
+- **What a document may leave out** is what the transaction does not own: a transfer has no
+  `target_date`, a local transaction has neither pairing member, and the three arrays may be
+  absent as well as empty. Any of those may also be written as the literal `null`, which says
+  the same as leaving it out. Everything a type does own is required, and a missing one is
+  refused rather than defaulted -- a silent zero in a public key or an amount is the expensive
+  kind of forgiveness.
+- The 0.17.0 note that "nothing of this project includes a JSON header" no longer holds: the
+  two headers above include `arnm/json_writer.h` and `arnm/json_reader.h`. The half of that
+  note that still stands is the one that mattered -- no installed header names yyjson, and
+  nothing of yyjson reaches a consumer.
+- **The reader walks every object once instead of asking it for members by name.** A JSON
+  object keeps its members in a chain, so `arnm_json_reader_get_*(reader, key)` walks that
+  chain until the key turns up, and asking one object for all of its keys walks it once per
+  question. The root object carries twenty-odd members and this mapping wants nearly all of
+  them, which is the worst shape that arithmetic has. Now each object is walked once, every key
+  is handed to a recogniser that answers what it is with a `switch` on its length and at most
+  one `memcmp`, and the value is filed in a slot indexed by field -- the shape
+  `geo_address_search_c` uses on planet dumps. Reading afterwards is array indexing with no
+  searching left in it.
+  - Measured on this machine, zig `ReleaseFast`, the read of one transaction: **small transfer
+    1.3 us → 923 ns (−29 %)**, **large transfer 3.7 → 3.2 us (−15 %)**, **wide transfer 38.4 →
+    35.3 us (−8 %)**. The small one gains most because it is nearly all root lookups; the wide
+    one least because its time is mostly the hex of 400 elements, which this does not touch.
+    The writer has no such cost -- it appends and never looks anything up.
+  - Falling out of it: **member order stopped mattering**. The walk collects first and decides
+    afterwards, so a document that puts `transaction_type` after the detail member it governs
+    reads like one that puts it first. A `null` written in place of an optional member counts
+    as absent, the same reading arnm's own reader takes.
+  - Every `case` label is `KEY_LEN(GRDM_JSON_KEY_X)`, worked out by the compiler from the key's
+    own literal. Hand-counted lengths were tried first and four of them were wrong, silently --
+    a mistyped length simply never matches, and the member then reads as absent. Derived from
+    the literal it cannot drift, and two keys of equal length become a duplicate `case`, which
+    is a compile error exactly where a second look at the first byte is needed.
+- **Writing costs more than reading on a transaction that is nearly all payload**, and
+  `bench_json` is where that is visible: a 7.3 KB document takes about 5 us to write and just
+  under 4 us to read in a zig ReleaseFast build, against 1.1 us for the same transaction
+  arriving as protobuf. The reason is the second copy in `add_hex_block()` -- memo and body
+  bytes are hexed into scratch and then copied into the document. Borrowing instead would mean
+  keeping every such block alive until the render and freeing it after, bookkeeping this
+  mapping does not carry today; the trade is written down at the function rather than left to
+  be rediscovered.
+- Not verified: MSVC and Windows, neither of which can be built from this checkout. The zig
+  build (`x86_64-linux-gnu`) and the CMake build were both run, the latter also with
+  `-DENABLE_SANITIZERS=ON`; UBSan and ASan with leak detection are clean over the new tests.
+  The benchmark figures above are one machine's, in a zig `ReleaseFast` build; the CMake build
+  puts the same rows further apart, not closer.
+
 ## 0.17.1 -- 2026-08-24
 
 `-Wall -Wextra -Wconversion` on the C this project owns, in both builds, and the tree is clean

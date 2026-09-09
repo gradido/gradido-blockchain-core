@@ -2,6 +2,8 @@
 #define GRADIDO_BLOCKCHAIN_CORE_TYPES_TRANSACTION_H
 
 #include "gradido_blockchain_core/types/memo_key.h"
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,6 +51,7 @@ typedef enum grdt_transaction {
 } grdt_transaction;
 
 const char *grdt_transaction_to_string(grdt_transaction transaction);
+grdt_transaction grdt_transaction_from_string(const char *transaction_string, size_t string_size);
 
 /*! @} */
 

@@ -234,8 +234,14 @@ pub fn build(b: *std.Build) void {
           .name = "bench_numberToString",
           .srcs = &.{"bench_numberToString.c"},
       }, path);
+      // The JSON benchmark builds its fixtures rather than decoding a sample, so it needs no
+      // libsodium and runs in every build.
+      processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = enable_sodium, .name = "bench_json", .srcs = &.{"bench_json.c"} }, path);
       if (enable_sodium) {
         processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_crypto", .srcs = &.{"bench_crypto.c"} }, path);
+        // Puts arnm's base64 -- the pair the JSON mapping uses -- next to libsodium's, so
+        // needs sodium even though nothing of the mapping does.
+        processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_base64", .srcs = &.{"bench_base64.c"} }, path);
       }
     }
 
@@ -244,6 +250,7 @@ pub fn build(b: *std.Build) void {
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data", .srcs = &.{"test_data.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data_wire", .srcs = &.{"test_data_wire.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_json", .srcs = &.{"test_json.cpp"} }, path);
         if (enable_sodium) {
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_crypto", .srcs = &.{ "test_crypto.cpp", "utils.cpp" } }, path);

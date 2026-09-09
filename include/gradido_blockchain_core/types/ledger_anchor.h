@@ -1,6 +1,8 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_TYPES_LEDGER_ANCHOR_H
 #define GRADIDO_BLOCKCHAIN_CORE_TYPES_LEDGER_ANCHOR_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +20,9 @@ typedef enum {
 } grdt_ledger_anchor;
 
 const char *grdt_ledger_anchor_to_string(grdt_ledger_anchor ledger_anchor);
+grdt_ledger_anchor grdt_ledger_anchor_from_string(
+    const char *ledger_anchor_string, size_t string_size
+);
 
 #ifdef __cplusplus
 }
