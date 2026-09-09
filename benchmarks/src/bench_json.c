@@ -350,7 +350,7 @@ int main(void) {
   /* Chosen so a debug build stays in the same minute as the other bench_* binaries when
      run_all.sh prints them in a row; in a ReleaseFast build the whole run is a quarter second.
      Every row still moves thousands of kilobytes, which is far past what timer noise reaches. */
-  const int stepCount = 10000;
+  const int stepCount = 5000;
 
   bench_section("one transaction, three representations, in bytes");
   printf("%-*s %11s  %11s  %11s\n", BENCH_NAME_WIDTH, "", "protobuf", "json", "json pretty");

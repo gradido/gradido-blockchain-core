@@ -127,6 +127,10 @@ static void add_ledger_anchor(
     bool escape_key,
     const grdw_ledger_anchor *anchor
 ) {
+  if (!anchor) {
+    arnm_json_writer_add_null(writer, key, key_length, escape_key);
+    return;
+  }
   arnm_json_writer_open_object(writer, key, key_length, escape_key);
   add_enum_string(
       writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TYPE), grdt_ledger_anchor_to_string(anchor->type)
@@ -381,20 +385,23 @@ static arnm_result add_complete_transaction(
       grdt_cross_group_to_string(tx->cross_group_type)
   );
 
-  // the two cross-group members are written only where they are set: on a local transaction
-  // they are NULL, and a document that carried them as null would say something the wire never
-  // said
-  if (tx->tx_pairing_community_uuid) {
-    arnm_json_writer_add_uuid(
-        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID),
-        tx->tx_pairing_community_uuid
-    );
-  }
-  if (tx->pairing_ledger_anchor) {
-    add_ledger_anchor(
-        writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR), tx->pairing_ledger_anchor
-    );
-  }
+  // the two cross-group members are written even on a local transaction, where they are NULL,
+  // as the literal `null`. They are the only members whose presence varies, so writing them
+  // always is what makes every document this file produces carry the same members in the same
+  // order -- and that is what lets grdm_complete_transaction_from_json()'s table meet the
+  // document one comparison per member instead of dragging two unfilled entries along behind it.
+  //
+  // It says nothing the wire did not say. arnm 0.8.1 passes a `null` member over as though it
+  // were not there, so the reader answers a written `null` and an omitted member identically,
+  // and the round trip is the same either way.
+  arnm_json_writer_add_uuid(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID),
+      tx->tx_pairing_community_uuid /* NULL writes `null` */
+  );
+
+  add_ledger_anchor(
+      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR), tx->pairing_ledger_anchor
+  );
 
   arnm_json_writer_add_base64(
       writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_BODY_BYTES), tx->body_bytes.data,
@@ -477,11 +484,14 @@ static void calculate_hint(arnm_json_writer_hint *hint, const grdr_complete_tran
   string_bytes += (uint32_t)tx->signature_pairs_count *
                   (HEX_FIELD_BYTES(SIGN_PUBLIC_KEY_SIZE) + HEX_FIELD_BYTES(SIGN_SIGNATURE_SIZE));
 
-  if (tx->tx_pairing_community_uuid) {
-    values += 2u;
-    string_bytes += UUID_FIELD_BYTES;
-  }
-  if (tx->pairing_ledger_anchor) { values += 1u + anchor_values(tx->pairing_ledger_anchor); }
+  // both are written whatever they hold, so both cost a key and a value either way -- the two a
+  // `null` member costs and no fewer. What differs is only what hangs below them: the uuid's
+  // characters, and the anchor's own members, which is why the anchor's present case reads as
+  // its key and whatever anchor_values() counts of the object under it
+  values += 2u;
+  if (tx->tx_pairing_community_uuid) { string_bytes += UUID_FIELD_BYTES; }
+
+  values += tx->pairing_ledger_anchor ? 1u + anchor_values(tx->pairing_ledger_anchor) : 2u;
 
   hint->values = values;
   hint->string_bytes = string_bytes;

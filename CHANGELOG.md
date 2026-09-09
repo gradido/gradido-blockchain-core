@@ -12,17 +12,22 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
-## 0.21.0 -- 2026-09-07
+## 0.21.0 -- 2026-09-09
 
-**This release needs arnm 0.8.0** and does not build against 0.7.5: every adder of
+**This release needs arnm 0.8.1** and does not build against 0.7.5: every adder of
 `arnm/json_writer.h` grew a `size_t key_length, bool escape_key` beside its key, and
 `arnm_binary_to_hex()` and `arnm_binary_to_base64()` take a pointer and a size where they took an
-`arnm_memory_block *`. Both are compile errors at every call site, which is the cheap half of an
-upgrade. What moves the minor number is the half the compiler has nothing to say about: what a
-document is now allowed to hold.
+`arnm_memory_block *`, and 0.8.1 added an element type to `arnm_json_read_array()`. All three are
+compile errors at every call site, which is the cheap half of an upgrade. What moves the minor
+number is the half the compiler has nothing to say about: what a document is now allowed to hold,
+and what one now carries.
 
-**The document format did not change.** A document written by 0.20.0 reads here byte for byte the
-way it did there, and this release writes the same one.
+**The document format changed, in one direction only.** A document written by 0.20.0 reads here
+exactly as it did there. One written *here* does not read in 0.20.0: a local transaction now
+carries `"tx_pairing_community_uuid": null` and `"pairing_ledger_anchor": null`, which 0.20.0
+refuses because arnm 0.7.5 met a `null` in a typed field with `ARNM_ERROR_INVALID_ENUM_TYPE`.
+Nothing else about a document moved -- no member was renamed, reordered against the members it
+already stood beside, or written differently.
 
 ### Changed
 
@@ -62,7 +67,31 @@ way it did there, and this release writes the same one.
   fast path is not open to this order of calls -- the document recedes chunk by chunk exactly as
   it did under 0.7.5, and `ARNM_WARNING_ARENA_MEMORY_NOT_RECLAIMED` reaches the caller under the
   same conditions as before. Nothing about how a caller holds its arena has to change.
-- The arnm dependency moves from 0.7.5 to 0.8.0, in both places that name it: the
+- **`null` is a member's own way of saying it is empty, on both banks.** arnm 0.8.1 meets a
+  `null` in a typed field entry by leaving the target as the caller had it, leaving the entry's
+  bit clear in the mask, and carrying on -- where 0.8.0 answered `ARNM_ERROR_INVALID_ENUM_TYPE`
+  and left every field behind it in the table unread. So `grdm_complete_transaction_from_json()`
+  reads `"tx_pairing_community_uuid": null` as the member not being there, which is what it
+  means, and the members after it are read rather than lost.
+  - `grdm_json_from_complete_transaction()` now writes both cross-group members on every
+    transaction, `null` where it is local. An omitted member reads the same, so this is not about
+    what a document says but about how it is read: a member that is there closes its table entry
+    whether it held a value or a `null`, so the walk's lowest open entry keeps step with the
+    document and every member after it costs one key comparison. Left out, the two entries were
+    carried along and compared against every member behind them. Every document this pair
+    produces now holds the same members in the same order as the table built for its transaction
+    type -- 16 for a transfer, 17 with a context scalar, 18 for a register address.
+  - **A pairing uuid of the wrong length is refused rather than dropped.** It is read by
+    `ARNM_JSON_FIELD_UUID` now, like every other uuid in that file, and presence comes from the
+    walk's mask instead of from a string length. `"tx_pairing_community_uuid": "not-a-uuid"` used
+    to be passed over as though the member were absent, which turned a cross-group transaction
+    into a local one without saying so; it now answers `ARNM_ERROR_DECODE_FAILED`.
+- **`arnm_json_read_array()` takes the element type its buffer holds.**
+  `arnm_json_read_array(array, list->values, room, &count)` is
+  `arnm_json_read_array(array, ARNM_JSON_FIELD_TYPE_VALUE, list->values, room, &count)`. A
+  compile error at both call sites in `runtime_from_json.c` and nothing more -- the three arrays
+  are read as handles here, which is the type named.
+- The arnm dependency moves from 0.7.5 to 0.8.1, in both places that name it: the
   `FetchContent_Declare(arnm ...)` in `CMakeLists.txt` and the `.arnm` entry of `build.zig.zon`.
 
 ## 0.20.0 -- 2026-08-30

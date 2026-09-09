@@ -459,8 +459,12 @@ TEST(JsonMappingTest, EmptyArrays_And_EmptyBodyBytes_RoundTrip) {
   const std::string json = roundTrip(source.get());
   EXPECT_NE(std::string::npos, json.find("\"account_balances\":[]"));
   EXPECT_NE(std::string::npos, json.find("\"body_bytes\":\"\""));
-  // a local transaction carries neither pairing member, so neither is written
-  EXPECT_EQ(std::string::npos, json.find("tx_pairing_community_uuid"));
+  // a local transaction carries neither pairing member, and both are written all the same, as
+  // the literal `null`: every document this mapping produces holds the same members in the same
+  // order, which is what the reader's table is built against. That they still read back as
+  // absent is what roundTrip()'s expectSame() above has already checked.
+  EXPECT_NE(std::string::npos, json.find("\"tx_pairing_community_uuid\":null"));
+  EXPECT_NE(std::string::npos, json.find("\"pairing_ledger_anchor\":null"));
 }
 
 TEST(JsonMappingTest, Pretty_ReadsBackTheSame) {

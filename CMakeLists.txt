@@ -85,11 +85,11 @@ endif()
 # directory that holds no CMakeLists, which is the documented way to say populate only. Point
 # it at the real thing instead if this project ever wants that target.
 FetchContent_Declare(arnm
-  URL https://github.com/gradido/arnm/archive/refs/tags/v0.8.0.tar.gz
+  URL https://github.com/gradido/arnm/archive/refs/tags/v0.8.1.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=6d544586682d303231d07192ca7129713c960b594e521aaa76688b55b0728df0
+  URL_HASH SHA256=c86d5068a218f1fe25dff762c0fea0e779379eb94464680faf6aacaa7c8553b4
   SOURCE_SUBDIR do-not-add-subdirectory
 )
 FetchContent_MakeAvailable(arnm)

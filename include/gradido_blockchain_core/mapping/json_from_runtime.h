@@ -52,8 +52,10 @@ extern "C" {
  *  the one member its type owns -- @c "transfer", @c "register_address" or
  *  @c "community_root" -- and its context beside it, @c "target_date",
  *  @c "timeout_duration" or @c "previous_tx". The three arrays follow, each written even when
- *  empty. @c "tx_pairing_community_uuid" and @c "pairing_ledger_anchor" appear only on a
- *  transaction that is not local, exactly as they are only set there.
+ *  empty. @c "tx_pairing_community_uuid" and @c "pairing_ledger_anchor" are always there too,
+ *  written as @c null on a local transaction, which is where they are not set --
+ *  @ref grdm_runtime_from_json reads a @c null member and an absent one as the same thing, and
+ *  spelling them out keeps every document's members in the order that mapping's table expects.
  *
  *  @code
  *  arnm scratch;

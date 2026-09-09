@@ -25,7 +25,7 @@
 #include <string.h>
 
 /*
- * How this file reads a document, and what arnm 0.7.5 decides for it.
+ * How this file reads a document, and what arnm 0.8.0 decides for it.
  *
  * A JSON object keeps its members in a chain, so asking it for one key walks that chain until the
  * key turns up. Asking it for all of its keys therefore walks it once per question -- the square
@@ -57,12 +57,34 @@
  *
  * ### Optional members, and what a document may put in them
  *
- * The three arrays and the two pairing members are optional. arnm 0.7.5 has no way to ask a value
- * what it is, so `null` in one of them cannot be told from a number: both come back as
- * ARNM_ERROR_INVALID_ENUM_TYPE from the read that wanted an array or an object. An optional member
- * that will not read as its shape is therefore taken as absent, whichever of the two it was. That
- * is the reading a mapper wants for `null` -- "nothing here", the same as leaving the member out --
- * and it is why `"account_balances": 7` is passed over rather than refused.
+ * The three arrays and the two pairing members are optional, and which is which is said at the
+ * member -- ADD_REQUIRED() or ADD_OPTIONAL() as the root table is built -- rather than in a list
+ * somewhere else. What the walk found is a mask, and the bits the required entries claimed are
+ * what the whole object is judged by, once.
+ *
+ * `null` is the answer a document may put in an optional member, and it means what leaving the
+ * member out means. arnm 0.8.1 reads it that way on its own: a typed entry meets a `null` by
+ * leaving its target as the caller had it and its bit clear in the mask, and the walk carries on.
+ * So every one of the five is a plain entry, and "absent" and "there and empty" arrive as the
+ * same cleared bit, which is what this mapping wants of both.
+ *
+ * The one type that still receives a `null` is ARNM_JSON_FIELD_TYPE_VALUE, which converts
+ * nothing. Both places that take one ask arnm_json_read_is_null() themselves: the three arrays
+ * through read_elements(), which reads `null`, a number and an object alike as "nothing here" --
+ * so `"account_balances": 7` is passed over rather than refused -- and `pairing_ledger_anchor`,
+ * where the question costs nothing because the handle is already in hand.
+ *
+ * ### Why the writer spells the empty ones out
+ *
+ * grdm_json_from_complete_transaction() writes both pairing members on every transaction, `null`
+ * where the transaction is local. It does not have to -- an omitted member reads the same -- and
+ * it is done for the walk above. A member that is there closes its entry whether it held a value
+ * or a `null`, so the table's lowest open entry keeps step with the document and every member
+ * after it costs one comparison. A member left out closes nothing, and the two entries would be
+ * carried along and compared against every member behind them for the rest of the walk. Written
+ * this way, every document this pair produces carries the same members in the same order as the
+ * table built for its transaction type -- sixteen for a transfer, seventeen with a context
+ * scalar, eighteen for a register address.
  *
  * Everything a transaction type owns is required, and a missing one is refused rather than
  * defaulted: a silent zero in a public key or an amount is the expensive kind of forgiveness.
@@ -283,7 +305,10 @@ typedef struct root_view {
   arnm_json_value *account_balances;
   arnm_json_value *encrypted_memos;
   arnm_json_value *signature_pairs;
-  arnm_memory_block tx_pairing_community_uuid;
+  /** Decoded where the root walk met it; read only where @ref has_tx_pairing_community_uuid. */
+  uint8_t tx_pairing_community_uuid[ARNM_UUID_BINARY_SIZE];
+  /** Whether the root walk read the member above: the mask's word, and not a length's. */
+  bool has_tx_pairing_community_uuid;
   arnm_json_value *pairing_ledger_anchor;
   arnm_memory_block transaction_type;
   arnm_memory_block balance_derivation_type;
@@ -348,6 +373,7 @@ static arnm_result read_root(
   arnm_memory_block tx_community_uuid = ARNM_JSON_BLOCK_OF(tx->tx_community_uuid);
   arnm_memory_block tx_running_hash = ARNM_JSON_BLOCK_OF(tx->tx_running_hash);
   arnm_memory_block address_name = {NULL, 0};
+  arnm_memory_block pairing_community_uuid = ARNM_JSON_BLOCK_OF(view->tx_pairing_community_uuid);
   uint8_t field_count = 0;
   // the bits of the members this document has to carry, claimed as the table is built. A count
   // cannot answer this: the table's length changes with the transaction type, and five of its
@@ -392,9 +418,14 @@ static arnm_result read_root(
   ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos));
   ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_SIGNATURE_PAIRS, &view->signature_pairs));
   ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_CROSS_GROUP_TYPE, &view->cross_group_type));
-  ADD_OPTIONAL(ARNM_JSON_FIELD_STRING(
-      GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &view->tx_pairing_community_uuid
-  ));
+  // arnm 0.8.1 passes a `null` over instead of refusing the walk, so this can be the typed entry
+  // every other uuid in this file is. Which of the two a document held -- the member absent, or
+  // there and `null` -- is a difference nothing downstream acts on, and the mask folds them
+  // together the same way for both
+  const uint8_t pairing_community_uuid_index = field_count;
+  ADD_OPTIONAL(
+      ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &pairing_community_uuid)
+  );
   ADD_OPTIONAL(
       ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, &view->pairing_ledger_anchor)
   );
@@ -406,6 +437,7 @@ static arnm_result read_root(
   // asked before anything is converted, so a name is never read out of a member that was not
   // there -- the mask is what says it was
   if (required != (seen & required)) { return ARNM_ERROR_DECODE_FAILED; }
+  view->has_tx_pairing_community_uuid = (0 != (seen & SEEN(pairing_community_uuid_index)));
 
   if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
     tx->address_type = grdt_address_from_string(chars(&address_name), address_name.size);
@@ -485,9 +517,11 @@ static arnm_result read_elements(
   init_elements(list);
   if (!array) { return ARNM_SUCCESS; }
 
-  arnm_result result = arnm_json_read_array(array, list->values, ELEMENTS_INLINE, &list->count);
+  arnm_result result = arnm_json_read_array(
+      array, ARNM_JSON_FIELD_TYPE_VALUE, list->values, ELEMENTS_INLINE, &list->count
+  );
   // `null`, a number, an object: an optional member that is not an array carries nothing this
-  // mapping can read, and arnm 0.7.5 answers all three the same way
+  // mapping can read, and one answer serves all three
   if (ARNM_ERROR_INVALID_ENUM_TYPE == result) { return ARNM_SUCCESS; }
   if (ARNM_ERROR_DESTINATION_BUFFER_TO_SMALL != result) { return result; }
 
@@ -499,7 +533,9 @@ static arnm_result read_elements(
   );
   if (ARNM_SUCCESS != result) { return result; }
   list->values = (arnm_json_value **)(void *)list->widened.data;
-  return arnm_json_read_array(array, list->values, upper_bound, &list->count);
+  return arnm_json_read_array(
+      array, ARNM_JSON_FIELD_TYPE_VALUE, list->values, upper_bound, &list->count
+  );
 }
 
 /** @brief Give a widened buffer back, and leave the list empty either way. */
@@ -578,10 +614,12 @@ static arnm_result calculate_memory_size(
   }
   total += ARNM_ALIGN8((uint64_t)signatures->count * sizeof(grdw_signature_pair));
 
-  if (ARNM_UUID_BINARY_SIZE == view->tx_pairing_community_uuid.size) {
+  if (view->has_tx_pairing_community_uuid) {
     total += ARNM_ALIGN8((uint64_t)ARNM_UUID_BINARY_SIZE);
   }
-  if (view->pairing_ledger_anchor) { total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor)); }
+  if (view->pairing_ledger_anchor && !arnm_json_read_is_null(view->pairing_ledger_anchor)) {
+    total += ARNM_ALIGN8((uint64_t)sizeof(grdw_ledger_anchor));
+  }
 
   uint32_t body_size = 0;
   const arnm_result sized = arnm_base64_binary_size(
@@ -751,16 +789,15 @@ static arnm_result read_complete_transaction(
   result = read_signature_pairs(tx, signatures);
   if (ARNM_SUCCESS != result) { return result; }
 
-  if (ARNM_UUID_BINARY_SIZE == view->tx_pairing_community_uuid.size) {
+  if (view->has_tx_pairing_community_uuid) {
     result = arnm_alloc(&tx->tx_pairing_community_uuid, ARNM_UUID_BINARY_SIZE, &tx->memory_area);
     if (ARNM_SUCCESS != result) { return result; }
-    result = arnm_binary_from_hex_with_known_hex_size(
-        tx->tx_pairing_community_uuid, (const char *)view->tx_pairing_community_uuid.data,
-        view->tx_pairing_community_uuid.size
-    );
-    if (ARNM_SUCCESS != result) { return result; }
+    // decoded by the root walk, into the view it was handed; nothing is parsed twice
+    memcpy(tx->tx_pairing_community_uuid, view->tx_pairing_community_uuid, ARNM_UUID_BINARY_SIZE);
   }
-  if (view->pairing_ledger_anchor) {
+  // the same reading as the uuid above, and free here: the member is already a handle, so a
+  // `null` is a question asked of it rather than a walk that has to be repeated
+  if (view->pairing_ledger_anchor && !arnm_json_read_is_null(view->pairing_ledger_anchor)) {
     result = arnm_alloc(
         (uint8_t **)&tx->pairing_ledger_anchor, (uint32_t)sizeof(grdw_ledger_anchor),
         &tx->memory_area

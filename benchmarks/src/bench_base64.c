@@ -185,7 +185,7 @@ int main(void) {
   prepare_test_data();
   bench_prepared(timeUsed);
 
-  const int stepCount = 200000;
+  const int stepCount = 20000;
 
   printf(
       "\nsame text out of both, checked above; %u / %u / %u byte payloads\n", SMALL_SIZE, BODY_SIZE,
