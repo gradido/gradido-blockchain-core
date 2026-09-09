@@ -292,6 +292,42 @@ typedef struct root_view {
 } root_view;
 
 /**
+ * @brief Entries the root table can hold, which is the widest a transaction type makes it.
+ *
+ * Eighteen, for a register address; every other type builds a shorter one, and the two spare are
+ * room for a member added below without this number having to be thought about again.
+ */
+#define MAX_FIELD_COUNT 20
+
+/** A walk carries one bit per field in a @c uint64_t, and arnm refuses a longer table. */
+_Static_assert(
+    MAX_FIELD_COUNT <= ARNM_JSON_FIELDS_MAX, "the root table is longer than one walk can carry"
+);
+
+/**
+ * @brief Append an entry the document must carry, claiming its bit in @c required.
+ *
+ * The bit is taken before the entry is written, so it is the index this entry gets and not the
+ * next one's. Both appenders read @c fields, @c field_count and @c required from the walk they
+ * are written in -- they exist to keep the table one line per member, which is what makes the
+ * order it is in readable against the order the writer puts the members in.
+ */
+#define ADD_REQUIRED(entry)                                                                        \
+  do {                                                                                             \
+    required |= SEEN(field_count);                                                                 \
+    fields[field_count++] = (arnm_json_field)entry;                                                \
+  } while (0)
+
+/**
+ * @brief Append an entry a document may leave out; its bit stays clear in @c required.
+ *
+ * Which member is optional is said here, at the member, rather than in a list somewhere else that
+ * a field added below would fall out of step with.
+ */
+#define ADD_OPTIONAL(entry)                                                                        \
+  do { fields[field_count++] = (arnm_json_field)entry; } while (0)
+
+/**
  * @brief Walk the root once, converting what can be converted and filing the rest.
  *
  * @param[out]    view Receives the handles and the borrowed strings; every field is written.
@@ -301,9 +337,6 @@ typedef struct root_view {
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE The root is no object, or a member is of another JSON type
  *                                      than the field it names.
  */
-
-#define MAX_FIELD_COUNT 20
-
 static arnm_result read_root(
     root_view *view,
     grdr_complete_transaction *tx,
@@ -316,86 +349,69 @@ static arnm_result read_root(
   arnm_memory_block tx_running_hash = ARNM_JSON_BLOCK_OF(tx->tx_running_hash);
   arnm_memory_block address_name = {NULL, 0};
   uint8_t field_count = 0;
+  // the bits of the members this document has to carry, claimed as the table is built. A count
+  // cannot answer this: the table's length changes with the transaction type, and five of its
+  // entries are ones a document is allowed to leave out
+  uint64_t required = 0;
   arnm_json_field fields[MAX_FIELD_COUNT];
   // read again, to have the key consumed, to prevent compare it again on every walk step
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
-      GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type
-  );
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr);
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at);
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CREATED_AT, &view->created_at);
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_COMMUNITY_UUID, &tx_community_uuid);
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_LEDGER_ANCHOR, &view->ledger_anchor);
+  ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_TRANSACTION_TYPE, &view->transaction_type));
+  ADD_REQUIRED(ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_TX_NR, &tx->tx_nr));
+  ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CONFIRMED_AT, &view->confirmed_at));
+  ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_CREATED_AT, &view->created_at));
+  ADD_REQUIRED(ARNM_JSON_FIELD_UUID(GRDM_JSON_KEY_TX_COMMUNITY_UUID, &tx_community_uuid));
+  ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_LEDGER_ANCHOR, &view->ledger_anchor));
   if (GRDT_TRANSACTION_TRANSFER == transaction_type ||
       GRDT_TRANSACTION_CREATION == transaction_type ||
       GRDT_TRANSACTION_DEFERRED_TRANSFER == transaction_type ||
       GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER == transaction_type) {
-    fields[field_count++] =
-        (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_TRANSFER, &view->transfer);
+    ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_TRANSFER, &view->transfer));
   } else if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
-    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
-        GRDM_JSON_KEY_REGISTER_ADDRESS, &view->register_address
-    );
+    ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_REGISTER_ADDRESS, &view->register_address));
   } else if (GRDT_TRANSACTION_COMMUNITY_ROOT == transaction_type) {
-    fields[field_count++] =
-        (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_COMMUNITY_ROOT, &view->community_root);
+    ADD_REQUIRED(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_COMMUNITY_ROOT, &view->community_root));
   }
 
   if (GRDT_TRANSACTION_CREATION == transaction_type) {
-    fields[field_count++] =
-        (arnm_json_field)ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TARGET_DATE, &tx->target_date);
+    ADD_REQUIRED(ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TARGET_DATE, &tx->target_date));
   } else if (GRDT_TRANSACTION_DEFERRED_TRANSFER == transaction_type) {
-    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_INT64(
-        GRDM_JSON_KEY_TIMEOUT_DURATION, &tx->timeout_duration
-    );
+    ADD_REQUIRED(ARNM_JSON_FIELD_INT64(GRDM_JSON_KEY_TIMEOUT_DURATION, &tx->timeout_duration));
   } else if (
       GRDT_TRANSACTION_REDEEM_DEFERRED_TRANSFER == transaction_type ||
       GRDT_TRANSACTION_TIMEOUT_DEFERRED_TRANSFER == transaction_type) {
-    fields[field_count++] =
-        (arnm_json_field)ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_PREVIOUS_TX, &tx->previous_tx);
+    ADD_REQUIRED(ARNM_JSON_FIELD_UINT64(GRDM_JSON_KEY_PREVIOUS_TX, &tx->previous_tx));
   } else if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
-    fields[field_count++] =
-        (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_ADDRESS_TYPE, &address_name);
-    fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_UINT32(
-        GRDM_JSON_KEY_DERIVATION_INDEX, &tx->derivation_index
-    );
+    ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_ADDRESS_TYPE, &address_name));
+    ADD_REQUIRED(ARNM_JSON_FIELD_UINT32(GRDM_JSON_KEY_DERIVATION_INDEX, &tx->derivation_index));
   }
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
-      GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE, &view->balance_derivation_type
+  ADD_REQUIRED(
+      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE, &view->balance_derivation_type)
   );
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_TX_RUNNING_HASH, &tx_running_hash);
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
-      GRDM_JSON_KEY_ACCOUNT_BALANCES, &view->account_balances
-  );
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos);
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_SIGNATURE_PAIRS, &view->signature_pairs);
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
-      GRDM_JSON_KEY_CROSS_GROUP_TYPE, &view->cross_group_type
-  );
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_STRING(
+  ADD_REQUIRED(ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_TX_RUNNING_HASH, &tx_running_hash));
+  ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ACCOUNT_BALANCES, &view->account_balances));
+  ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos));
+  ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_SIGNATURE_PAIRS, &view->signature_pairs));
+  ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_CROSS_GROUP_TYPE, &view->cross_group_type));
+  ADD_OPTIONAL(ARNM_JSON_FIELD_STRING(
       GRDM_JSON_KEY_TX_PAIRING_COMMUNITY_UUID, &view->tx_pairing_community_uuid
+  ));
+  ADD_OPTIONAL(
+      ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, &view->pairing_ledger_anchor)
   );
-  fields[field_count++] = (arnm_json_field)ARNM_JSON_FIELD_VALUE(
-      GRDM_JSON_KEY_PAIRING_LEDGER_ANCHOR, &view->pairing_ledger_anchor
-  );
-  fields[field_count++] =
-      (arnm_json_field)ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BODY_BYTES, &view->body_bytes);
+  ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BODY_BYTES, &view->body_bytes));
 
   uint64_t seen = 0;
   const arnm_result result = arnm_json_read_object(root, fields, field_count, &seen);
   if (ARNM_SUCCESS != result) { return result; }
+  // asked before anything is converted, so a name is never read out of a member that was not
+  // there -- the mask is what says it was
+  if (required != (seen & required)) { return ARNM_ERROR_DECODE_FAILED; }
+
   if (GRDT_TRANSACTION_REGISTER_ADDRESS == transaction_type) {
-    tx->address_type = grdt_address_from_string((const char *)address_name.data, address_name.size);
-    if (GRDT_ADDRESS_NONE == tx->address_type) return ARNM_ERROR_ENUM_UNKNOWN;
+    tx->address_type = grdt_address_from_string(chars(&address_name), address_name.size);
+    if (GRDT_ADDRESS_NONE == tx->address_type) { return ARNM_ERROR_ENUM_UNKNOWN; }
   }
-  return (field_count == (seen & field_count)) ? ARNM_SUCCESS : ARNM_ERROR_DECODE_FAILED;
+  return ARNM_SUCCESS;
 }
 
 /**
