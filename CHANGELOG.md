@@ -12,6 +12,29 @@ This file starts at 0.16.0. The version had stood at 0.15.2 since the zig build 
 and did not move through the rewrite that followed, so there is no earlier boundary to write
 entries against; the git history is the record for anything before this.
 
+## Unreleased
+
+Additions only: nothing that builds against 0.21.0 changes, and every existing function returns
+what it returned before.
+
+### Added
+
+- **`data/unit.h` -- `grdd_unit_calculate_decay_windowed()`.** The same decay as
+  `grdd_unit_calculate_decay()`, with the sub-year factor built from five 5 bit windows instead of
+  one step per bit: five multiplications instead of up to 25. It exists for the zero knowledge
+  circuit of `gradido-blockchain-zk`, which has to prove every multiplication and recomputes this
+  function bit for bit. The window factors come from the same `DECAY_POWERS` table, so no new
+  constant enters. Fewer truncations shift the last unit for huge amounts: of 4252 vectors 89
+  differ, by at most 2 units, the smallest at 36 trillion GDD; below 10 billion GDD the two agree
+  exactly. Negative durations are handed to `grdd_unit_calculate_decay()`.
+- **`helper/precalculate_decay_windows.c`**, which prints the `DECAY_WINDOW_FACTORS` table in
+  `unit.c` from `DECAY_POWERS`; built by `helper/CMakeLists.txt` next to
+  `precalculate_decay_table`.
+- **`test_unit`** gains four cases for the windowed decay: the existing decay vectors, 200,000
+  random amounts below 10 billion GDD against the bit chain, four pinned amounts where the chains
+  part, and the edges (zero, a remainder with every window digit set, 63 and 64 years, negative
+  durations).
+
 ## 0.21.0 -- 2026-09-09
 
 **This release needs arnm 0.8.1** and does not build against 0.7.5: every adder of

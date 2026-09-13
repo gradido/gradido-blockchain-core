@@ -11,3 +11,4 @@ include_directories(
 )
 
 add_executable(precalculate_decay_table precalculate_decay_table.c ../third_party/fp256/src/fp256_mul.c ../third_party/fp256/src/fp256_utils.c)
+add_executable(precalculate_decay_windows precalculate_decay_windows.c)
