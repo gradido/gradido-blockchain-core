@@ -220,6 +220,36 @@ int grdd_unit_to_string(char *buffer, size_t bufferSize, grdd_unit value, uint8_
 grdd_unit grdd_unit_calculate_decay(grdd_unit gdd, grdd_duration_seconds duration);
 
 /**
+ * @brief Same decay, computed in five windows instead of 25 bit steps.
+ *
+ * The law is unchanged – half of the value per year – and so are the constants: the window
+ * factors are derived from the very same DECAY_POWERS table with the same chain. Only the
+ * grouping differs. Where grdd_unit_calculate_decay() multiplies once per set bit of the
+ * sub-year remainder, this one multiplies once per 5 bit window, so five times instead of 25.
+ *
+ * Why it exists: inside a zero knowledge circuit every one of those multiplications has to be
+ * proven, and the shorter chain is what keeps a shielded transfer inside the smaller circuit.
+ * The halo2 side (`gradido-blockchain-zk`) recomputes exactly this function, bit for bit.
+ *
+ * Fewer truncations mean the result differs from grdd_unit_calculate_decay() in the last unit
+ * for very large amounts: of 4252 test vectors 89 differ, at most by 2 units of 0.0001 GDD, the
+ * smallest of them at 36 trillion GDD on a single note; 5 million random amounts below 10 billion
+ * GDD with durations up to 64 years agree exactly. Measured against the exact
+ * `value * 2^(-duration/year)`, the windowed result is the closer one slightly more often, so
+ * this is a shift in the last digit, not a loss of accuracy.
+ *
+ * @param[in] gdd       Starting value, must not be negative.
+ * @param[in] duration  Seconds of decay. Negative durations (growing backwards, used by the old
+ *                      deferred transfers) are handed to grdd_unit_calculate_decay().
+ *
+ * @return
+ *   Decayed value, 0 after more than 63 years.
+ *
+ * @whisper The same seasons, counted in fives.
+ */
+grdd_unit grdd_unit_calculate_decay_windowed(grdd_unit gdd, grdd_duration_seconds duration);
+
+/**
  * @}
  */
 

@@ -430,6 +430,68 @@ TEST(GradidoUnitTest, DecayTestVectors) {
   }
 }
 
+TEST(GradidoUnitTest, DecayWindowedTestVectors) {
+  // amounts of everyday size: the windowed chain gives exactly the same result
+  for (const auto &test : DECAY_TEST_VECTORS) {
+    EXPECT_EQ(grdd_unit_calculate_decay_windowed(test.amount, test.duration), test.expected)
+        << "failed test vector: " << test.name;
+  }
+}
+
+TEST(GradidoUnitTest, DecayWindowedAgreesBelowTenBillionGdd) {
+  std::mt19937_64 rng(7);
+  std::uniform_int_distribution<grdd_unit> amounts(0, 100000000000000LL); // 10 billion GDD
+  std::uniform_int_distribution<grdd_duration_seconds> durations(0, 64LL * 31556952);
+  for (int i = 0; i < 200'000; ++i) {
+    grdd_unit amount = amounts(rng);
+    grdd_duration_seconds duration = durations(rng);
+    ASSERT_EQ(
+        grdd_unit_calculate_decay_windowed(amount, duration),
+        grdd_unit_calculate_decay(amount, duration)
+    ) << "amount "
+      << amount << ", duration " << duration;
+  }
+}
+
+TEST(GradidoUnitTest, DecayWindowedHugeAmounts) {
+  // where the two chains part, by one or two units; values from
+  // grdd_unit_calculate_decay_windowed() as generated for the test vectors of
+  // gradido-blockchain-zk, pinning the window table
+  struct Case {
+    grdd_unit amount;
+    grdd_duration_seconds duration;
+    grdd_unit bit_chain;
+    grdd_unit windowed;
+  };
+  const Case cases[] = {
+      {4611686018427387903LL, 86400, 4602942386755233962LL, 4602942386755233961LL},
+      {3869433431323140154LL, 2549, 3869216792908366033LL, 3869216792908366034LL},
+      {6864085402324294824LL, 5986, 6863182956266887544LL, 6863182956266887542LL},
+      {361748298072325198LL, 16764573, 250313839759646950LL, 250313839759646951LL},
+  };
+  for (const auto &c : cases) {
+    EXPECT_EQ(grdd_unit_calculate_decay(c.amount, c.duration), c.bit_chain) << c.amount;
+    EXPECT_EQ(grdd_unit_calculate_decay_windowed(c.amount, c.duration), c.windowed) << c.amount;
+  }
+}
+
+TEST(GradidoUnitTest, DecayWindowedEdges) {
+  const grdd_unit amount = 10000000; // 1000 GDD
+  EXPECT_EQ(grdd_unit_calculate_decay_windowed(amount, 0), amount);
+  // every window digit set: the largest remainder below a year
+  EXPECT_EQ(
+      grdd_unit_calculate_decay_windowed(amount, 31556951),
+      grdd_unit_calculate_decay(amount, 31556951)
+  );
+  EXPECT_EQ(grdd_unit_calculate_decay_windowed(amount, 63LL * 31556952), 0);
+  EXPECT_EQ(grdd_unit_calculate_decay_windowed(INT64_MAX, 63LL * 31556952 + 5), 0);
+  EXPECT_EQ(grdd_unit_calculate_decay_windowed(amount, 64LL * 31556952), 0);
+  // growing backwards is the bit chain's
+  for (grdd_duration_seconds d : {-1LL, -86400LL, -31556952LL}) {
+    EXPECT_EQ(grdd_unit_calculate_decay_windowed(amount, d), grdd_unit_calculate_decay(amount, d));
+  }
+}
+
 TEST(GradidoUnitTest, toString_Randomized) {
   std::mt19937_64 rng(42);                                // deterministisch
   std::uniform_real_distribution<double> dist(-1e9, 1e9); // innerhalb double-Bereich
