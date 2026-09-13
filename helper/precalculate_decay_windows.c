@@ -30,7 +30,22 @@ static const uint64_t DECAY_POWERS[25] = {
     12760787697116905635ULL,
 };
 
-// high 64 bits of a * b, without a 128 bit integer type (MSVC has none)
+/**
+ * @brief High half of a full 64 x 64 bit product, without a 128 bit integer type.
+ *
+ * Splits both operands into 32 bit halves and recombines the four partial products, because
+ * MSVC offers no `__uint128_t`. Every partial product stays below 2^64, and so does the sum of
+ * carries: at most (2^32 - 1) + (2^32 - 1) + (2^32 - 1)^2 = 2^64 - 1. Nothing wraps; the carries
+ * settle into the upper half exactly as a 128 bit multiplication would leave them.
+ *
+ * Read as Q64.64 fractions, `a / 2^64` times `b / 2^64`, the result is the product truncated
+ * to 64 fractional bits: the part below 2^-64 is dropped, never rounded.
+ *
+ * @param[in] a  Any value in [0, 2^64 - 1].
+ * @param[in] b  Any value in [0, 2^64 - 1].
+ * @return       floor(a * b / 2^64), exact, in [0, 2^64 - 2]. Pure and deterministic: no state,
+ *               no side effects, the same result on every platform.
+ */
 static uint64_t mul_high(uint64_t a, uint64_t b) {
     uint64_t a_lo = (uint32_t)a, a_hi = a >> 32;
     uint64_t b_lo = (uint32_t)b, b_hi = b >> 32;
@@ -42,7 +57,29 @@ static uint64_t mul_high(uint64_t a, uint64_t b) {
     return hi_hi + (hi_lo >> 32) + (cross >> 32);
 }
 
-// floor(a * b / 2^64) in Q64.64, where a may be exactly 2^64 (represented as hi = 1)
+/**
+ * @brief Multiplies an accumulated Q64.64 factor by one decay power, in place.
+ *
+ * The pair `(*hi, *lo)` holds a factor `hi + lo / 2^64` from the closed interval [0, 1]. Only
+ * two kinds of state are accepted:
+ * - `*hi == 1 && *lo == 0`: exactly 1.0, the untouched start of a chain. The product is then
+ *   `b` itself, taken over without truncation.
+ * - `*hi == 0`, `*lo` any value: the factor `lo / 2^64` in [0, 1). The product is
+ *   `floor(lo * b / 2^64)` (mul_high()), truncated toward zero; each step loses less than 2^-64.
+ *
+ * Any other state (`*hi == 1` with `*lo != 0`, or `*hi > 1`) is outside the contract and is not
+ * detected: the integer part would be dropped silently. The factor only ever shrinks or stays,
+ * so a chain that starts at 1.0 never leaves the accepted states.
+ *
+ * Both pointers are always written: afterwards `*hi == 0` and `*lo` holds the new factor. The
+ * order in which powers are applied matters, because every step truncates.
+ *
+ * @param[in,out] hi  Integer part of the factor, 0 or 1; set to 0. Must be non-null and must not
+ *                    alias `lo`.
+ * @param[in,out] lo  Fractional part of the factor in units of 2^-64; replaced by the product.
+ *                    Must be non-null.
+ * @param[in]     b   Decay power as a Q64.64 fraction `b / 2^64`, any value in [0, 2^64 - 1].
+ */
 static void mul_q64(uint64_t *hi, uint64_t *lo, uint64_t b) {
     if (*hi == 1 && *lo == 0) {
         *lo = b;
@@ -53,6 +90,28 @@ static void mul_q64(uint64_t *hi, uint64_t *lo, uint64_t b) {
     *hi = 0;
 }
 
+/**
+ * @brief Prints the window table of the decay as C source to stdout.
+ *
+ * Takes no arguments and reads nothing: no input, no clock, no randomness, only the 25
+ * DECAY_POWERS above and unsigned 64 bit arithmetic. The output is therefore identical on every
+ * run and every platform, byte for byte.
+ *
+ * It writes `static const uint64_t DECAY_WINDOW_FACTORS[5][32] = { ... };`. For window `j` in
+ * [0, 4] and digit `c` in [1, 31], the entry is the product of `DECAY_POWERS[5 * j + bit]` over
+ * the set bits of `c`, applied in ascending bit order starting from exactly 1.0, in Q64.64 with
+ * truncation after every multiplication (mul_q64()) — the factor of `c * 2^(5 * j)` seconds of
+ * decay. Entry `[j][0]` is written as `0ULL`: its factor would be exactly 1.0 = 2^64, which does
+ * not fit into 64 bits, and grdd_unit_calculate_decay_windowed() skips a zero digit instead of
+ * reading it. The seconds of one year, grouped into five windows, each already carrying the
+ * decay that its span of time asks for.
+ *
+ * The return values of printf() are used only to wrap lines near 80 columns; write errors are
+ * not reported.
+ *
+ * @return  Always 0.
+ * @whisper Each window a season, each digit a day that already knows its weight
+ */
 int main(void) {
     printf("static const uint64_t DECAY_WINDOW_FACTORS[%d][%d] = {\n", WINDOWS, WINDOW_SIZE);
     for (int j = 0; j < WINDOWS; ++j) {
