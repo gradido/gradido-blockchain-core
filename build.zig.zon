@@ -17,8 +17,8 @@
             .hash = "zig_compile_commands-0.0.1-OZg5-e_JAAAGg1WHAePtq4l4Uvjs34BexnFFCZk63EaG",
         },
         .arnm = .{
-            .url = "https://github.com/gradido/arnm/archive/refs/tags/v0.8.1.tar.gz",
-            .hash = "arnm-0.8.1-ZdhGsKDJIABS-gEr8bPKHaSzVNqJ73a19tHDHdAHdDzZ",
+            .url = "https://github.com/gradido/arnm/archive/refs/tags/v0.8.3.tar.gz",
+            .hash = "arnm-0.8.3-ZdhGsPZrJgAWcLD-KoYpN6RqeIjxCpEZWw1KoIdFRrU4",
         },
     },
     .paths = .{""},

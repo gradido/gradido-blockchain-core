@@ -20,6 +20,21 @@ const c_flags = [_][]const u8{ "-Wall", "-Wextra", "-Wconversion" };
 /// Same two exclusions lint.sh has.
 const c_flags_foreign = [_][]const u8{};
 
+/// stb_ds v0.67 shifts a byte promoted to int into the sign bit in its siphash
+/// (`d[3] << 24`, stb_ds.h:1082) -- undefined behaviour on every key whose fourth byte is past
+/// 0x7f. zig's Debug build traps on it. Harmless in practice and not ours to fix, so the one
+/// translation unit that expands stb_ds is built without the undefined behaviour checks.
+const c_flags_stb = [_][]const u8{"-fno-sanitize=undefined"};
+
+/// The map prototypes and the counting allocator, shared by every tx_index benchmark and test.
+/// map_stb.c is not among them: it expands stb_ds and goes in as a foreign source.
+const tx_index_map_srcs = [_][]const u8{
+    "benchmarks/src/proto/counted_alloc.c",
+    "benchmarks/src/proto/map_lp_inline.c",
+    "benchmarks/src/proto/map_lp_narrow.c",
+    "benchmarks/src/proto/map_sorted.c",
+};
+
 /// Recursively add .c files from a directory
 fn addDirSources(
     lib: *std.Build.Step.Compile,
@@ -88,11 +103,27 @@ const BuildContext = struct {
     cdb: *std.ArrayList(*std.Build.Step.Compile),
 };
 
+const CMacro = struct {
+    name: []const u8,
+    value: []const u8 = "1",
+};
+
 const BuildTarget = struct {
     link_googletest: bool = false,
     link_sodium: bool = false,
     name: []const u8,
     srcs: []const []const u8,
+    /// Sources outside @p path, relative to the build root, compiled with the project flags.
+    /// The tx_index prototypes live under benchmarks/src/proto and are shared with a test.
+    extra_srcs: []const []const u8 = &.{},
+    /// Vendored sources relative to the build root, compiled without the project flags.
+    foreign_srcs: []const []const u8 = &.{},
+    /// Translation units that expand stb_ds, see c_flags_stb.
+    stb_srcs: []const []const u8 = &.{},
+    c_macros: []const CMacro = &.{},
+    /// Adds benchmarks/src to the include path and benchmarks/third_party as a system path,
+    /// for the tx_index prototypes and the libraries they are measured against.
+    bench_includes: bool = false,
 };
 
 fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, path: []const u8) void {
@@ -124,6 +155,22 @@ fn processBuildTarget(context: *const BuildContext, build_target: BuildTarget, p
     exe.addIncludePath(b.path("include"));
     exe.addSystemIncludePath(b.path("third_party"));
     exe.addIncludePath(context.arnm_dep.path("include"));
+    if (build_target.bench_includes) {
+        exe.addIncludePath(b.path("benchmarks/src"));
+        exe.addSystemIncludePath(b.path("benchmarks/third_party"));
+    }
+    for (build_target.c_macros) |macro| {
+        exe.root_module.addCMacro(macro.name, macro.value);
+    }
+    for (build_target.extra_srcs) |src_file| {
+        exe.addCSourceFiles(.{ .files = &.{src_file}, .flags = &c_flags });
+    }
+    for (build_target.foreign_srcs) |src_file| {
+        exe.addCSourceFiles(.{ .files = &.{src_file}, .flags = &c_flags_foreign });
+    }
+    for (build_target.stb_srcs) |src_file| {
+        exe.addCSourceFiles(.{ .files = &.{src_file}, .flags = &c_flags_stb });
+    }
 
     for (build_target.srcs) |src_file| {
         exe.addCSourceFiles(.{
@@ -243,6 +290,40 @@ pub fn build(b: *std.Build) void {
         // needs sodium even though nothing of the mapping does.
         processBuildTarget(&context, .{ .link_googletest = false, .link_sodium = true, .name = "bench_base64", .srcs = &.{"bench_base64.c"} }, path);
       }
+      // Transaction index prototypes, measured before the index is written: which map turns a
+      // public key into an id, and whether CRoaring or an append-only roaring over arnm holds
+      // the transaction sets. See benchmarks/src/proto/ and benchmarks/third_party/README.md.
+      processBuildTarget(&context, .{
+          .link_sodium = enable_sodium,
+          .name = "bench_tx_index_map",
+          .srcs = &.{ "bench_tx_index_map.c", "bench_chain_data.c" },
+          .extra_srcs = &tx_index_map_srcs,
+          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
+          .bench_includes = true,
+      }, path);
+      // one binary, three backends: the numbers only compare when every other line is the
+      // same, and a reader should not have to remember them between runs. CRoaring is built
+      // without its x64 SIMD paths, the way the target CPU runs it.
+      processBuildTarget(&context, .{
+          .link_sodium = enable_sodium,
+          .name = "bench_tx_index_bitmap",
+          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_bitmap_arnm.c", "bench_bitmap_croaring32.c", "bench_bitmap_croaring64.c", "bench_chain_data.c" },
+          .extra_srcs = &tx_index_map_srcs,
+          .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
+          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
+          .c_macros = &.{ .{ .name = "ROARING_DISABLE_X64" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
+          .bench_includes = true,
+      }, path);
+      // what an address's sets look like in memory, and what its rows cost one by one: the
+      // study behind ARNM_ROARING_SPARSE_MAX and the shapes the index asks for
+      processBuildTarget(&context, .{
+          .link_sodium = enable_sodium,
+          .name = "bench_tx_index_layout",
+          .srcs = &.{ "bench_tx_index_layout.c", "bench_chain_data.c" },
+          .extra_srcs = &tx_index_map_srcs,
+          .bench_includes = true,
+      }, path);
+      // arnm/roaring_bitmap.h, the sets the index is built on
     }
 
     if (enable_tests) {
@@ -251,6 +332,32 @@ pub fn build(b: *std.Build) void {
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "data_wire", .srcs = &.{"test_data_wire.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_json", .srcs = &.{"test_json.cpp"} }, path);
+        // the transaction index: every filter against a reference that walks the transactions
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions", .srcs = &.{"test_index_transactions.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_addresses", .srcs = &.{"test_index_addresses.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions_filter", .srcs = &.{"test_index_transactions_filter.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_chain_synth", .srcs = &.{"test_chain_synth.cpp"}, .extra_srcs = &.{"benchmarks/src/bench_chain_synth.c"}, .bench_includes = true }, path);
+        // the prototypes behind bench_tx_index_map: every map variant against the others
+        processBuildTarget(&context, .{
+            .link_googletest = true,
+            .link_sodium = enable_sodium,
+            .name = "test_tx_index_proto",
+            .srcs = &.{"test_tx_index_proto.cpp"},
+            .extra_srcs = &tx_index_map_srcs,
+            .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
+            .bench_includes = true,
+        }, path);
+        // arnm/roaring_bitmap.h against CRoaring on the real and a synthetic chain
+        processBuildTarget(&context, .{
+            .link_googletest = true,
+            .link_sodium = enable_sodium,
+            .name = "test_tx_index_roaring",
+            .srcs = &.{"test_tx_index_roaring.cpp"},
+            .extra_srcs = &.{"benchmarks/src/bench_chain_data.c"},
+            .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
+            .c_macros = &.{.{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" }},
+            .bench_includes = true,
+        }, path);
         if (enable_sodium) {
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_converter", .srcs = &.{"test_converter.cpp"} }, path);
             processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = true, .name = "test_crypto", .srcs = &.{ "test_crypto.cpp", "utils.cpp" } }, path);

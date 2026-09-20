@@ -85,11 +85,11 @@ endif()
 # directory that holds no CMakeLists, which is the documented way to say populate only. Point
 # it at the real thing instead if this project ever wants that target.
 FetchContent_Declare(arnm
-  URL https://github.com/gradido/arnm/archive/refs/tags/v0.8.1.tar.gz
+  URL https://github.com/gradido/arnm/archive/refs/tags/v0.8.3.tar.gz
   # Pins what a tag resolves to. A tag can be moved and GitHub regenerates its archives, so
   # without this the build takes whatever the URL serves today. Update it with the version:
   #   curl -sSL <url> | sha256sum
-  URL_HASH SHA256=c86d5068a218f1fe25dff762c0fea0e779379eb94464680faf6aacaa7c8553b4
+  URL_HASH SHA256=0b99f612a54e11e09e5597b34d6cb9483c0a2fe3f9d6528292d3ecada7c1baae
   SOURCE_SUBDIR do-not-add-subdirectory
 )
 FetchContent_MakeAvailable(arnm)
@@ -104,6 +104,7 @@ list(APPEND ARNM_SRC "${arnm_SOURCE_DIR}/third_party/yyjson/src/yyjson.c")
 set_source_files_properties("${arnm_SOURCE_DIR}/third_party/yyjson/src/yyjson.c" PROPERTIES
   COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/wd4242;/wd4244;/wd4267,-Wno-conversion>")
 message(STATUS "arnm from ${arnm_SOURCE_DIR}")
+
 
 if (USE_SODIUM)
   add_compile_definitions(USE_SODIUM)
@@ -130,6 +131,7 @@ FILE(GLOB DATA "src/data/*.c" "include/gradido_blockchain_core/data/*.h")
 FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_blockchain_core/data/proto/gradido/*.h")
 FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
+FILE(GLOB INDEX "src/index/*.c" "include/gradido_blockchain_core/index/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB TYPES "src/types/*.c" "include/gradido_blockchain_core/types/*.h")
@@ -146,6 +148,7 @@ set(GRADIDO_BLOCKCHAIN_CORE_SRC
   ${DATA_PROTO_GRADIDO}
   ${DATA_RUNTIME}
   ${DATA_WIRE}
+  ${INDEX}
   ${INTERACTION_VALIDATE}
   ${MAPPING}
   ${SRC}
@@ -171,6 +174,7 @@ endif()
     source_group("data/runtime" FILES  ${DATA_RUNTIME} )
     source_group("data/wire" FILES ${DATA_WIRE} )
     source_group("data" FILES ${DATA} )
+    source_group("index" FILES ${INDEX})
     source_group("interactions/validate" FILES ${INTERACTION_VALIDATE})
     source_group("mapping" FILES ${MAPPING} )
     source_group("types" FILES ${TYPES})
@@ -236,6 +240,11 @@ if(MSVC)
   target_compile_options(${PROJECT_NAME} PRIVATE
       $<$<CONFIG:Debug>:/JMC>
   )
+endif()
+
+if(ENABLE_BENCHMARKS OR ENABLE_TESTS)
+    # transaction index prototypes, used by bench_tx_index_* and test_tx_index_proto
+    include(benchmarks/tx_index_proto.cmake)
 endif()
 
 if(ENABLE_BENCHMARKS)
