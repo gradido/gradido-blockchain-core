@@ -71,11 +71,22 @@ process_proto() {
 
 cd "$PROTO_ROOT"
 
+# What the folder holds is read before anything is replaced. An empty glob would otherwise walk
+# the loop nought times and still reach the exchange below, where the generated tree is removed
+# and two empty folders take its place -- a checkout without its submodule would quietly wipe
+# what it could not regenerate.
 shopt -s nullglob
-for proto_file in *.proto; do
+proto_files=(*.proto)
+shopt -u nullglob
+
+if [ ${#proto_files[@]} -eq 0 ]; then
+    echo "no .proto files in $PROTO_ROOT -- is the gradido_protocol submodule checked out?"
+    exit 1
+fi
+
+for proto_file in "${proto_files[@]}"; do
     process_proto "$proto_file"
 done
-shopt -u nullglob
 
 rm -rf "$SRC_BASE" "$INC_BASE"
 mkdir -p "$(dirname "$SRC_BASE")" "$(dirname "$INC_BASE")"
