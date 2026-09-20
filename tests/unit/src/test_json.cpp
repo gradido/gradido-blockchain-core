@@ -11,7 +11,6 @@
 #include "gradido_blockchain_core/mapping/runtime_from_json.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -75,7 +74,6 @@ void fillEnvelope(grdr_complete_transaction &tx, grdt_transaction type) {
   tx.ledger_anchor.type = GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID;
   tx.ledger_anchor.id = 987654321;
   tx.transaction_type = type;
-  tx.balance_derivation_type = GRDT_BALANCE_DERIVATION_NODE;
   tx.cross_group_type = GRDT_CROSS_GROUP_LOCAL;
   fillBytes(tx.tx_running_hash, GENERIC_HASH_SIZE, 0x20);
 }
@@ -146,7 +144,6 @@ void expectSame(const grdr_complete_transaction &a, const grdr_complete_transact
   expectSameAnchor(a.ledger_anchor, b.ledger_anchor);
 
   ASSERT_EQ(a.transaction_type, b.transaction_type);
-  EXPECT_EQ(a.balance_derivation_type, b.balance_derivation_type);
   EXPECT_EQ(a.cross_group_type, b.cross_group_type);
   EXPECT_EQ(0, memcmp(a.tx_running_hash, b.tx_running_hash, GENERIC_HASH_SIZE));
 
@@ -373,7 +370,6 @@ TEST(JsonMappingTest, CommunityRoot_RoundTrip) {
   fillBytes(source->community_root.public_key, SIGN_PUBLIC_KEY_SIZE, 0x09);
   fillBytes(source->community_root.gmw_public_key, SIGN_PUBLIC_KEY_SIZE, 0x0a);
   fillBytes(source->community_root.auf_public_key, SIGN_PUBLIC_KEY_SIZE, 0x0b);
-  source->balance_derivation_type = GRDT_BALANCE_DERIVATION_EXTERN;
   fillArrays(source.get());
 
   roundTrip(source.get());
@@ -627,7 +623,6 @@ std::string transferDocument(
                      "\"tx_community_uuid\":\"019e2c31-a303-75c0-941e-f35c59e4f978\","
                      "\"ledger_anchor\":{\"type\":\"GRDT_LEDGER_ANCHOR_UNSPECIFIED\"},"
                      "\"transaction_type\":\"GRDT_TRANSACTION_TRANSFER\","
-                     "\"balance_derivation_type\":\"GRDT_BALANCE_DERIVATION_NODE\","
                      "\"cross_group_type\":\"GRDT_CROSS_GROUP_LOCAL\","
                      "\"tx_running_hash\":\"" +
                      std::string(GENERIC_HASH_SIZE * 2, 'a') +
@@ -683,17 +678,6 @@ TEST(JsonMappingTest, Refuses_UnknownEnumeratorName) {
   EXPECT_EQ(
       ARNM_ERROR_ENUM_UNKNOWN,
       readVerdict(transferDocument("GRDT_TRANSACTION_TRANSFER", "GRDT_TRANSACTION_SOMETHING"))
-  );
-}
-
-TEST(JsonMappingTest, Refuses_UnknownBalanceDerivationName) {
-  // GRDT_BALANCE_DERIVATION_UNSPECIFIED means none, so a name that is not one of the others is
-  // a name this document had no business carrying
-  EXPECT_EQ(
-      ARNM_ERROR_ENUM_UNKNOWN,
-      readVerdict(
-          transferDocument("GRDT_BALANCE_DERIVATION_NODE", "GRDT_BALANCE_DERIVATION_SOMETHING")
-      )
   );
 }
 

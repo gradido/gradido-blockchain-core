@@ -9,7 +9,6 @@
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/transaction.h"
 
@@ -74,7 +73,6 @@ typedef struct grdr_complete_transaction {
   };
 
   grdt_transaction transaction_type;
-  grdt_balance_derivation balance_derivation_type;
   uint8_t tx_running_hash[GENERIC_HASH_SIZE];
 
   // arrays

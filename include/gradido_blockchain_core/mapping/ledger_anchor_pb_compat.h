@@ -1,7 +1,7 @@
 #ifndef GRADIDO_BLOCKCHAIN_CORE_MAPPING_LEDGER_ANCHOT_PB_COMPAT_H
 #define GRADIDO_BLOCKCHAIN_CORE_MAPPING_LEDGER_ANCHOT_PB_COMPAT_H
 
-#include "gradido_blockchain_core/data/proto/gradido/ledger_metadata.h"
+#include "gradido_blockchain_core/data/proto/gradido/ledger_anchor.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include <assert.h>
 

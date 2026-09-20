@@ -65,3 +65,7 @@ zig-out
 html
 compile_commands.json
 .cache
+
+# pbtools generator, created by update_proto.sh
+.venv-pbtools/
+.proto-gen.*/

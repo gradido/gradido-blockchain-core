@@ -47,14 +47,12 @@ void proto_gradido_confirmed_transaction_init(
     pbtools_bytes_init(&self_p->running_hash);
     self_p->ledger_anchor_p = NULL;
     self_p->account_balances.length = 0;
-    self_p->balance_derivation = 0;
 }
 
 void proto_gradido_confirmed_transaction_encode_inner(
     struct pbtools_encoder_t *encoder_p,
     struct proto_gradido_confirmed_transaction_t *self_p)
 {
-    pbtools_encoder_write_enum(encoder_p, 8, self_p->balance_derivation);
     proto_gradido_account_balance_encode_repeated_inner(
         encoder_p,
         7,
@@ -137,10 +135,6 @@ void proto_gradido_confirmed_transaction_decode_inner(
             pbtools_repeated_info_decode(&repeated_info_account_balances,
                                          decoder_p,
                                          wire_type);
-            break;
-
-        case 8:
-            self_p->balance_derivation = pbtools_decoder_read_enum(decoder_p, wire_type);
             break;
 
         default:

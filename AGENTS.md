@@ -75,8 +75,13 @@ Linux checkout — say so instead of implying you did.
 - **Every `.c` includes its own header first**, so the compiler checks declaration against
   definition.
 - **`src/data/proto/gradido/` and its headers are generated** by `update_proto.sh` (pbtools),
-  which deletes the folders before regenerating. Never edit them; fix the generator or the
-  `.proto` instead. `third_party/` is vendored — same rule.
+  which replaces the folders whole — a renamed message must not leave its old file behind for the
+  build to keep collecting. Never edit them; fix the generator or the `.proto` instead.
+  `third_party/` is vendored — same rule.
+  The script needs `python3` with its `venv` module — a separate package on Debian and Ubuntu
+  (`apt install python3-venv`) — and nothing else: it puts pbtools into `.venv-pbtools/` at the
+  version `third_party/pbtools/pbtools.h` names, because the generated code calls into that
+  vendored runtime and carries no version of its own.
 
 ----------
 

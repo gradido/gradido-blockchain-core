@@ -148,7 +148,6 @@ arnm_result grdm_complete_transaction_from_wire(
   }
 
   tx->transaction_type = body->transaction_type;
-  tx->balance_derivation_type = confirmed_tx->balance_derivation;
   memcpy(tx->tx_running_hash, confirmed_tx->running_hash, GENERIC_HASH_SIZE);
 
   result = ARNM_SUCCESS;

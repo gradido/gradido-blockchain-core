@@ -38,7 +38,7 @@ extern "C" {
 #include "pbtools.h"
 #include "gradido_transaction.h"
 #include "basic_types.h"
-#include "ledger_metadata.h"
+#include "ledger_anchor.h"
 
 /**
  * Message proto.gradido.ConfirmedTransaction.
@@ -57,7 +57,6 @@ struct proto_gradido_confirmed_transaction_t {
     struct pbtools_bytes_t running_hash;
     struct proto_gradido_ledger_anchor_t *ledger_anchor_p;
     struct proto_gradido_account_balance_repeated_t account_balances;
-    enum proto_gradido_balance_derivation_e balance_derivation;
 };
 
 int proto_gradido_confirmed_transaction_transaction_alloc(

@@ -37,7 +37,7 @@ extern "C" {
 
 #include "pbtools.h"
 #include "basic_types.h"
-#include "ledger_metadata.h"
+#include "ledger_anchor.h"
 
 /**
  * Message proto.gradido.GradidoTransaction.

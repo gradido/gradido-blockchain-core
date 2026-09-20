@@ -25,7 +25,6 @@
 #define GRDM_JSON_KEY_TX_COMMUNITY_UUID "tx_community_uuid"
 #define GRDM_JSON_KEY_LEDGER_ANCHOR "ledger_anchor"
 #define GRDM_JSON_KEY_TRANSACTION_TYPE "transaction_type"
-#define GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE "balance_derivation_type"
 #define GRDM_JSON_KEY_CROSS_GROUP_TYPE "cross_group_type"
 #define GRDM_JSON_KEY_TX_RUNNING_HASH "tx_running_hash"
 #define GRDM_JSON_KEY_BODY_BYTES "body_bytes"
