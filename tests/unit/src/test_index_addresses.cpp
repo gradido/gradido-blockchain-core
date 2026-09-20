@@ -3,6 +3,7 @@
 #include "gradido_blockchain_core/index/addresses.h"
 
 #include "bench_chain_data.h"
+#include "bench_chain_synth.h"
 
 #include "memory_limit.h"
 
@@ -283,6 +284,93 @@ TEST(AddressIndex, ResetForgetsEveryAddress) {
   uint64_t again_max = 0;
   BuildChain(index, again, &again_max);
   ExpectSameAnswers(&index.index, again, again_max);
+}
+
+/**
+ * The generated chain, which is there whether or not the file in the tree is: every address it
+ * types and every balance it moves, held against the same reference the real chain is.
+ */
+TEST(AddressIndex, AGeneratedChainMatchesTheReference) {
+  const bench_chain_source source = bench_chain_source_of(0, nullptr);
+  Index index;
+
+  struct Fill {
+    grdx_addresses *index;
+    Reference *reference;
+    uint64_t max_tx = 0;
+    uint32_t seen = 0;
+  } fill;
+  Reference reference;
+  fill.index = &index.index;
+  fill.reference = &reference;
+
+  ASSERT_EQ(
+      bench_chain_source_feed(
+          &source, bench_default_community_uuid,
+          [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
+            Fill &fill = *static_cast<Fill *>(context);
+            const arnm_result result = grdx_addresses_add(fill.index, tx);
+            if (ARNM_SUCCESS != result) { return result; }
+            fill.max_tx = tx->tx_nr;
+            ++fill.seen;
+            const Key zero{};
+            auto note_type = [&](const uint8_t *key_bytes, grdt_address type) {
+              if (!key_bytes) { return; }
+              Key key{};
+              memcpy(key.data(), key_bytes, SIGN_PUBLIC_KEY_SIZE);
+              if (key == zero) { return; }
+              (*fill.reference)[key].types.push_back({tx->tx_nr, type});
+            };
+            switch (tx->transaction_type) {
+            case GRDT_TRANSACTION_COMMUNITY_ROOT:
+              note_type(tx->community_root.gmw_public_key, GRDT_ADDRESS_COMMUNITY_GMW);
+              note_type(tx->community_root.auf_public_key, GRDT_ADDRESS_COMMUNITY_AUF);
+              break;
+            case GRDT_TRANSACTION_REGISTER_ADDRESS:
+              note_type(tx->register_address.user_public_key, tx->address_type);
+              note_type(tx->register_address.account_public_key, tx->address_type);
+              break;
+            case GRDT_TRANSACTION_DEFERRED_TRANSFER:
+              note_type(tx->transfer.recipient_pubkey, GRDT_ADDRESS_DEFERRED_TRANSFER);
+              break;
+            default:
+              break;
+            }
+            for (size_t i = 0; i < tx->account_balances_count; ++i) {
+              Key key{};
+              memcpy(key.data(), tx->account_balances[i].pubkey, SIGN_PUBLIC_KEY_SIZE);
+              if (key == zero) { continue; }
+              (*fill.reference)[key].last_balance = tx->tx_nr;
+            }
+            return ARNM_SUCCESS;
+          },
+          &fill, nullptr
+      ),
+      ARNM_SUCCESS
+  );
+
+  ASSERT_GT(fill.seen, 1000u);
+  EXPECT_EQ(grdx_addresses_size(&index.index), reference.size());
+  for (const auto &entry : reference) {
+    const Key &key = entry.first;
+    const Address &address = entry.second;
+    EXPECT_EQ(
+        grdx_addresses_type(&index.index, key.data()),
+        address.types.empty() ? GRDT_ADDRESS_NONE : address.types.back().second
+    );
+    for (uint64_t at : {uint64_t{0}, fill.max_tx / 3u, fill.max_tx}) {
+      grdt_address want = GRDT_ADDRESS_NONE;
+      const bool wanted = TypeAt(address, at, &want);
+      grdt_address got = GRDT_ADDRESS_NONE;
+      const bool found = grdx_addresses_type_at(&index.index, key.data(), at, &got);
+      ASSERT_EQ(found, wanted) << "at " << at;
+      if (found) { EXPECT_EQ(got, want) << "at " << at; }
+    }
+    uint64_t balance_tx = 0;
+    const bool has_balance = grdx_addresses_last_balance(&index.index, key.data(), &balance_tx);
+    EXPECT_EQ(has_balance, address.last_balance != 0);
+    if (has_balance) { EXPECT_EQ(balance_tx, address.last_balance); }
+  }
 }
 
 std::string ChainPath() {

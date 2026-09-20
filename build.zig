@@ -301,62 +301,17 @@ pub fn build(b: *std.Build) void {
           .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
           .bench_includes = true,
       }, path);
-      // One body, one backend each: the numbers only compare when every other line is the
-      // same. A scalar build switches off CRoaring's x64 SIMD paths, the way it runs on a CPU
-      // without them, which is what the target CPU of the index looks like.
+      // one binary, three backends: the numbers only compare when every other line is the
+      // same, and a reader should not have to remember them between runs. CRoaring is built
+      // without its x64 SIMD paths, the way the target CPU runs it.
       processBuildTarget(&context, .{
           .link_sodium = enable_sodium,
-          .name = "bench_tx_index_bitmap_croaring",
-          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_chain_data.c" },
+          .name = "bench_tx_index_bitmap",
+          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_bitmap_arnm.c", "bench_bitmap_croaring32.c", "bench_bitmap_croaring64.c", "bench_chain_data.c" },
           .extra_srcs = &tx_index_map_srcs,
           .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
           .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
-          .c_macros = &.{ .{ .name = "BENCH_BITMAP_CROARING" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
-          .bench_includes = true,
-      }, path);
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_tx_index_bitmap_croaring_scalar",
-          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_chain_data.c" },
-          .extra_srcs = &tx_index_map_srcs,
-          .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
-          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
-          .c_macros = &.{ .{ .name = "BENCH_BITMAP_CROARING" }, .{ .name = "ROARING_DISABLE_X64" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
-          .bench_includes = true,
-      }, path);
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_tx_index_bitmap_croaring32",
-          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_chain_data.c" },
-          .extra_srcs = &tx_index_map_srcs,
-          .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
-          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
-          .c_macros = &.{ .{ .name = "BENCH_BITMAP_CROARING32" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
-          .bench_includes = true,
-      }, path);
-      // the 32 bit sets without x64 SIMD, the way they would run on the target CPU
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_tx_index_bitmap_croaring32_scalar",
-          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_chain_data.c" },
-          .extra_srcs = &tx_index_map_srcs,
-          .foreign_srcs = &.{"benchmarks/third_party/croaring/roaring.c"},
-          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
-          .c_macros = &.{ .{ .name = "BENCH_BITMAP_CROARING32" }, .{ .name = "ROARING_DISABLE_X64" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
-          .bench_includes = true,
-      }, path);
-      // the index itself on a real chain: filling it, and the questions a node asks of it
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_index_transactions",
-          .srcs = &.{"bench_index_transactions.c"},
-          .bench_includes = true,
-      }, path);
-      // the address index: what a validation's two questions cost
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_index_addresses",
-          .srcs = &.{"bench_index_addresses.c"},
+          .c_macros = &.{ .{ .name = "ROARING_DISABLE_X64" }, .{ .name = "CROARING_COMPILER_SUPPORTS_AVX512", .value = "0" } },
           .bench_includes = true,
       }, path);
       // what an address's sets look like in memory, and what its rows cost one by one: the
@@ -369,15 +324,6 @@ pub fn build(b: *std.Build) void {
           .bench_includes = true,
       }, path);
       // arnm/roaring_bitmap.h, the sets the index is built on
-      processBuildTarget(&context, .{
-          .link_sodium = enable_sodium,
-          .name = "bench_tx_index_bitmap_arnm_roaring",
-          .srcs = &.{ "bench_tx_index_bitmap.c", "bench_chain_data.c" },
-          .extra_srcs = &tx_index_map_srcs,
-          .stb_srcs = &.{"benchmarks/src/proto/map_stb.c"},
-          .c_macros = &.{.{ .name = "BENCH_BITMAP_ARNM_ROARING" }},
-          .bench_includes = true,
-      }, path);
     }
 
     if (enable_tests) {
@@ -387,9 +333,10 @@ pub fn build(b: *std.Build) void {
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_unit", .srcs = &.{"test_unit.cpp"} }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = false, .name = "test_json", .srcs = &.{"test_json.cpp"} }, path);
         // the transaction index: every filter against a reference that walks the transactions
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions", .srcs = &.{"test_index_transactions.cpp"}, .extra_srcs = &.{"benchmarks/src/bench_chain_data.c"}, .bench_includes = true }, path);
-        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_addresses", .srcs = &.{"test_index_addresses.cpp"}, .extra_srcs = &.{"benchmarks/src/bench_chain_data.c"}, .bench_includes = true }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions", .srcs = &.{"test_index_transactions.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_addresses", .srcs = &.{"test_index_addresses.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions_filter", .srcs = &.{"test_index_transactions_filter.cpp"} }, path);
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_chain_synth", .srcs = &.{"test_chain_synth.cpp"}, .extra_srcs = &.{"benchmarks/src/bench_chain_synth.c"}, .bench_includes = true }, path);
         // the prototypes behind bench_tx_index_map: every map variant against the others
         processBuildTarget(&context, .{
             .link_googletest = true,

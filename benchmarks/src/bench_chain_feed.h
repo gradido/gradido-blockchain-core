@@ -49,8 +49,11 @@ static inline arnm_result bench_chain_feed(
   FILE *file = fopen(path, "rb");
   if (!file) { return ARNM_ERROR_INVALID_PARAM; }
 
-  static _Alignas(8) uint8_t decode_buffer[BENCH_CHAIN_FEED_DECODE_BYTES];
+  // words rather than bytes: the decoder wants 8 byte alignment, and an array of uint64_t has
+  // it in C and in C++ alike, where the alignment keywords are spelled differently
+  static uint64_t decode_words[BENCH_CHAIN_FEED_DECODE_BYTES / 8u];
   static uint8_t tx_buffer[BENCH_CHAIN_FEED_MAX_TX_BYTES];
+  uint8_t *const decode_buffer = (uint8_t *)decode_words;
   grdr_complete_transaction tx;
   grdr_complete_transaction_init(&tx);
 
@@ -62,7 +65,7 @@ static inline arnm_result bench_chain_feed(
     if (!size || size != fread(tx_buffer, 1, size, file)) { break; }
     if (ARNM_SUCCESS !=
         grdr_complete_transaction_init_from_protobuf(
-            &tx, tx_buffer, size, community_uuid, decode_buffer, sizeof(decode_buffer)
+            &tx, tx_buffer, size, community_uuid, decode_buffer, (uint32_t)sizeof(decode_words)
         )) {
       continue; // a transaction this build cannot read is skipped, not counted
     }

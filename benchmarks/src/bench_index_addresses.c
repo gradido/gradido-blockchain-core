@@ -1,5 +1,5 @@
 #include "arnm/mono_timer.h"
-#include "bench_chain_feed.h"
+#include "bench_chain_synth.h"
 #include "bench_report.h"
 #include "gradido_blockchain_core/index/addresses.h"
 
@@ -98,8 +98,7 @@ static void report_row(const char *name, double nanos) {
 }
 
 int main(int argc, char **argv) {
-  const char *path = argc > 1 ? argv[1] : getenv("GRD_BENCH_CHAIN_DATA");
-  if (!path) { path = "../gradido_blockchain/build/tests/data/blk00000001.dat"; }
+  const bench_chain_source source = bench_chain_source_of(argc, argv);
   static const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE] = {0x3a, 0x3d, 0x7b, 0x4c, 0x1f, 0x9e,
                                                                 0x4a, 0x61, 0x8d, 0x2b, 0x6c, 0x05,
                                                                 0x9f, 0x77, 0xe3, 0x12};
@@ -118,13 +117,17 @@ int main(int argc, char **argv) {
   arnm_mono_timer whole;
   arnm_mono_timer_reset(&whole);
   uint32_t transactions = 0;
-  if (ARNM_SUCCESS != bench_chain_feed(path, community_uuid, feed, &fill, &transactions)) {
-    printf("no chain file at %s -- pass one as the first argument\n", path);
+  if (ARNM_SUCCESS !=
+      bench_chain_source_feed(&source, community_uuid, feed, &fill, &transactions)) {
+    printf(
+        "no chain at %s -- pass a file as the first argument, or none to generate one\n",
+        source.path ? source.path : "(generated)"
+    );
     grdx_addresses_release(&index);
     return 1;
   }
 
-  printf("chain %s\n", path);
+  bench_chain_source_print(&source);
   printf(
       "  %u transactions, %u addresses, fill %.2f ms (%.1f ns per transaction)\n", transactions,
       grdx_addresses_size(&index), (double)fill.nanos / 1e6,

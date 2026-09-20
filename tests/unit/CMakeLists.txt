@@ -33,11 +33,20 @@ target_link_libraries(test_json gradido_blockchain_core GTest::gtest_main)
 # The transaction index: every filter against a reference that walks the transactions.
 # bench_chain_data.c comes along for the chain file loader and the community uuid it carries.
 add_executable(test_index_transactions src/test_index_transactions.cpp
-               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_data.c)
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_data.c
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_synth.c)
 target_link_libraries(test_index_transactions gradido_blockchain_core GTest::gtest_main)
 target_include_directories(test_index_transactions PRIVATE ${CMAKE_SOURCE_DIR}/benchmarks/src)
 if (USE_SODIUM)
   target_link_libraries(test_index_transactions sodium)
+endif()
+
+add_executable(test_chain_synth src/test_chain_synth.cpp
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_synth.c)
+target_link_libraries(test_chain_synth gradido_blockchain_core GTest::gtest_main)
+target_include_directories(test_chain_synth PRIVATE ${CMAKE_SOURCE_DIR}/benchmarks/src)
+if (USE_SODIUM)
+  target_link_libraries(test_chain_synth sodium)
 endif()
 
 add_executable(test_index_transactions_filter src/test_index_transactions_filter.cpp)
@@ -47,7 +56,8 @@ if (USE_SODIUM)
 endif()
 
 add_executable(test_index_addresses src/test_index_addresses.cpp
-               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_data.c)
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_data.c
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_synth.c)
 target_link_libraries(test_index_addresses gradido_blockchain_core GTest::gtest_main)
 target_include_directories(test_index_addresses PRIVATE ${CMAKE_SOURCE_DIR}/benchmarks/src)
 if (USE_SODIUM)
@@ -98,6 +108,7 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   add_test(NAME test_unit COMMAND test_unit)
   add_test(NAME test_json COMMAND test_json)
   add_test(NAME test_index_addresses COMMAND test_index_addresses)
+  add_test(NAME test_chain_synth COMMAND test_chain_synth)
   add_test(NAME test_index_transactions_filter COMMAND test_index_transactions_filter)
   add_test(NAME test_index_transactions COMMAND test_index_transactions)
   add_test(NAME test_tx_index_proto COMMAND test_tx_index_proto)

@@ -3,6 +3,7 @@
 #include "gradido_blockchain_core/index/transactions.h"
 
 #include "bench_chain_data.h"
+#include "bench_chain_synth.h"
 
 #include "memory_limit.h"
 
@@ -403,33 +404,39 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
 
   Uuid chain_uuid{};
   memcpy(chain_uuid.data(), bench_default_community_uuid, ARNM_UUID_BINARY_SIZE);
+  fclose(file);
   Index index;
   std::vector<Record> records;
   std::map<Key, uint32_t> seen;
 
-  alignas(8) static uint8_t decode_buffer[256u * 1024u];
-  static uint8_t tx_buffer[65535u];
-  grdr_complete_transaction tx;
-  grdr_complete_transaction_init(&tx);
-  uint8_t size_bytes[2];
-  while (2u == fread(size_bytes, 1, 2, file)) {
-    const uint16_t size = static_cast<uint16_t>(size_bytes[0] | (size_bytes[1] << 8));
-    if (!size) { continue; }
-    if (size != fread(tx_buffer, 1, size, file)) { break; }
-    if (ARNM_SUCCESS !=
-        grdr_complete_transaction_init_from_protobuf(
-            &tx, tx_buffer, size, chain_uuid.data(), decode_buffer, sizeof(decode_buffer)
-        )) {
-      continue;
-    }
-    ASSERT_EQ(grdx_transactions_add(&index.index, &tx), ARNM_SUCCESS) << "tx " << tx.tx_nr;
-    records.push_back(RecordOf(&tx, chain_uuid));
-    for (const Key &key : records.back().signer) { ++seen[key]; }
-    for (const Key &key : records.back().balance) { ++seen[key]; }
-    for (const Key &key : records.back().other) { ++seen[key]; }
-    grdr_complete_transaction_release(&tx);
-  }
-  fclose(file);
+  struct Read {
+    grdx_transactions *index;
+    std::vector<Record> *records;
+    std::map<Key, uint32_t> *seen;
+    Uuid chain_uuid;
+  } read{&index.index, &records, &seen, chain_uuid};
+  bench_chain_source file_source;
+  file_source.path = path.c_str();
+  file_source.count = 0;
+  file_source.seed = 0;
+  ASSERT_EQ(
+      bench_chain_source_feed(
+          &file_source, bench_default_community_uuid,
+          [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
+            Read &read = *static_cast<Read *>(context);
+            const arnm_result result = grdx_transactions_add(read.index, tx);
+            if (ARNM_SUCCESS != result) { return result; }
+            read.records->push_back(RecordOf(tx, read.chain_uuid));
+            for (const Key &key : read.records->back().signer) { ++(*read.seen)[key]; }
+            for (const Key &key : read.records->back().balance) { ++(*read.seen)[key]; }
+            for (const Key &key : read.records->back().other) { ++(*read.seen)[key]; }
+            return ARNM_SUCCESS;
+          },
+          &read, nullptr
+      ),
+      ARNM_SUCCESS
+  );
+
   ASSERT_GT(records.size(), 100u) << "the file holds no transactions this build can read";
   EXPECT_EQ(grdx_transactions_size(&index.index), records.size());
   EXPECT_EQ(grdx_transactions_address_count(&index.index), seen.size());
@@ -483,6 +490,125 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
       ),
       day_filter, "real chain one day"
   );
+}
+
+/**
+ * The generated chain: as long as a node's, shaped like the one in the tree, and there whether
+ * or not that file is. The reference here is not every transaction -- a hundred thousand of
+ * those would cost more than the index does -- but what can be counted while reading: how many
+ * of each type, and every transaction a sample of addresses took part in.
+ */
+TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
+  const bench_chain_source source = bench_chain_source_of(0, nullptr);
+  Uuid chain_uuid{};
+  memcpy(chain_uuid.data(), bench_default_community_uuid, ARNM_UUID_BINARY_SIZE);
+
+  Index index;
+
+  // two passes: the first fills the index and picks the sample, the second follows the sample
+  struct Pass1 {
+    grdx_transactions *index;
+    std::array<uint32_t, GRDT_TRANSACTION_COUNT> by_type{};
+    std::vector<Key> sample;
+    uint32_t seen = 0;
+    uint64_t first_tx = 0;
+    uint64_t last_tx = 0;
+  } pass1;
+  pass1.index = &index.index;
+  ASSERT_EQ(
+      bench_chain_source_feed(
+          &source, bench_default_community_uuid,
+          [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
+            Pass1 &pass = *static_cast<Pass1 *>(context);
+            const arnm_result result = grdx_transactions_add(pass.index, tx);
+            if (ARNM_SUCCESS != result) { return result; }
+            if (!pass.seen) { pass.first_tx = tx->tx_nr; }
+            pass.last_tx = tx->tx_nr;
+            ++pass.seen;
+            pass.by_type[static_cast<size_t>(tx->transaction_type)]++;
+            // every so often an address, so the sample holds busy ones and quiet ones
+            if (pass.sample.size() < 24 && pass.seen % 997 == 0 && tx->account_balances_count) {
+              Key key{};
+              memcpy(key.data(), tx->account_balances[0].pubkey, SIGN_PUBLIC_KEY_SIZE);
+              pass.sample.push_back(key);
+            }
+            return ARNM_SUCCESS;
+          },
+          &pass1, nullptr
+      ),
+      ARNM_SUCCESS
+  );
+  ASSERT_GT(pass1.seen, 1000u);
+  EXPECT_EQ(grdx_transactions_size(&index.index), pass1.seen);
+
+  // the same chain again, this time following what the sampled addresses did
+  struct Pass2 {
+    const std::vector<Key> *sample;
+    std::vector<std::vector<uint64_t>> involved;
+    std::vector<std::vector<uint64_t>> balance;
+    Uuid chain_uuid{};
+  } pass2;
+  pass2.sample = &pass1.sample;
+  pass2.involved.resize(pass1.sample.size());
+  pass2.balance.resize(pass1.sample.size());
+  pass2.chain_uuid = chain_uuid;
+  ASSERT_EQ(
+      bench_chain_source_feed(
+          &source, bench_default_community_uuid,
+          [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
+            Pass2 &pass = *static_cast<Pass2 *>(context);
+            const Record record = RecordOf(tx, pass.chain_uuid);
+            for (size_t i = 0; i < pass.sample->size(); ++i) {
+              const Key &key = (*pass.sample)[i];
+              if (record.balance.count(key)) { pass.balance[i].push_back(tx->tx_nr); }
+              if (record.balance.count(key) || record.signer.count(key) ||
+                  record.other.count(key)) {
+                pass.involved[i].push_back(tx->tx_nr);
+              }
+            }
+            return ARNM_SUCCESS;
+          },
+          &pass2, nullptr
+      ),
+      ARNM_SUCCESS
+  );
+
+  // every type, counted from the sets against what was read
+  for (uint32_t type = 1; type < GRDT_TRANSACTION_COUNT; ++type) {
+    grdx_transactions_filter filter{};
+    ASSERT_EQ(
+        grdx_transactions_filter_set_transaction_type(&filter, static_cast<grdt_transaction>(type)),
+        ARNM_SUCCESS
+    );
+    uint64_t count = 0;
+    ASSERT_EQ(grdx_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
+    EXPECT_EQ(count, pass1.by_type[type]) << "type " << type;
+  }
+
+  // a filter that names nothing is the whole chain
+  grdx_transactions_filter everything{};
+  uint64_t all = 0;
+  ASSERT_EQ(grdx_transactions_count(&index.index, &everything, &all), ARNM_SUCCESS);
+  EXPECT_EQ(all, pass1.seen);
+  uint64_t newest = 0;
+  ASSERT_TRUE(grdx_transactions_newest(&index.index, &everything, &newest));
+  EXPECT_EQ(newest, pass1.last_tx);
+
+  // and the sampled addresses, in both roles
+  for (size_t i = 0; i < pass1.sample.size(); ++i) {
+    const Key &key = pass1.sample[i];
+    grdx_transactions_filter filter{};
+    ASSERT_EQ(
+        grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_INVOLVED),
+        ARNM_SUCCESS
+    );
+    ExpectSameAnswers(&index.index, pass2.involved[i], filter, "generated involved");
+    ASSERT_EQ(
+        grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_BALANCE),
+        ARNM_SUCCESS
+    );
+    ExpectSameAnswers(&index.index, pass2.balance[i], filter, "generated balance");
+  }
 }
 
 TEST(TransactionsIndex, AnEmptyIndexAnswersNothing) {
