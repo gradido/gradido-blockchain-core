@@ -50,3 +50,61 @@ if (USE_SODIUM)
     target_link_libraries(bench_base64 m)
   endif()
 endif()
+
+# Transaction index prototypes (see tx_index_proto.cmake). One benchmark body per bitmap
+# backend, so every row compares with the same row of the others. The chain file is optional:
+# pass it as the first argument or in GRD_BENCH_CHAIN_DATA.
+add_executable(bench_tx_index_map src/bench_tx_index_map.c src/bench_chain_data.c)
+target_compile_options(bench_tx_index_map PRIVATE ${GRADIDO_WARNING_FLAGS})
+target_link_libraries(bench_tx_index_map tx_index_proto)
+
+set(TX_INDEX_BITMAP_BACKENDS
+  "croaring:BENCH_BITMAP_CROARING:tx_index_croaring_default"
+  "croaring_scalar:BENCH_BITMAP_CROARING:tx_index_croaring_scalar"
+  "croaring32:BENCH_BITMAP_CROARING32:tx_index_croaring_default"
+  "croaring32_scalar:BENCH_BITMAP_CROARING32:tx_index_croaring_scalar"
+  "arnm_roaring:BENCH_BITMAP_ARNM_ROARING:"
+)
+foreach(backend ${TX_INDEX_BITMAP_BACKENDS})
+  string(REPLACE ":" ";" parts "${backend}")
+  list(GET parts 0 suffix)
+  list(GET parts 1 define)
+  list(LENGTH parts part_count)
+  set(target bench_tx_index_bitmap_${suffix})
+  add_executable(${target} src/bench_tx_index_bitmap.c src/bench_chain_data.c)
+  target_compile_options(${target} PRIVATE ${GRADIDO_WARNING_FLAGS})
+  target_compile_definitions(${target} PRIVATE ${define})
+  target_link_libraries(${target} tx_index_proto)
+  if(part_count GREATER 2)
+    list(GET parts 2 roaring)
+    if(roaring)
+      target_link_libraries(${target} ${roaring})
+    endif()
+  endif()
+endforeach()
+
+add_executable(bench_index_addresses src/bench_index_addresses.c)
+target_compile_options(bench_index_addresses PRIVATE ${GRADIDO_WARNING_FLAGS})
+target_link_libraries(bench_index_addresses gradido_blockchain_core)
+target_include_directories(bench_index_addresses PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(bench_index_transactions src/bench_index_transactions.c)
+target_compile_options(bench_index_transactions PRIVATE ${GRADIDO_WARNING_FLAGS})
+target_link_libraries(bench_index_transactions gradido_blockchain_core)
+target_include_directories(bench_index_transactions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(bench_tx_index_layout src/bench_tx_index_layout.c src/bench_chain_data.c)
+target_compile_options(bench_tx_index_layout PRIVATE ${GRADIDO_WARNING_FLAGS})
+target_link_libraries(bench_tx_index_layout tx_index_proto)
+
+foreach(target bench_tx_index_map bench_tx_index_bitmap_croaring bench_tx_index_bitmap_croaring_scalar
+               bench_tx_index_bitmap_croaring32 bench_tx_index_bitmap_croaring32_scalar
+               bench_tx_index_bitmap_arnm_roaring bench_tx_index_layout bench_index_transactions
+               bench_index_addresses)
+  if (USE_SODIUM)
+    target_link_libraries(${target} sodium)
+  endif()
+  if(NOT WIN32)
+    target_link_libraries(${target} m)
+  endif()
+endforeach()

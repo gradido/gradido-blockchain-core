@@ -102,7 +102,7 @@ allocation path. The invariants:
   read none, so uninitialised storage is a valid input.
 
 Prefixes: `grd_` core · `grdu_` utils · `grdd_` data · `grdt_` types · `grdw_` wire ·
-`grdr_` runtime · `grdm_` mapping · `grdi_` interactions · `grdc_` crypto.
+`grdr_` runtime · `grdm_` mapping · `grdi_` interactions · `grdc_` crypto · `grdx_` index.
 
 ----------
 
