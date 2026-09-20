@@ -8,7 +8,6 @@
 #include "gradido_blockchain_core/interactions/validate/result_type.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -106,10 +105,6 @@ static grdi_validate_result_type validateCommon(
       );
       return GRDI_VALIDATE_INVALID_FIELD;
     }
-  }
-  if (GRDT_BALANCE_DERIVATION_UNSPECIFIED == input_tx->balance_derivation_type) {
-    grd_error_details_fill(error_details, "balanceDerivationType is unspecified", NULL, NULL);
-    return GRDI_VALIDATE_INVALID_FIELD;
   }
   if (input_tx->signature_pairs_count) {
     for (size_t i = 0; i < input_tx->signature_pairs_count; i++) {

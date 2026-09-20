@@ -63,7 +63,7 @@ constexpr auto confirmedCommunityRootTransactionBase64 =
     "dO4XT1bnvSpV/7gQQfbbHRogrYcHSiqkvALTeX+7Q8iyvm7dbLHWNEqUD8UovOHhMLISBgiAzLn/BRiIgAwaBgjC8rn/"
     "BSCIgAwqIGHF/azvYntEu9pwC3bmSL61/"
     "Ob0pLcCTWspFwaJb4Q7MhQaEAoKCIDMuf8FELeVERICGHkIAjo3CiDbDtYSWhTwMKvtG/"
-    "yDHgohjPn6v87n7NWBwMDniPAXxxCQThoQAZ4sMaMDdcCUHvNcWeT5eEAC";
+    "yDHgohjPn6v87n7NWBwMDniPAXxxCQThoQAZ4sMaMDdcCUHvNcWeT5eA==";
 
 constexpr auto communityUuidHex = "019e2c31a30375c0941ef35c59e4f978";
 
@@ -932,7 +932,6 @@ TEST(PBToolsTest, ConfirmedTransaction_Encode_CommunityRoot) {
   memcpy(accountBalance.community_uuid, communityUuid.data, 16);
   free(communityUuid.data);
   ASSERT_EQ(grdw_confirmed_transaction_copy_account_balance(&tx, &accountBalance, 0), ARNM_SUCCESS);
-  tx.balance_derivation = GRDT_BALANCE_DERIVATION_EXTERN;
 
   ASSERT_EQ(grdw_confirmed_transaction_encode(&bufferPtr, &finalSize, &tx, &mem), ARNM_SUCCESS);
   bufferPtr.size = finalSize;
@@ -970,7 +969,6 @@ TEST(PBToolsTest, ConfirmedTransaction_Decode_CommunityRoot) {
   );
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.transactionValidStart.nanos, createdAt2.nanos);
   EXPECT_EQ(tx.ledger_anchor.hiero_transaction_id.accountID.accountNum, 121);
-  EXPECT_EQ(tx.balance_derivation, GRDT_BALANCE_DERIVATION_EXTERN);
 
   // everything the decode produced sits in the arena; only the base64 bytes came from malloc
   grdw_confirmed_transaction_free(&tx, &mem);

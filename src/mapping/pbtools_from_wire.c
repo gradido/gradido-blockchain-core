@@ -1,6 +1,5 @@
 #include "gradido_blockchain_core/mapping/pbtools_from_wire.h"
 #include "gradido_blockchain_core/mapping/address_pb_compat.h"
-#include "gradido_blockchain_core/mapping/balance_derivation_pb_compat.h"
 #include "gradido_blockchain_core/mapping/cross_group_pb_compat.h"
 #include "gradido_blockchain_core/mapping/ledger_anchor_pb_compat.h"
 #include "gradido_blockchain_core/mapping/memo_key_pb_compat.h"
@@ -15,7 +14,7 @@
 #include "gradido_blockchain_core/data/proto/gradido/gradido_transaction.h"
 #include "gradido_blockchain_core/data/proto/gradido/gradido_transfer.h"
 #include "gradido_blockchain_core/data/proto/gradido/hiero_basic_types.h"
-#include "gradido_blockchain_core/data/proto/gradido/ledger_metadata.h"
+#include "gradido_blockchain_core/data/proto/gradido/ledger_anchor.h"
 #include "gradido_blockchain_core/data/proto/gradido/register_address.h"
 #include "gradido_blockchain_core/data/proto/gradido/transaction_body.h"
 #include "gradido_blockchain_core/data/timestamp.h"
@@ -28,7 +27,6 @@
 #include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/memo_key.h"
 #include "gradido_blockchain_core/utils/version.h"
 
@@ -503,7 +501,5 @@ arnm_result grdm_confirmed_transaction_from_wire(
     }
   }
 
-  pb_confirmed_tx->balance_derivation =
-      (enum proto_gradido_balance_derivation_e)confirmed_tx->balance_derivation;
   return ARNM_SUCCESS;
 }

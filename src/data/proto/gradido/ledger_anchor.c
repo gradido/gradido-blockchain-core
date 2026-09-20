@@ -29,7 +29,7 @@
  */
 
 #include <limits.h>
-#include "ledger_metadata.h"
+#include "ledger_anchor.h"
 
 #if CHAR_BIT != 8
 #    error "Number of bits in a char must be 8."

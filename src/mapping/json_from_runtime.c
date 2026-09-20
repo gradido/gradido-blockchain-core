@@ -10,7 +10,6 @@
 #include "gradido_blockchain_core/data/wire/hiero.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -369,10 +368,6 @@ static arnm_result add_complete_transaction(
   const arnm_result result = add_transaction_detail(writer, tx);
   if (ARNM_SUCCESS != result) { return result; }
 
-  add_enum_string(
-      writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE),
-      grdt_balance_derivation_to_string(tx->balance_derivation_type)
-  );
   arnm_json_writer_add_hex(
       writer, ARNM_JSON_WRITER_KEY(GRDM_JSON_KEY_TX_RUNNING_HASH), tx->tx_running_hash,
       GENERIC_HASH_SIZE
@@ -430,11 +425,11 @@ static arnm_result add_complete_transaction(
 static void calculate_hint(arnm_json_writer_hint *hint, const grdr_complete_transaction *tx) {
   // an object member is its key and its value; a container is one more, and what it holds
   // besides. Counted the way arnm/json_writer.h describes it.
-  //   tx_nr, the three type names, tx_running_hash, body_bytes  6 members
-  //   tx_community_uuid                                         1 member
+  //   tx_nr, the two type names, tx_running_hash, body_bytes  5 members
+  //   tx_community_uuid                                        1 member
   //   confirmed_at, created_at   2 members, each an object of two members
   //   the three arrays           3 members, each an array
-  uint32_t values = 1u + 2u * 6u + 2u + 6u + 6u + 3u * 2u;
+  uint32_t values = 1u + 2u * 5u + 2u + 6u + 6u + 3u * 2u;
   // the hex and uuid fields, each counted with its quotes and the terminator the pool adds
   uint32_t string_bytes = HEX_FIELD_BYTES(GENERIC_HASH_SIZE) /* tx_running_hash */
                           + UUID_FIELD_BYTES                 /* tx_community_uuid */

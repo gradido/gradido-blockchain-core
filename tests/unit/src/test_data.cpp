@@ -272,7 +272,6 @@ TEST(TimestampArithmetic, ToleratesNullOperands) {
 // ********** the enumerations of types/, read back through the names they were written by *****
 
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -292,16 +291,6 @@ TEST(TimestampArithmetic, ToleratesNullOperands) {
 TEST(EnumFromString, Address_RoundTrip) {
   for (int value = GRDT_ADDRESS_NONE; value <= GRDT_ADDRESS_DEFERRED_TRANSFER; ++value) {
     EXPECT_ROUND_TRIP(grdt_address_from_string, grdt_address_to_string, (grdt_address)value);
-  }
-}
-
-TEST(EnumFromString, BalanceDerivation_RoundTrip) {
-  for (int value = GRDT_BALANCE_DERIVATION_UNSPECIFIED; value <= GRDT_BALANCE_DERIVATION_EXTERN;
-       ++value) {
-    EXPECT_ROUND_TRIP(
-        grdt_balance_derivation_from_string, grdt_balance_derivation_to_string,
-        (grdt_balance_derivation)value
-    );
   }
 }
 
@@ -348,9 +337,6 @@ TEST(EnumFromString, UnknownNameAnswersTheValueThatMeansNone) {
   const char unknown[] = "GRDT_SOMETHING_THAT_WAS_NEVER_WRITTEN";
   const size_t size = strlen(unknown);
   EXPECT_EQ(GRDT_ADDRESS_NONE, grdt_address_from_string(unknown, size));
-  EXPECT_EQ(
-      GRDT_BALANCE_DERIVATION_UNSPECIFIED, grdt_balance_derivation_from_string(unknown, size)
-  );
   EXPECT_EQ(GRDT_TRANSACTION_NONE, grdt_transaction_from_string(unknown, size));
   // these two have their none past the protobuf range, because zero is a value of their own
   EXPECT_EQ(GRDT_CROSS_GROUP_NONE, grdt_cross_group_from_string(unknown, size));

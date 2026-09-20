@@ -14,7 +14,6 @@
 #include "gradido_blockchain_core/data/wire/hiero.h"
 #include "gradido_blockchain_core/data/wire/ledger_anchor.h"
 #include "gradido_blockchain_core/types/address.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -311,7 +310,6 @@ typedef struct root_view {
   bool has_tx_pairing_community_uuid;
   arnm_json_value *pairing_ledger_anchor;
   arnm_memory_block transaction_type;
-  arnm_memory_block balance_derivation_type;
   arnm_memory_block cross_group_type;
   arnm_memory_block body_bytes;
 } root_view;
@@ -319,8 +317,8 @@ typedef struct root_view {
 /**
  * @brief Entries the root table can hold, which is the widest a transaction type makes it.
  *
- * Eighteen, for a register address; every other type builds a shorter one, and the two spare are
- * room for a member added below without this number having to be thought about again.
+ * Seventeen, for a register address; every other type builds a shorter one, and the three spare
+ * are room for a member added below without this number having to be thought about again.
  */
 #define MAX_FIELD_COUNT 20
 
@@ -410,9 +408,6 @@ static arnm_result read_root(
     ADD_REQUIRED(ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_ADDRESS_TYPE, &address_name));
     ADD_REQUIRED(ARNM_JSON_FIELD_UINT32(GRDM_JSON_KEY_DERIVATION_INDEX, &tx->derivation_index));
   }
-  ADD_REQUIRED(
-      ARNM_JSON_FIELD_STRING(GRDM_JSON_KEY_BALANCE_DERIVATION_TYPE, &view->balance_derivation_type)
-  );
   ADD_REQUIRED(ARNM_JSON_FIELD_HEX_FIXED(GRDM_JSON_KEY_TX_RUNNING_HASH, &tx_running_hash));
   ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ACCOUNT_BALANCES, &view->account_balances));
   ADD_OPTIONAL(ARNM_JSON_FIELD_VALUE(GRDM_JSON_KEY_ENCRYPTED_MEMOS, &view->encrypted_memos));
@@ -840,17 +835,11 @@ static arnm_result read_document(
   result = read_root(&view, tx, root, tx->transaction_type);
   if (ARNM_SUCCESS != result) { return result; }
 
-  // the three enumerations first: the transaction type decides which detail member matters, and a
+  // the two enumerations first: the transaction type decides which detail member matters, and a
   // walk cannot promise to have met it before the members it decides for. Each name is turned into
   // a value by the grdt_*_from_string() of the type that owns it, so no enumerator is spelled in
   // this file and there is no second table to fall out of step with the first.
 
-  tx->balance_derivation_type = grdt_balance_derivation_from_string(
-      chars(&view.balance_derivation_type), view.balance_derivation_type.size
-  );
-  if (GRDT_BALANCE_DERIVATION_UNSPECIFIED == tx->balance_derivation_type) {
-    return ARNM_ERROR_ENUM_UNKNOWN;
-  }
   tx->cross_group_type =
       grdt_cross_group_from_string(chars(&view.cross_group_type), view.cross_group_type.size);
   if (GRDT_CROSS_GROUP_NONE == tx->cross_group_type) { return ARNM_ERROR_ENUM_UNKNOWN; }

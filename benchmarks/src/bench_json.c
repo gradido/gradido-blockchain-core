@@ -12,7 +12,6 @@
 #include "gradido_blockchain_core/mapping/runtime_from_json.h"
 #include "gradido_blockchain_core/mapping/runtime_from_wire.h"
 #include "gradido_blockchain_core/result.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_blockchain_core/types/cross_group.h"
 #include "gradido_blockchain_core/types/ledger_anchor.h"
 #include "gradido_blockchain_core/types/memo_key.h"
@@ -152,7 +151,6 @@ static void prepare_fixture(
   fill_bytes(f->confirmed.running_hash, GENERIC_HASH_SIZE, 0x20);
   f->confirmed.ledger_anchor.type = GRDT_LEDGER_ANCHOR_LEGACY_GRADIDO_DB_TRANSACTION_ID;
   f->confirmed.ledger_anchor.id = 987654321;
-  f->confirmed.balance_derivation = GRDT_BALANCE_DERIVATION_NODE;
 
   must(
       grdw_confirmed_transaction_reserve_account_balances(&f->confirmed, balances, &prepare_arena),

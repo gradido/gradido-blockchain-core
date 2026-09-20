@@ -30,7 +30,7 @@ constexpr auto confirmedCommunityRootTransactionBase64 =
     "dO4XT1bnvSpV/7gQQfbbHRogrYcHSiqkvALTeX+7Q8iyvm7dbLHWNEqUD8UovOHhMLISBgiAzLn/BRiIgAwaBgjC8rn/"
     "BSCIgAwqIGHF/azvYntEu9pwC3bmSL61/"
     "Ob0pLcCTWspFwaJb4Q7MhQaEAoKCIDMuf8FELeVERICGHkIAjo3CiDbDtYSWhTwMKvtG/"
-    "yDHgohjPn6v87n7NWBwMDniPAXxxCQThoQAZ4sMaMDdcCUHvNcWeT5eEAC";
+    "yDHgohjPn6v87n7NWBwMDniPAXxxCQThoQAZ4sMaMDdcCUHvNcWeT5eA==";
 
 static const uint8_t community_uuid[16] = {0x01, 0x9e, 0x2c, 0x31, 0xa3, 0x03, 0x75, 0xc0,
                                            0x94, 0x1e, 0xf3, 0x5c, 0x59, 0xe4, 0xf9, 0x78};
@@ -133,7 +133,6 @@ TEST(RuntimeTest, ConfirmedTransaction_Decode_ToRuntime_ToJson_AndBack) {
 
   EXPECT_EQ(tx.tx_nr, from_json.tx_nr);
   EXPECT_EQ(tx.transaction_type, from_json.transaction_type);
-  EXPECT_EQ(tx.balance_derivation_type, from_json.balance_derivation_type);
   EXPECT_EQ(tx.cross_group_type, from_json.cross_group_type);
   EXPECT_EQ(tx.confirmed_at.seconds, from_json.confirmed_at.seconds);
   EXPECT_EQ(tx.created_at.seconds, from_json.created_at.seconds);

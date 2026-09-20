@@ -5,7 +5,6 @@
 #include "basic_types.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/result.h"
-#include "gradido_blockchain_core/types/balance_derivation.h"
 #include "gradido_transaction.h"
 #include "ledger_anchor.h"
 
@@ -44,8 +43,6 @@ typedef struct grdw_confirmed_transaction {
   grdw_account_balance *account_balances;
   //! Number of account balance entries in the array.
   uint8_t account_balances_count;
-  //! Method used to derive the balance changes. For example extern for legacy but usually node
-  grdt_balance_derivation balance_derivation;
 } grdw_confirmed_transaction;
 
 /**
