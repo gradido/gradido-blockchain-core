@@ -349,7 +349,8 @@ TEST(AddressIndex, AGeneratedChainMatchesTheReference) {
       ARNM_SUCCESS
   );
 
-  ASSERT_GT(fill.seen, 1000u);
+  ASSERT_GT(fill.seen, 0u);
+  if (!source.path) { EXPECT_EQ(fill.seen, source.count); }
   EXPECT_EQ(grdx_addresses_size(&index.index), reference.size());
   for (const auto &entry : reference) {
     const Key &key = entry.first;

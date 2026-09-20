@@ -506,8 +506,11 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
   Index index;
 
   // two passes: the first fills the index and picks the sample, the second follows the sample
+  // one address out of every so many transactions, whatever length the chain has
+  const uint32_t sample_step = 1u + (source.path ? 997u : source.count / 32u);
   struct Pass1 {
     grdx_transactions *index;
+    uint32_t sample_step;
     std::array<uint32_t, GRDT_TRANSACTION_COUNT> by_type{};
     std::vector<Key> sample;
     uint32_t seen = 0;
@@ -515,6 +518,7 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
     uint64_t last_tx = 0;
   } pass1;
   pass1.index = &index.index;
+  pass1.sample_step = sample_step;
   ASSERT_EQ(
       bench_chain_source_feed(
           &source, bench_default_community_uuid,
@@ -527,7 +531,8 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
             ++pass.seen;
             pass.by_type[static_cast<size_t>(tx->transaction_type)]++;
             // every so often an address, so the sample holds busy ones and quiet ones
-            if (pass.sample.size() < 24 && pass.seen % 997 == 0 && tx->account_balances_count) {
+            if (pass.sample.size() < 24 && pass.seen % pass.sample_step == 0 &&
+                tx->account_balances_count) {
               Key key{};
               memcpy(key.data(), tx->account_balances[0].pubkey, SIGN_PUBLIC_KEY_SIZE);
               pass.sample.push_back(key);
@@ -538,7 +543,9 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
       ),
       ARNM_SUCCESS
   );
-  ASSERT_GT(pass1.seen, 1000u);
+  ASSERT_GT(pass1.seen, 0u);
+  // a generated chain is exactly as long as it was asked to be; a file is as long as it is
+  if (!source.path) { EXPECT_EQ(pass1.seen, source.count); }
   EXPECT_EQ(grdx_transactions_size(&index.index), pass1.seen);
 
   // the same chain again, this time following what the sampled addresses did
@@ -744,6 +751,61 @@ TEST(TransactionsIndex, ADayTableTurnsSecondsIntoNumbers) {
       &index.index, records.back().seconds + 86400 * 2, records.back().seconds + 86400 * 4, &min,
       &max
   ));
+}
+
+/**
+ * The first transaction carries its community's own coin, like every other one. Whatever the
+ * index learns about the chain from it has to be known before its balances are read, or the
+ * chain's own coin looks foreign to it -- once, in the one transaction that defines it.
+ */
+TEST(TransactionsIndex, TheFirstTransactionsCoinIsNotForeign) {
+  const Uuid chain_uuid = MakeUuid(77);
+  Index index;
+  std::vector<Record> records;
+
+  for (uint32_t i = 0; i < 3; ++i) {
+    Transaction transaction;
+    grdr_complete_transaction *tx = &transaction.tx;
+    grdr_complete_transaction_init(tx);
+    tx->tx_nr = 1u + i;
+    tx->confirmed_at.seconds = 1700000000 + i * 3600;
+    tx->transaction_type = GRDT_TRANSACTION_TRANSFER;
+    memcpy(tx->tx_community_uuid, chain_uuid.data(), ARNM_UUID_BINARY_SIZE);
+    const Key sender = MakeKey(1);
+    const Key recipient = MakeKey(2);
+    memcpy(tx->transfer.sender_pubkey, sender.data(), SIGN_PUBLIC_KEY_SIZE);
+    memcpy(tx->transfer.recipient_pubkey, recipient.data(), SIGN_PUBLIC_KEY_SIZE);
+    grdw_account_balance balance{};
+    memcpy(balance.pubkey, recipient.data(), SIGN_PUBLIC_KEY_SIZE);
+    memcpy(balance.community_uuid, chain_uuid.data(), ARNM_UUID_BINARY_SIZE);
+    transaction.balances = {balance};
+    tx->account_balances = transaction.balances.data();
+    tx->account_balances_count = transaction.balances.size();
+    ASSERT_EQ(grdx_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << tx->tx_nr;
+
+    Record record;
+    record.tx_nr = tx->tx_nr;
+    record.seconds = tx->confirmed_at.seconds;
+    record.type = tx->transaction_type;
+    record.balance.insert(recipient);
+    record.other.insert(sender);
+    records.push_back(record);
+  }
+
+  EXPECT_EQ(index.index.coin_community_count, 0u)
+      << "no transaction here carries a coin that is not the chain's own";
+
+  // "only this chain's coin" has to hold every one of them, the first included
+  grdx_transactions_filter filter{};
+  ASSERT_EQ(grdx_transactions_filter_set_coin_community(&filter, chain_uuid.data()), ARNM_SUCCESS);
+  ExpectSameAnswers(
+      &index.index,
+      Matching(
+          records, chain_uuid, nullptr, GRDX_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, &chain_uuid,
+          0, 0, 0, 0
+      ),
+      filter, "the chain's own coin"
+  );
 }
 
 TEST(TransactionsIndex, WhatItRefuses) {

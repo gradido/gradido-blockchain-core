@@ -235,6 +235,15 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
   arnm_result result = note_day(index, tx->confirmed_at.seconds, offset);
   if (ARNM_SUCCESS != result) { return result; }
 
+  // what the first transaction says about the chain has to stand before its own balances are
+  // read: they are compared against the chain's community, and an unset one makes its own coin
+  // look foreign. Only the count below says the transaction is in, so a refusal further down
+  // leaves an index that still holds nothing.
+  if (!index->transaction_count) {
+    index->min_tx_nr = tx->tx_nr;
+    memcpy(index->chain_community_uuid, tx->tx_community_uuid, ARNM_UUID_BINARY_SIZE);
+  }
+
   // the signatures: whoever signed
   for (size_t i = 0; i < tx->signature_pairs_count; ++i) {
     const uint8_t *key = tx->signature_pairs[i].public_key;
@@ -301,10 +310,6 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
   result = arnm_roaring_add(&index->per_type[tx->transaction_type], offset, &index->pool);
   if (ARNM_SUCCESS != result) { return result; }
 
-  if (!index->transaction_count) {
-    index->min_tx_nr = tx->tx_nr;
-    memcpy(index->chain_community_uuid, tx->tx_community_uuid, ARNM_UUID_BINARY_SIZE);
-  }
   index->max_tx_nr = tx->tx_nr;
   ++index->transaction_count;
   return ARNM_SUCCESS;

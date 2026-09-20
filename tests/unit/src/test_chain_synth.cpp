@@ -4,10 +4,12 @@
 
 #include "memory_limit.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -19,6 +21,37 @@
  */
 
 namespace {
+
+/**
+ * One environment variable, taken out of the way for a test and put back afterwards.
+ *
+ * These tests decide what the environment says, and a run that inherits a GRD_CHAIN_COUNT from
+ * whoever started it would otherwise measure that instead of the default. Restoring matters as
+ * much: the tests of one binary share one environment.
+ */
+class ScopedEnv {
+public:
+  explicit ScopedEnv(const char *name) : name_(name) {
+    const char *value = getenv(name);
+    held_ = value != nullptr;
+    if (held_) { value_ = value; }
+    unsetenv(name);
+  }
+  ~ScopedEnv() {
+    if (held_) {
+      setenv(name_, value_.c_str(), 1);
+    } else {
+      unsetenv(name_);
+    }
+  }
+  ScopedEnv(const ScopedEnv &) = delete;
+  ScopedEnv &operator=(const ScopedEnv &) = delete;
+
+private:
+  const char *name_;
+  std::string value_;
+  bool held_ = false;
+};
 
 const uint8_t kCommunityUuid[ARNM_UUID_BINARY_SIZE] = {0x3a, 0x3d, 0x7b, 0x4c, 0x1f, 0x9e,
                                                        0x4a, 0x61, 0x8d, 0x2b, 0x6c, 0x05,
@@ -102,9 +135,8 @@ TEST(ChainSynth, TheSameSeedGivesTheSameChain) {
 }
 
 TEST(ChainSynth, TheDefaultSeedIsFixedAndTheEnvironmentOverridesIt) {
-  const char *before = getenv("GRD_CHAIN_SEED");
-  const std::string kept = before ? before : "";
-  unsetenv("GRD_CHAIN_SEED");
+  const ScopedEnv seed("GRD_CHAIN_SEED");
+  const ScopedEnv count("GRD_CHAIN_COUNT");
   EXPECT_EQ(bench_chain_seed(), BENCH_CHAIN_DEFAULT_SEED);
 
   setenv("GRD_CHAIN_SEED", "4711", 1);
@@ -117,19 +149,18 @@ TEST(ChainSynth, TheDefaultSeedIsFixedAndTheEnvironmentOverridesIt) {
   EXPECT_NE(bench_chain_seed(), BENCH_CHAIN_DEFAULT_SEED) << "the lower case spelling too";
 
   unsetenv("GRD_CHAIN_SEED");
+  EXPECT_EQ(bench_chain_seed(), BENCH_CHAIN_DEFAULT_SEED);
+
   EXPECT_EQ(bench_chain_count(), BENCH_CHAIN_DEFAULT_COUNT);
   setenv("GRD_CHAIN_COUNT", "1234", 1);
   EXPECT_EQ(bench_chain_count(), 1234u);
   setenv("GRD_CHAIN_COUNT", "0", 1);
   EXPECT_EQ(bench_chain_count(), BENCH_CHAIN_DEFAULT_COUNT) << "nothing is not a count";
-  unsetenv("GRD_CHAIN_COUNT");
-
-  if (!kept.empty()) { setenv("GRD_CHAIN_SEED", kept.c_str(), 1); }
 }
 
 TEST(ChainSynth, AFileNamedOnTheCommandLineWins) {
-  unsetenv("GRD_BENCH_CHAIN_DATA");
-  bench_chain_source generated = bench_chain_source_of(0, nullptr);
+  const ScopedEnv data("GRD_BENCH_CHAIN_DATA");
+  const bench_chain_source generated = bench_chain_source_of(0, nullptr);
   EXPECT_EQ(generated.path, nullptr);
   EXPECT_EQ(generated.count, bench_chain_count());
 
@@ -144,7 +175,6 @@ TEST(ChainSynth, AFileNamedOnTheCommandLineWins) {
   const bench_chain_source from_env = bench_chain_source_of(0, nullptr);
   ASSERT_NE(from_env.path, nullptr);
   EXPECT_STREQ(from_env.path, "from/the/environment.dat");
-  unsetenv("GRD_BENCH_CHAIN_DATA");
 }
 
 /**
