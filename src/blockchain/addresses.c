@@ -1,4 +1,4 @@
-#include "gradido_blockchain_core/index/addresses.h"
+#include "gradido_blockchain_core/blockchain/addresses.h"
 
 #include <string.h>
 
@@ -31,16 +31,16 @@ typedef struct type_change {
   uint8_t type;      /**< @ref grdt_address. */
 } type_change;
 
-static address_entry *entry_at(const grdx_addresses *index, uint32_t id) {
+static address_entry *entry_at(const grdb_addresses *index, uint32_t id) {
   return (address_entry *)arnm_bvec_get(&index->entries, id);
 }
 
-static const type_change *change_at(const grdx_addresses *index, uint32_t position) {
+static const type_change *change_at(const grdb_addresses *index, uint32_t position) {
   return (const type_change *)arnm_bvec_get(&index->type_changes, position);
 }
 
 /** The entry of @p key, opened on first sight of it. */
-static arnm_result entry_for_key(grdx_addresses *index, const uint8_t *key, address_entry **out) {
+static arnm_result entry_for_key(grdb_addresses *index, const uint8_t *key, address_entry **out) {
   uint32_t id = 0;
   bool inserted = false;
   const arnm_result result = arnm_key_map_get_or_insert(&index->keys, key, &id, &inserted);
@@ -59,7 +59,7 @@ static arnm_result entry_for_key(grdx_addresses *index, const uint8_t *key, addr
 }
 
 /** The entry of @p key, or NULL when the index never saw it. */
-static const address_entry *entry_of_key(const grdx_addresses *index, const uint8_t *public_key) {
+static const address_entry *entry_of_key(const grdb_addresses *index, const uint8_t *public_key) {
   uint32_t id = 0;
   if (!index || !index->ready || !public_key) { return NULL; }
   if (!arnm_key_map_find(&index->keys, public_key, &id)) { return NULL; }
@@ -69,7 +69,7 @@ static const address_entry *entry_of_key(const grdx_addresses *index, const uint
 
 /** Writes one type record in front of the address's chain of them. */
 static arnm_result note_type(
-    grdx_addresses *index, const uint8_t *key, uint64_t tx_nr, grdt_address type
+    grdb_addresses *index, const uint8_t *key, uint64_t tx_nr, grdt_address type
 ) {
   if (!key) { return ARNM_SUCCESS; }
   bool zero = true;
@@ -95,11 +95,11 @@ static arnm_result note_type(
 
 // ********** building *******************
 
-arnm_result grdx_addresses_init(
-    grdx_addresses *index, const grdx_addresses_options *options, arnm *source
+arnm_result grdb_addresses_init(
+    grdb_addresses *index, const grdb_addresses_options *options, arnm *source
 ) {
   if (!index) { return ARNM_ERROR_NULL_POINTER; }
-  const grdx_addresses_options empty = {0};
+  const grdb_addresses_options empty = {0};
   if (!options) { options = &empty; }
 
   memset(index, 0, sizeof(*index));
@@ -138,7 +138,7 @@ fail_map:
   return result;
 }
 
-void grdx_addresses_release(grdx_addresses *index) {
+void grdb_addresses_release(grdb_addresses *index) {
   if (!index || !index->ready) { return; }
   arnm_bvec_free(&index->type_changes);
   arnm_bvec_free(&index->entries);
@@ -146,7 +146,7 @@ void grdx_addresses_release(grdx_addresses *index) {
   memset(index, 0, sizeof(*index));
 }
 
-void grdx_addresses_reset(grdx_addresses *index) {
+void grdb_addresses_reset(grdb_addresses *index) {
   if (!index || !index->ready) { return; }
   arnm_key_map_clear(&index->keys);
   arnm_bvec_clear(&index->entries);
@@ -155,7 +155,7 @@ void grdx_addresses_reset(grdx_addresses *index) {
   index->transaction_count = 0;
 }
 
-arnm_result grdx_addresses_add(grdx_addresses *index, const grdr_complete_transaction *tx) {
+arnm_result grdb_addresses_add(grdb_addresses *index, const grdr_complete_transaction *tx) {
   if (!index || !tx) { return ARNM_ERROR_NULL_POINTER; }
   if (!index->ready) { return ARNM_ERROR_INVALID_STATE; }
   if (index->transaction_count && tx->tx_nr <= index->max_tx_nr) {
@@ -212,14 +212,14 @@ arnm_result grdx_addresses_add(grdx_addresses *index, const grdr_complete_transa
 
 // ********** asking *******************
 
-grdt_address grdx_addresses_type(const grdx_addresses *index, const uint8_t *public_key) {
+grdt_address grdb_addresses_type(const grdb_addresses *index, const uint8_t *public_key) {
   const address_entry *entry = entry_of_key(index, public_key);
   if (!entry || ADDRESSES_NO_CHANGE == entry->last_change) { return GRDT_ADDRESS_NONE; }
   return (grdt_address)change_at(index, entry->last_change)->type;
 }
 
-bool grdx_addresses_type_at(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t at_tx_nr, grdt_address *out
+bool grdb_addresses_type_at(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t at_tx_nr, grdt_address *out
 ) {
   const address_entry *entry = entry_of_key(index, public_key);
   if (!entry || !out) { return false; }
@@ -235,8 +235,8 @@ bool grdx_addresses_type_at(
   return false;
 }
 
-uint32_t grdx_addresses_type_changes(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t *out, uint32_t size
+uint32_t grdb_addresses_type_changes(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t *out, uint32_t size
 ) {
   const address_entry *entry = entry_of_key(index, public_key);
   if (!entry || (size && !out)) { return 0u; }
@@ -249,8 +249,8 @@ uint32_t grdx_addresses_type_changes(
   return written;
 }
 
-bool grdx_addresses_last_balance(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t *out
+bool grdb_addresses_last_balance(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t *out
 ) {
   const address_entry *entry = entry_of_key(index, public_key);
   if (!entry || !out || !entry->last_balance_tx) { return false; }
@@ -258,10 +258,10 @@ bool grdx_addresses_last_balance(
   return true;
 }
 
-bool grdx_addresses_knows(const grdx_addresses *index, const uint8_t *public_key) {
+bool grdb_addresses_knows(const grdb_addresses *index, const uint8_t *public_key) {
   return entry_of_key(index, public_key) != NULL;
 }
 
-uint32_t grdx_addresses_size(const grdx_addresses *index) {
+uint32_t grdb_addresses_size(const grdb_addresses *index) {
   return index && index->ready ? arnm_key_map_size(&index->keys) : 0u;
 }

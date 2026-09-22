@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "gradido_blockchain_core/index/transactions.h"
+#include "gradido_blockchain_core/blockchain/transactions.h"
 
 #include "bench_chain_data.h"
 #include "bench_chain_synth.h"
@@ -20,7 +20,7 @@
 #include <vector>
 
 /*
- * grdx_transactions against a reference that answers the same questions by walking a
+ * grdb_transactions against a reference that answers the same questions by walking a
  * vector of transactions. The index is built from the same transactions, so a disagreement is
  * the index's: the reference knows nothing of sets, keys or days, it compares fields.
  *
@@ -48,8 +48,8 @@ struct Record {
   std::set<Uuid> foreign; /**< coins that are not the chain's own */
 };
 
-bool Involves(const Record &record, const Key &key, grdx_address_role role) {
-  if (GRDX_ADDRESS_ROLE_BALANCE == role) { return record.balance.count(key) != 0; }
+bool Involves(const Record &record, const Key &key, grdb_address_role role) {
+  if (GRDB_ADDRESS_ROLE_BALANCE == role) { return record.balance.count(key) != 0; }
   return record.balance.count(key) || record.signer.count(key) || record.other.count(key);
 }
 
@@ -58,7 +58,7 @@ std::vector<uint64_t> Matching(
     const std::vector<Record> &records,
     const Uuid &chain_uuid,
     const Key *key,
-    grdx_address_role role,
+    grdb_address_role role,
     grdt_transaction type,
     const Uuid *coin,
     uint64_t min_tx,
@@ -76,7 +76,7 @@ std::vector<uint64_t> Matching(
       if (from_seconds && day < from_seconds / 86400) { continue; }
       if (to_seconds && day > to_seconds / 86400) { continue; }
     }
-    if (GRDX_ADDRESS_ROLE_NONE != role && (!key || !Involves(record, *key, role))) { continue; }
+    if (GRDB_ADDRESS_ROLE_NONE != role && (!key || !Involves(record, *key, role))) { continue; }
     if (GRDT_TRANSACTION_NONE != type && record.type != type) { continue; }
     if (coin) {
       if (*coin == chain_uuid) {
@@ -112,20 +112,20 @@ Uuid MakeUuid(uint8_t n) {
 
 class Index {
 public:
-  explicit Index(const grdx_transactions_options *options = nullptr) {
-    EXPECT_EQ(grdx_transactions_init(&index, options, nullptr), ARNM_SUCCESS);
+  explicit Index(const grdb_transactions_options *options = nullptr) {
+    EXPECT_EQ(grdb_transactions_init(&index, options, nullptr), ARNM_SUCCESS);
   }
   ~Index() {
-    grdx_transactions_release(&index);
+    grdb_transactions_release(&index);
   }
   Index(const Index &) = delete;
   Index &operator=(const Index &) = delete;
-  grdx_transactions index{};
+  grdb_transactions index{};
 };
 
 /** Everything the index matches, read out in pages, so a disagreement can be named. */
 std::vector<uint64_t> AllMatches(
-    const grdx_transactions *index, const grdx_transactions_filter &filter
+    const grdb_transactions *index, const grdb_transactions_filter &filter
 ) {
   std::vector<uint64_t> all;
   uint32_t skip = 0;
@@ -134,7 +134,7 @@ std::vector<uint64_t> AllMatches(
     uint32_t written = 0;
     uint64_t count = 0;
     if (ARNM_SUCCESS !=
-        grdx_transactions_listing(index, &filter, skip, 64, false, page.data(), &written, &count)) {
+        grdb_transactions_listing(index, &filter, skip, 64, false, page.data(), &written, &count)) {
       break;
     }
     all.insert(all.end(), page.begin(), page.begin() + written);
@@ -175,9 +175,9 @@ std::vector<uint32_t> SetValues(const arnm_roaring_bitmap &set) {
  * only inside the union.
  */
 void ExpectRolesAreDistinct(
-    const grdx_transactions *index, const Key &key, const std::vector<Record> &records
+    const grdb_transactions *index, const Key &key, const std::vector<Record> &records
 ) {
-  const grdx_address_sets *sets = grdx_transactions_address(index, key.data());
+  const grdb_address_sets *sets = grdb_transactions_address(index, key.data());
   ASSERT_NE(sets, nullptr);
   const std::vector<uint32_t> balance = SetValues(sets->balance);
   const std::vector<uint32_t> signed_ = SetValues(sets->signed_);
@@ -203,13 +203,13 @@ void ExpectRolesAreDistinct(
 
 /** Every page of every shape, against the reference. */
 void ExpectSameAnswers(
-    const grdx_transactions *index,
+    const grdb_transactions *index,
     const std::vector<uint64_t> &expected,
-    const grdx_transactions_filter &filter,
+    const grdb_transactions_filter &filter,
     const std::string &what
 ) {
   uint64_t count = 0;
-  ASSERT_EQ(grdx_transactions_count(index, &filter, &count), ARNM_SUCCESS) << what;
+  ASSERT_EQ(grdb_transactions_count(index, &filter, &count), ARNM_SUCCESS) << what;
   EXPECT_EQ(count, expected.size()) << what << " the index has, the reference has not:"
                                     << Difference(AllMatches(index, filter), expected);
 
@@ -220,7 +220,7 @@ void ExpectSameAnswers(
       uint32_t written = 0;
       uint64_t listed = 0;
       ASSERT_EQ(
-          grdx_transactions_listing(
+          grdb_transactions_listing(
               index, &filter, skip, size, descending, page.data(), &written, &listed
           ),
           ARNM_SUCCESS
@@ -236,7 +236,7 @@ void ExpectSameAnswers(
   }
 
   uint64_t newest = 0;
-  const bool found = grdx_transactions_newest(index, &filter, &newest);
+  const bool found = grdb_transactions_newest(index, &filter, &newest);
   EXPECT_EQ(found, !expected.empty()) << what;
   if (found) { EXPECT_EQ(newest, expected.back()) << what; }
 }
@@ -329,7 +329,7 @@ void BuildChain(
       }
     }
 
-    ASSERT_EQ(grdx_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << i;
+    ASSERT_EQ(grdb_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << i;
     records.push_back(record);
   }
 }
@@ -410,7 +410,7 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
   std::map<Key, uint32_t> seen;
 
   struct Read {
-    grdx_transactions *index;
+    grdb_transactions *index;
     std::vector<Record> *records;
     std::map<Key, uint32_t> *seen;
     Uuid chain_uuid;
@@ -424,7 +424,7 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
           &file_source, bench_default_community_uuid,
           [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
             Read &read = *static_cast<Read *>(context);
-            const arnm_result result = grdx_transactions_add(read.index, tx);
+            const arnm_result result = grdb_transactions_add(read.index, tx);
             if (ARNM_SUCCESS != result) { return result; }
             read.records->push_back(RecordOf(tx, read.chain_uuid));
             for (const Key &key : read.records->back().signer) { ++(*read.seen)[key]; }
@@ -438,8 +438,8 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
   );
 
   ASSERT_GT(records.size(), 100u) << "the file holds no transactions this build can read";
-  EXPECT_EQ(grdx_transactions_size(&index.index), records.size());
-  EXPECT_EQ(grdx_transactions_address_count(&index.index), seen.size());
+  EXPECT_EQ(grdb_transactions_size(&index.index), records.size());
+  EXPECT_EQ(grdb_transactions_address_count(&index.index), seen.size());
 
   // the busiest address and a handful of ordinary ones
   std::vector<std::pair<uint32_t, Key>> by_activity;
@@ -454,11 +454,11 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
 
   for (const Key &key : sample) {
     ExpectRolesAreDistinct(&index.index, key, records);
-    for (grdx_address_role role : {GRDX_ADDRESS_ROLE_INVOLVED, GRDX_ADDRESS_ROLE_BALANCE}) {
+    for (grdb_address_role role : {GRDB_ADDRESS_ROLE_INVOLVED, GRDB_ADDRESS_ROLE_BALANCE}) {
       for (grdt_transaction type : {GRDT_TRANSACTION_NONE, GRDT_TRANSACTION_TRANSFER}) {
-        grdx_transactions_filter filter{};
-        ASSERT_EQ(grdx_transactions_filter_set_address(&filter, key.data(), role), ARNM_SUCCESS);
-        ASSERT_EQ(grdx_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
+        grdb_transactions_filter filter{};
+        ASSERT_EQ(grdb_transactions_filter_set_address(&filter, key.data(), role), ARNM_SUCCESS);
+        ASSERT_EQ(grdb_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
         ExpectSameAnswers(
             &index.index, Matching(records, chain_uuid, &key, role, type, nullptr, 0, 0, 0, 0),
             filter, "real chain role " + std::to_string(role) + " type " + std::to_string(type)
@@ -470,22 +470,22 @@ TEST(TransactionsIndex, ARealChainMatchesTheReference) {
   // a type over the whole chain, and one day out of it
   for (grdt_transaction type :
        {GRDT_TRANSACTION_TRANSFER, GRDT_TRANSACTION_CREATION, GRDT_TRANSACTION_REGISTER_ADDRESS}) {
-    grdx_transactions_filter filter{};
-    ASSERT_EQ(grdx_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
+    grdb_transactions_filter filter{};
+    ASSERT_EQ(grdb_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
     ExpectSameAnswers(
         &index.index,
-        Matching(records, chain_uuid, nullptr, GRDX_ADDRESS_ROLE_NONE, type, nullptr, 0, 0, 0, 0),
+        Matching(records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, type, nullptr, 0, 0, 0, 0),
         filter, "real chain type " + std::to_string(type)
     );
   }
   const int64_t middle_day = records[records.size() / 2].seconds / 86400;
-  grdx_transactions_filter day_filter{};
+  grdb_transactions_filter day_filter{};
   day_filter.from_seconds = middle_day * 86400;
   day_filter.to_seconds = middle_day * 86400 + 86399;
   ExpectSameAnswers(
       &index.index,
       Matching(
-          records, chain_uuid, nullptr, GRDX_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, nullptr, 0,
+          records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, nullptr, 0,
           0, day_filter.from_seconds, day_filter.to_seconds
       ),
       day_filter, "real chain one day"
@@ -509,7 +509,7 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
   // one address out of every so many transactions, whatever length the chain has
   const uint32_t sample_step = 1u + (source.path ? 997u : source.count / 32u);
   struct Pass1 {
-    grdx_transactions *index;
+    grdb_transactions *index;
     uint32_t sample_step;
     std::array<uint32_t, GRDT_TRANSACTION_COUNT> by_type{};
     std::vector<Key> sample;
@@ -524,7 +524,7 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
           &source, bench_default_community_uuid,
           [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
             Pass1 &pass = *static_cast<Pass1 *>(context);
-            const arnm_result result = grdx_transactions_add(pass.index, tx);
+            const arnm_result result = grdb_transactions_add(pass.index, tx);
             if (ARNM_SUCCESS != result) { return result; }
             if (!pass.seen) { pass.first_tx = tx->tx_nr; }
             pass.last_tx = tx->tx_nr;
@@ -546,7 +546,7 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
   ASSERT_GT(pass1.seen, 0u);
   // a generated chain is exactly as long as it was asked to be; a file is as long as it is
   if (!source.path) { EXPECT_EQ(pass1.seen, source.count); }
-  EXPECT_EQ(grdx_transactions_size(&index.index), pass1.seen);
+  EXPECT_EQ(grdb_transactions_size(&index.index), pass1.seen);
 
   // the same chain again, this time following what the sampled addresses did
   struct Pass2 {
@@ -582,36 +582,36 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
 
   // every type, counted from the sets against what was read
   for (uint32_t type = 1; type < GRDT_TRANSACTION_COUNT; ++type) {
-    grdx_transactions_filter filter{};
+    grdb_transactions_filter filter{};
     ASSERT_EQ(
-        grdx_transactions_filter_set_transaction_type(&filter, static_cast<grdt_transaction>(type)),
+        grdb_transactions_filter_set_transaction_type(&filter, static_cast<grdt_transaction>(type)),
         ARNM_SUCCESS
     );
     uint64_t count = 0;
-    ASSERT_EQ(grdx_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
+    ASSERT_EQ(grdb_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
     EXPECT_EQ(count, pass1.by_type[type]) << "type " << type;
   }
 
   // a filter that names nothing is the whole chain
-  grdx_transactions_filter everything{};
+  grdb_transactions_filter everything{};
   uint64_t all = 0;
-  ASSERT_EQ(grdx_transactions_count(&index.index, &everything, &all), ARNM_SUCCESS);
+  ASSERT_EQ(grdb_transactions_count(&index.index, &everything, &all), ARNM_SUCCESS);
   EXPECT_EQ(all, pass1.seen);
   uint64_t newest = 0;
-  ASSERT_TRUE(grdx_transactions_newest(&index.index, &everything, &newest));
+  ASSERT_TRUE(grdb_transactions_newest(&index.index, &everything, &newest));
   EXPECT_EQ(newest, pass1.last_tx);
 
   // and the sampled addresses, in both roles
   for (size_t i = 0; i < pass1.sample.size(); ++i) {
     const Key &key = pass1.sample[i];
-    grdx_transactions_filter filter{};
+    grdb_transactions_filter filter{};
     ASSERT_EQ(
-        grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_INVOLVED),
+        grdb_transactions_filter_set_address(&filter, key.data(), GRDB_ADDRESS_ROLE_INVOLVED),
         ARNM_SUCCESS
     );
     ExpectSameAnswers(&index.index, pass2.involved[i], filter, "generated involved");
     ASSERT_EQ(
-        grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_BALANCE),
+        grdb_transactions_filter_set_address(&filter, key.data(), GRDB_ADDRESS_ROLE_BALANCE),
         ARNM_SUCCESS
     );
     ExpectSameAnswers(&index.index, pass2.balance[i], filter, "generated balance");
@@ -620,16 +620,16 @@ TEST(TransactionsIndex, AGeneratedChainMatchesTheReference) {
 
 TEST(TransactionsIndex, AnEmptyIndexAnswersNothing) {
   Index index;
-  grdx_transactions_filter filter{};
+  grdb_transactions_filter filter{};
   uint64_t count = 7;
-  ASSERT_EQ(grdx_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
+  ASSERT_EQ(grdb_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
   EXPECT_EQ(count, 0u);
   uint64_t newest = 7;
-  EXPECT_FALSE(grdx_transactions_newest(&index.index, &filter, &newest));
+  EXPECT_FALSE(grdb_transactions_newest(&index.index, &filter, &newest));
   EXPECT_EQ(newest, 7u);
-  EXPECT_EQ(grdx_transactions_address_count(&index.index), 0u);
-  EXPECT_EQ(grdx_transactions_size(&index.index), 0u);
-  EXPECT_EQ(grdx_transactions_address(&index.index, MakeKey(1).data()), nullptr);
+  EXPECT_EQ(grdb_transactions_address_count(&index.index), 0u);
+  EXPECT_EQ(grdb_transactions_size(&index.index), 0u);
+  EXPECT_EQ(grdb_transactions_address(&index.index, MakeKey(1).data()), nullptr);
 }
 
 TEST(TransactionsIndex, EveryFilterMatchesTheReference) {
@@ -638,7 +638,7 @@ TEST(TransactionsIndex, EveryFilterMatchesTheReference) {
   std::vector<Record> records;
   std::mt19937 random(11);
   BuildChain(index, records, chain_uuid, 400, 25, random, 1);
-  ASSERT_EQ(grdx_transactions_size(&index.index), 400u);
+  ASSERT_EQ(grdb_transactions_size(&index.index), 400u);
 
   for (uint32_t address = 0; address < 6; ++address) {
     ExpectRolesAreDistinct(&index.index, MakeKey(address), records);
@@ -651,16 +651,16 @@ TEST(TransactionsIndex, EveryFilterMatchesTheReference) {
   const Uuid foreign = MakeUuid(1);
   for (uint32_t address = 0; address < 6; ++address) {
     const Key key = MakeKey(address);
-    for (grdx_address_role role :
-         {GRDX_ADDRESS_ROLE_NONE, GRDX_ADDRESS_ROLE_INVOLVED, GRDX_ADDRESS_ROLE_BALANCE}) {
+    for (grdb_address_role role :
+         {GRDB_ADDRESS_ROLE_NONE, GRDB_ADDRESS_ROLE_INVOLVED, GRDB_ADDRESS_ROLE_BALANCE}) {
       for (grdt_transaction type : types) {
         for (int coin_case = 0; coin_case < 3; ++coin_case) {
           const Uuid *coin = coin_case == 0 ? nullptr : coin_case == 1 ? &chain_uuid : &foreign;
-          grdx_transactions_filter filter{};
-          ASSERT_EQ(grdx_transactions_filter_set_address(&filter, key.data(), role), ARNM_SUCCESS);
-          ASSERT_EQ(grdx_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
+          grdb_transactions_filter filter{};
+          ASSERT_EQ(grdb_transactions_filter_set_address(&filter, key.data(), role), ARNM_SUCCESS);
+          ASSERT_EQ(grdb_transactions_filter_set_transaction_type(&filter, type), ARNM_SUCCESS);
           ASSERT_EQ(
-              grdx_transactions_filter_set_coin_community(&filter, coin ? coin->data() : nullptr),
+              grdb_transactions_filter_set_coin_community(&filter, coin ? coin->data() : nullptr),
               ARNM_SUCCESS
           );
           const std::vector<uint64_t> expected =
@@ -679,7 +679,7 @@ TEST(TransactionsIndex, EveryFilterMatchesTheReference) {
 TEST(TransactionsIndex, RangesOfNumbersAndOfDaysNarrowTheSameWay) {
   const Uuid chain_uuid = MakeUuid(7);
   // an index that does not start at zero: the sets hold offsets, every answer holds numbers
-  grdx_transactions_options options{};
+  grdb_transactions_options options{};
   options.base_tx_nr = 5000;
   Index index(&options);
   std::vector<Record> records;
@@ -689,11 +689,11 @@ TEST(TransactionsIndex, RangesOfNumbersAndOfDaysNarrowTheSameWay) {
   const int64_t first = records.front().seconds;
   const int64_t last = records.back().seconds;
   for (int probe = 0; probe < 12; ++probe) {
-    grdx_transactions_filter filter{};
+    grdb_transactions_filter filter{};
     const Key key = MakeKey(probe % 4);
     if (probe % 2) {
       ASSERT_EQ(
-          grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_INVOLVED),
+          grdb_transactions_filter_set_address(&filter, key.data(), GRDB_ADDRESS_ROLE_INVOLVED),
           ARNM_SUCCESS
       );
     }
@@ -714,10 +714,46 @@ TEST(TransactionsIndex, RangesOfNumbersAndOfDaysNarrowTheSameWay) {
     filter.from_seconds = from;
     filter.to_seconds = to;
     const std::vector<uint64_t> expected = Matching(
-        records, chain_uuid, grdx_transactions_filter_address(&filter) ? &key : nullptr,
+        records, chain_uuid, grdb_transactions_filter_address(&filter) ? &key : nullptr,
         filter.role, GRDT_TRANSACTION_NONE, nullptr, min_tx, max_tx, from, to
     );
     ExpectSameAnswers(&index.index, expected, filter, "probe " + std::to_string(probe));
+  }
+}
+
+TEST(TransactionsIndex, ABoundReachingPastTheChainNamesNoTransactions) {
+  // A filter that names a range and no set at all is answered from the span of numbers rather
+  // than from a set. A bound past either end of what the index holds then counts and pages
+  // numbers that are no transactions -- the test above never sees it, because it draws its
+  // bounds from transactions that exist. A segmented chain meets it on every query, which is
+  // how test_blockchain_chain found it.
+  const Uuid chain_uuid = MakeUuid(11);
+  Index index;
+  std::vector<Record> records;
+  std::mt19937 random(97);
+  BuildChain(index, records, chain_uuid, 200, 8, random, 1);
+
+  const uint64_t first = records.front().tx_nr;
+  const uint64_t last = records.back().tx_nr;
+  const std::vector<std::pair<uint64_t, uint64_t>> ranges = {
+      {first, last},          // exactly what is there
+      {first, last + 1000},   // past the end
+      {1, last * 4},          // far past the end
+      {last + 1, last + 500}, // entirely behind it
+  };
+  for (const auto &range : ranges) {
+    grdb_transactions_filter filter{};
+    ASSERT_EQ(
+        grdb_transactions_filter_set_tx_range(&filter, range.first, range.second), ARNM_SUCCESS
+    );
+    const std::vector<uint64_t> expected = Matching(
+        records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, nullptr,
+        range.first, range.second, 0, 0
+    );
+    ExpectSameAnswers(
+        &index.index, expected, filter,
+        std::to_string(range.first) + ".." + std::to_string(range.second)
+    );
   }
 }
 
@@ -729,14 +765,14 @@ TEST(TransactionsIndex, ADayTableTurnsSecondsIntoNumbers) {
   BuildChain(index, records, chain_uuid, 200, 8, random, 1);
 
   uint64_t min = 0, max = 0;
-  ASSERT_TRUE(grdx_transactions_range_of_days(&index.index, 0, 0, &min, &max));
+  ASSERT_TRUE(grdb_transactions_range_of_days(&index.index, 0, 0, &min, &max));
   EXPECT_EQ(min, records.front().tx_nr);
   EXPECT_EQ(max, records.back().tx_nr);
 
   // a span of one day holds exactly the transactions confirmed that day
   const int64_t day = records[records.size() / 2].seconds / 86400;
   ASSERT_TRUE(
-      grdx_transactions_range_of_days(&index.index, day * 86400, day * 86400 + 86399, &min, &max)
+      grdb_transactions_range_of_days(&index.index, day * 86400, day * 86400 + 86399, &min, &max)
   );
   for (const Record &record : records) {
     const bool inside = record.tx_nr >= min && record.tx_nr <= max;
@@ -745,12 +781,115 @@ TEST(TransactionsIndex, ADayTableTurnsSecondsIntoNumbers) {
 
   // a span before the chain and one after it hold nothing
   EXPECT_FALSE(
-      grdx_transactions_range_of_days(&index.index, 1, records.front().seconds - 86400, &min, &max)
+      grdb_transactions_range_of_days(&index.index, 1, records.front().seconds - 86400, &min, &max)
   );
-  EXPECT_FALSE(grdx_transactions_range_of_days(
+  EXPECT_FALSE(grdb_transactions_range_of_days(
       &index.index, records.back().seconds + 86400 * 2, records.back().seconds + 86400 * 4, &min,
       &max
   ));
+}
+
+/*
+ * How many communities a chain trades with is not something it can know in advance, and a
+ * community that has run for years may pair with every other one. There used to be a ceiling of
+ * eight here -- "this chain's coin only" was asked as "in none of the foreign sets", and a query
+ * list holds eight -- and the ninth coin stopped the chain. Now that filter excludes a single
+ * union set, so a thousand coins cost what one does.
+ */
+TEST(TransactionsIndex, AThousandForeignCoinsAreAsOrdinaryAsOne) {
+  const Uuid chain_uuid = MakeUuid(200);
+  constexpr uint32_t kCoins = 1000;
+  constexpr uint32_t kTransactions = 3000;
+  Index index;
+  std::vector<Record> records;
+  std::vector<Uuid> coins;
+  std::set<Uuid> distinct;
+
+  for (uint32_t i = 0; i < kTransactions; ++i) {
+    Transaction transaction;
+    grdr_complete_transaction *tx = &transaction.tx;
+    grdr_complete_transaction_init(tx);
+    tx->tx_nr = 1u + i;
+    tx->confirmed_at.seconds = 1700000000 + static_cast<int64_t>(i) * 600;
+    tx->transaction_type = GRDT_TRANSACTION_TRANSFER;
+    memcpy(tx->tx_community_uuid, chain_uuid.data(), ARNM_UUID_BINARY_SIZE);
+    const Key sender = MakeKey(i % 40u);
+    const Key recipient = MakeKey(40u + i % 40u);
+    memcpy(tx->transfer.sender_pubkey, sender.data(), SIGN_PUBLIC_KEY_SIZE);
+    memcpy(tx->transfer.recipient_pubkey, recipient.data(), SIGN_PUBLIC_KEY_SIZE);
+
+    // every third transaction stays in the chain's own coin, the others spread over a thousand
+    Uuid coin = chain_uuid;
+    const bool foreign = i % 3u != 0;
+    if (foreign) {
+      const uint32_t n = i % kCoins;
+      coin = Uuid{};
+      coin[0] = 0xC0;
+      coin[1] = static_cast<uint8_t>(n >> 8);
+      coin[2] = static_cast<uint8_t>(n & 0xffu);
+      coin[15] = 0x5A;
+      if (distinct.insert(coin).second) { coins.push_back(coin); }
+    }
+    grdw_account_balance balance{};
+    memcpy(balance.pubkey, recipient.data(), SIGN_PUBLIC_KEY_SIZE);
+    memcpy(balance.community_uuid, coin.data(), ARNM_UUID_BINARY_SIZE);
+    transaction.balances = {balance};
+    tx->account_balances = transaction.balances.data();
+    tx->account_balances_count = transaction.balances.size();
+    ASSERT_EQ(grdb_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << tx->tx_nr;
+
+    Record record;
+    record.tx_nr = tx->tx_nr;
+    record.seconds = tx->confirmed_at.seconds;
+    record.type = tx->transaction_type;
+    record.balance.insert(recipient);
+    record.other.insert(sender);
+    if (foreign) { record.foreign.insert(coin); }
+    records.push_back(record);
+  }
+
+  ASSERT_GT(coins.size(), 8u) << "the point is to go far past the old ceiling";
+  EXPECT_EQ(grdb_transactions_coin_community_count(&index.index), coins.size());
+
+  // the chain's own coin: everything outside the union of all the foreign ones
+  {
+    grdb_transactions_filter filter{};
+    ASSERT_EQ(
+        grdb_transactions_filter_set_coin_community(&filter, chain_uuid.data()), ARNM_SUCCESS
+    );
+    ExpectSameAnswers(
+        &index.index,
+        Matching(
+            records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE,
+            &chain_uuid, 0, 0, 0, 0
+        ),
+        filter, "own coin"
+    );
+  }
+
+  // each foreign coin on its own, from the first seen to the last
+  for (size_t k = 0; k < coins.size(); k += coins.size() / 25u + 1u) {
+    grdb_transactions_filter filter{};
+    ASSERT_EQ(grdb_transactions_filter_set_coin_community(&filter, coins[k].data()), ARNM_SUCCESS);
+    ExpectSameAnswers(
+        &index.index,
+        Matching(
+            records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, &coins[k],
+            0, 0, 0, 0
+        ),
+        filter, "foreign coin " + std::to_string(k)
+    );
+  }
+
+  // a coin the chain never met matches nothing, rather than being mistaken for one it did
+  Uuid never{};
+  never[0] = 0xEE;
+  never[15] = 0x01;
+  grdb_transactions_filter filter{};
+  ASSERT_EQ(grdb_transactions_filter_set_coin_community(&filter, never.data()), ARNM_SUCCESS);
+  uint64_t count = 7;
+  ASSERT_EQ(grdb_transactions_count(&index.index, &filter, &count), ARNM_SUCCESS);
+  EXPECT_EQ(count, 0u);
 }
 
 /**
@@ -781,7 +920,7 @@ TEST(TransactionsIndex, TheFirstTransactionsCoinIsNotForeign) {
     transaction.balances = {balance};
     tx->account_balances = transaction.balances.data();
     tx->account_balances_count = transaction.balances.size();
-    ASSERT_EQ(grdx_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << tx->tx_nr;
+    ASSERT_EQ(grdb_transactions_add(&index.index, tx), ARNM_SUCCESS) << "tx " << tx->tx_nr;
 
     Record record;
     record.tx_nr = tx->tx_nr;
@@ -792,16 +931,16 @@ TEST(TransactionsIndex, TheFirstTransactionsCoinIsNotForeign) {
     records.push_back(record);
   }
 
-  EXPECT_EQ(index.index.coin_community_count, 0u)
+  EXPECT_EQ(grdb_transactions_coin_community_count(&index.index), 0u)
       << "no transaction here carries a coin that is not the chain's own";
 
   // "only this chain's coin" has to hold every one of them, the first included
-  grdx_transactions_filter filter{};
-  ASSERT_EQ(grdx_transactions_filter_set_coin_community(&filter, chain_uuid.data()), ARNM_SUCCESS);
+  grdb_transactions_filter filter{};
+  ASSERT_EQ(grdb_transactions_filter_set_coin_community(&filter, chain_uuid.data()), ARNM_SUCCESS);
   ExpectSameAnswers(
       &index.index,
       Matching(
-          records, chain_uuid, nullptr, GRDX_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, &chain_uuid,
+          records, chain_uuid, nullptr, GRDB_ADDRESS_ROLE_NONE, GRDT_TRANSACTION_NONE, &chain_uuid,
           0, 0, 0, 0
       ),
       filter, "the chain's own coin"
@@ -809,7 +948,7 @@ TEST(TransactionsIndex, TheFirstTransactionsCoinIsNotForeign) {
 }
 
 TEST(TransactionsIndex, WhatItRefuses) {
-  grdx_transactions_options options{};
+  grdb_transactions_options options{};
   options.base_tx_nr = 100;
   Index index(&options);
 
@@ -819,45 +958,45 @@ TEST(TransactionsIndex, WhatItRefuses) {
   tx->transaction_type = GRDT_TRANSACTION_TRANSFER;
   tx->confirmed_at.seconds = 1700000000;
   tx->tx_nr = 99;
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
   tx->tx_nr = 100;
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_SUCCESS);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_SUCCESS);
   // the same number again, and a number that leaves a gap: a chain has neither
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
   tx->tx_nr = 102;
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
   tx->tx_nr = 101;
   tx->confirmed_at.seconds = 1700000000 - 86400 * 2;
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_ERROR_INVALID_PARAM);
   tx->confirmed_at.seconds = 1700000000;
-  EXPECT_EQ(grdx_transactions_add(&index.index, tx), ARNM_SUCCESS);
+  EXPECT_EQ(grdb_transactions_add(&index.index, tx), ARNM_SUCCESS);
 
   // past base + UINT32_MAX, which only a first transaction can reach
-  grdx_transactions_options far_options{};
+  grdb_transactions_options far_options{};
   far_options.base_tx_nr = 100;
   Index far(&far_options);
   tx->tx_nr = 100ull + UINT32_MAX + 1ull;
-  EXPECT_EQ(grdx_transactions_add(&far.index, tx), ARNM_ERROR_RESOURCE_SIZE_EXCEED);
+  EXPECT_EQ(grdb_transactions_add(&far.index, tx), ARNM_ERROR_RESOURCE_SIZE_EXCEED);
 
-  EXPECT_EQ(grdx_transactions_add(nullptr, tx), ARNM_ERROR_NULL_POINTER);
-  EXPECT_EQ(grdx_transactions_add(&index.index, nullptr), ARNM_ERROR_NULL_POINTER);
-  grdx_transactions_filter filter{};
+  EXPECT_EQ(grdb_transactions_add(nullptr, tx), ARNM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdb_transactions_add(&index.index, nullptr), ARNM_ERROR_NULL_POINTER);
+  grdb_transactions_filter filter{};
   uint64_t count = 0;
-  EXPECT_EQ(grdx_transactions_count(&index.index, &filter, nullptr), ARNM_ERROR_NULL_POINTER);
-  EXPECT_EQ(grdx_transactions_count(nullptr, &filter, &count), ARNM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdb_transactions_count(&index.index, &filter, nullptr), ARNM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdb_transactions_count(nullptr, &filter, &count), ARNM_ERROR_NULL_POINTER);
   uint64_t page[2] = {0, 0};
   uint32_t written = 0;
   EXPECT_EQ(
-      grdx_transactions_listing(
-          &index.index, &filter, 0, GRDX_PAGE_MAX + 1u, false, page, &written, &count
+      grdb_transactions_listing(
+          &index.index, &filter, 0, GRDB_PAGE_MAX + 1u, false, page, &written, &count
       ),
       ARNM_ERROR_INVALID_PARAM
   );
 
   // an index that was never initialised says so rather than reading its own zeroes
-  grdx_transactions raw{};
-  EXPECT_EQ(grdx_transactions_count(&raw, &filter, &count), ARNM_ERROR_INVALID_STATE);
-  EXPECT_EQ(grdx_transactions_add(&raw, tx), ARNM_ERROR_INVALID_STATE);
+  grdb_transactions raw{};
+  EXPECT_EQ(grdb_transactions_count(&raw, &filter, &count), ARNM_ERROR_INVALID_STATE);
+  EXPECT_EQ(grdb_transactions_add(&raw, tx), ARNM_ERROR_INVALID_STATE);
 }
 
 TEST(TransactionsIndex, ResetKeepsTheMemoryAndForgetsTheChain) {
@@ -869,9 +1008,9 @@ TEST(TransactionsIndex, ResetKeepsTheMemoryAndForgetsTheChain) {
   const uint64_t lent = index.index.pool.lent_bytes;
   EXPECT_GT(lent, 0u);
 
-  grdx_transactions_reset(&index.index);
-  EXPECT_EQ(grdx_transactions_size(&index.index), 0u);
-  EXPECT_EQ(grdx_transactions_address_count(&index.index), 0u);
+  grdb_transactions_reset(&index.index);
+  EXPECT_EQ(grdb_transactions_size(&index.index), 0u);
+  EXPECT_EQ(grdb_transactions_address_count(&index.index), 0u);
   EXPECT_EQ(index.index.pool.lent_bytes, 0u);
   EXPECT_GT(index.index.pool.cached_bytes, 0u) << "the blocks stay with the pool";
 
@@ -879,10 +1018,10 @@ TEST(TransactionsIndex, ResetKeepsTheMemoryAndForgetsTheChain) {
   std::vector<Record> again;
   std::mt19937 same(41);
   BuildChain(index, again, chain_uuid, 120, 10, same, 1);
-  grdx_transactions_filter filter{};
+  grdb_transactions_filter filter{};
   const Key key = MakeKey(0);
   ASSERT_EQ(
-      grdx_transactions_filter_set_address(&filter, key.data(), GRDX_ADDRESS_ROLE_INVOLVED),
+      grdb_transactions_filter_set_address(&filter, key.data(), GRDB_ADDRESS_ROLE_INVOLVED),
       ARNM_SUCCESS
   );
   ExpectSameAnswers(

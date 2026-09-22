@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "gradido_blockchain_core/index/addresses.h"
+#include "gradido_blockchain_core/blockchain/addresses.h"
 
 #include "bench_chain_data.h"
 #include "bench_chain_synth.h"
@@ -18,7 +18,7 @@
 #include <vector>
 
 /*
- * grdx_addresses against a reference that keeps the same two facts in a std::map: the
+ * grdb_addresses against a reference that keeps the same two facts in a std::map: the
  * transactions that gave an address a type, and the last one that moved its balance. The index
  * is filled from the same transactions, so a disagreement is the index's.
  *
@@ -52,15 +52,15 @@ struct Transaction {
 
 class Index {
 public:
-  explicit Index(const grdx_addresses_options *options = nullptr) {
-    EXPECT_EQ(grdx_addresses_init(&index, options, nullptr), ARNM_SUCCESS);
+  explicit Index(const grdb_addresses_options *options = nullptr) {
+    EXPECT_EQ(grdb_addresses_init(&index, options, nullptr), ARNM_SUCCESS);
   }
   ~Index() {
-    grdx_addresses_release(&index);
+    grdb_addresses_release(&index);
   }
   Index(const Index &) = delete;
   Index &operator=(const Index &) = delete;
-  grdx_addresses index{};
+  grdb_addresses index{};
 };
 
 /** The reference's answer to "what was this address as of @p at". */
@@ -75,26 +75,26 @@ bool TypeAt(const Address &address, uint64_t at, grdt_address *out) {
 }
 
 /** Every address of the reference, asked every way the index can be asked. */
-void ExpectSameAnswers(const grdx_addresses *index, const Reference &reference, uint64_t max_tx) {
+void ExpectSameAnswers(const grdb_addresses *index, const Reference &reference, uint64_t max_tx) {
   for (const auto &entry : reference) {
     const Key &key = entry.first;
     const Address &address = entry.second;
-    EXPECT_TRUE(grdx_addresses_knows(index, key.data()));
+    EXPECT_TRUE(grdb_addresses_knows(index, key.data()));
 
-    const grdt_address type = grdx_addresses_type(index, key.data());
+    const grdt_address type = grdb_addresses_type(index, key.data());
     EXPECT_EQ(type, address.types.empty() ? GRDT_ADDRESS_NONE : address.types.back().second);
 
     for (uint64_t at = 0; at <= max_tx + 1u; ++at) {
       grdt_address want = GRDT_ADDRESS_NONE;
       const bool wanted = TypeAt(address, at, &want);
       grdt_address got = GRDT_ADDRESS_NONE;
-      const bool found = grdx_addresses_type_at(index, key.data(), at, &got);
+      const bool found = grdb_addresses_type_at(index, key.data(), at, &got);
       ASSERT_EQ(found, wanted) << "at " << at;
       if (found) { EXPECT_EQ(got, want) << "at " << at; }
     }
 
     std::vector<uint64_t> changes(address.types.size() + 2u, 0);
-    const uint32_t written = grdx_addresses_type_changes(
+    const uint32_t written = grdb_addresses_type_changes(
         index, key.data(), changes.data(), static_cast<uint32_t>(changes.size())
     );
     changes.resize(written);
@@ -105,7 +105,7 @@ void ExpectSameAnswers(const grdx_addresses *index, const Reference &reference, 
     EXPECT_EQ(changes, want_changes);
 
     uint64_t balance_tx = 0;
-    const bool has_balance = grdx_addresses_last_balance(index, key.data(), &balance_tx);
+    const bool has_balance = grdb_addresses_last_balance(index, key.data(), &balance_tx);
     EXPECT_EQ(has_balance, address.last_balance != 0);
     if (has_balance) { EXPECT_EQ(balance_tx, address.last_balance); }
   }
@@ -115,7 +115,7 @@ void ExpectSameAnswers(const grdx_addresses *index, const Reference &reference, 
 void BuildChain(Index &index, Reference &reference, uint64_t *max_tx) {
   uint64_t tx_nr = 1;
   auto add = [&](Transaction &transaction) {
-    ASSERT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_SUCCESS)
+    ASSERT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_SUCCESS)
         << "tx " << transaction.tx.tx_nr;
     *max_tx = transaction.tx.tx_nr;
   };
@@ -208,16 +208,16 @@ void BuildChain(Index &index, Reference &reference, uint64_t *max_tx) {
 TEST(AddressIndex, AnEmptyIndexKnowsNothing) {
   Index index;
   const Key key = MakeKey(1);
-  EXPECT_EQ(grdx_addresses_size(&index.index), 0u);
-  EXPECT_FALSE(grdx_addresses_knows(&index.index, key.data()));
-  EXPECT_EQ(grdx_addresses_type(&index.index, key.data()), GRDT_ADDRESS_NONE);
+  EXPECT_EQ(grdb_addresses_size(&index.index), 0u);
+  EXPECT_FALSE(grdb_addresses_knows(&index.index, key.data()));
+  EXPECT_EQ(grdb_addresses_type(&index.index, key.data()), GRDT_ADDRESS_NONE);
   grdt_address type = GRDT_ADDRESS_SUBACCOUNT;
-  EXPECT_FALSE(grdx_addresses_type_at(&index.index, key.data(), 99, &type));
+  EXPECT_FALSE(grdb_addresses_type_at(&index.index, key.data(), 99, &type));
   EXPECT_EQ(type, GRDT_ADDRESS_SUBACCOUNT);
   uint64_t tx_nr = 7;
-  EXPECT_FALSE(grdx_addresses_last_balance(&index.index, key.data(), &tx_nr));
+  EXPECT_FALSE(grdb_addresses_last_balance(&index.index, key.data(), &tx_nr));
   EXPECT_EQ(tx_nr, 7u);
-  EXPECT_EQ(grdx_addresses_type_changes(&index.index, key.data(), &tx_nr, 1), 0u);
+  EXPECT_EQ(grdb_addresses_type_changes(&index.index, key.data(), &tx_nr, 1), 0u);
 }
 
 TEST(AddressIndex, EveryWayAnAddressIsTypedMatchesTheReference) {
@@ -226,19 +226,19 @@ TEST(AddressIndex, EveryWayAnAddressIsTypedMatchesTheReference) {
   uint64_t max_tx = 0;
   BuildChain(index, reference, &max_tx);
 
-  EXPECT_EQ(grdx_addresses_size(&index.index), reference.size());
+  EXPECT_EQ(grdb_addresses_size(&index.index), reference.size());
   ExpectSameAnswers(&index.index, reference, max_tx);
 
   // the community root's own key is named but never typed
-  EXPECT_EQ(grdx_addresses_type(&index.index, MakeKey(1).data()), GRDT_ADDRESS_NONE);
-  EXPECT_FALSE(grdx_addresses_knows(&index.index, MakeKey(1).data()));
+  EXPECT_EQ(grdb_addresses_type(&index.index, MakeKey(1).data()), GRDT_ADDRESS_NONE);
+  EXPECT_FALSE(grdb_addresses_knows(&index.index, MakeKey(1).data()));
   // an address registered twice answers with the type that stood at the time
   grdt_address type = GRDT_ADDRESS_NONE;
-  ASSERT_TRUE(grdx_addresses_type_at(&index.index, MakeKey(10).data(), 2, &type));
+  ASSERT_TRUE(grdb_addresses_type_at(&index.index, MakeKey(10).data(), 2, &type));
   EXPECT_EQ(type, GRDT_ADDRESS_COMMUNITY_HUMAN);
-  ASSERT_TRUE(grdx_addresses_type_at(&index.index, MakeKey(10).data(), max_tx, &type));
+  ASSERT_TRUE(grdb_addresses_type_at(&index.index, MakeKey(10).data(), max_tx, &type));
   EXPECT_EQ(type, GRDT_ADDRESS_COMMUNITY_PROJECT);
-  EXPECT_EQ(grdx_addresses_type(&index.index, MakeKey(10).data()), GRDT_ADDRESS_COMMUNITY_PROJECT);
+  EXPECT_EQ(grdb_addresses_type(&index.index, MakeKey(10).data()), GRDT_ADDRESS_COMMUNITY_PROJECT);
 }
 
 TEST(AddressIndex, WhatItRefuses) {
@@ -247,24 +247,24 @@ TEST(AddressIndex, WhatItRefuses) {
   grdr_complete_transaction_init(&transaction.tx);
   transaction.tx.transaction_type = GRDT_TRANSACTION_TRANSFER;
   transaction.tx.tx_nr = 5;
-  EXPECT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_SUCCESS);
-  EXPECT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_SUCCESS);
+  EXPECT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_PARAM);
   transaction.tx.tx_nr = 4;
-  EXPECT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_PARAM);
+  EXPECT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_PARAM);
   transaction.tx.tx_nr = 6;
   transaction.tx.transaction_type = static_cast<grdt_transaction>(GRDT_TRANSACTION_COUNT);
-  EXPECT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_ENUM_TYPE);
+  EXPECT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_ENUM_TYPE);
   transaction.tx.transaction_type = GRDT_TRANSACTION_REGISTER_ADDRESS;
   transaction.tx.address_type = static_cast<grdt_address>(GRDT_ADDRESS_DEFERRED_TRANSFER + 1);
   memcpy(transaction.tx.register_address.user_public_key, MakeKey(1).data(), SIGN_PUBLIC_KEY_SIZE);
-  EXPECT_EQ(grdx_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_ENUM_TYPE);
+  EXPECT_EQ(grdb_addresses_add(&index.index, &transaction.tx), ARNM_ERROR_INVALID_ENUM_TYPE);
 
-  EXPECT_EQ(grdx_addresses_add(nullptr, &transaction.tx), ARNM_ERROR_NULL_POINTER);
-  EXPECT_EQ(grdx_addresses_add(&index.index, nullptr), ARNM_ERROR_NULL_POINTER);
-  grdx_addresses raw{};
-  EXPECT_EQ(grdx_addresses_add(&raw, &transaction.tx), ARNM_ERROR_INVALID_STATE);
-  EXPECT_EQ(grdx_addresses_type(&raw, MakeKey(1).data()), GRDT_ADDRESS_NONE);
-  EXPECT_EQ(grdx_addresses_size(&raw), 0u);
+  EXPECT_EQ(grdb_addresses_add(nullptr, &transaction.tx), ARNM_ERROR_NULL_POINTER);
+  EXPECT_EQ(grdb_addresses_add(&index.index, nullptr), ARNM_ERROR_NULL_POINTER);
+  grdb_addresses raw{};
+  EXPECT_EQ(grdb_addresses_add(&raw, &transaction.tx), ARNM_ERROR_INVALID_STATE);
+  EXPECT_EQ(grdb_addresses_type(&raw, MakeKey(1).data()), GRDT_ADDRESS_NONE);
+  EXPECT_EQ(grdb_addresses_size(&raw), 0u);
 }
 
 TEST(AddressIndex, ResetForgetsEveryAddress) {
@@ -272,12 +272,12 @@ TEST(AddressIndex, ResetForgetsEveryAddress) {
   Reference reference;
   uint64_t max_tx = 0;
   BuildChain(index, reference, &max_tx);
-  ASSERT_GT(grdx_addresses_size(&index.index), 0u);
+  ASSERT_GT(grdb_addresses_size(&index.index), 0u);
 
-  grdx_addresses_reset(&index.index);
-  EXPECT_EQ(grdx_addresses_size(&index.index), 0u);
-  EXPECT_FALSE(grdx_addresses_knows(&index.index, MakeKey(10).data()));
-  EXPECT_EQ(grdx_addresses_type(&index.index, MakeKey(10).data()), GRDT_ADDRESS_NONE);
+  grdb_addresses_reset(&index.index);
+  EXPECT_EQ(grdb_addresses_size(&index.index), 0u);
+  EXPECT_FALSE(grdb_addresses_knows(&index.index, MakeKey(10).data()));
+  EXPECT_EQ(grdb_addresses_type(&index.index, MakeKey(10).data()), GRDT_ADDRESS_NONE);
 
   // and the same chain again gives the same answers
   Reference again;
@@ -295,7 +295,7 @@ TEST(AddressIndex, AGeneratedChainMatchesTheReference) {
   Index index;
 
   struct Fill {
-    grdx_addresses *index;
+    grdb_addresses *index;
     Reference *reference;
     uint64_t max_tx = 0;
     uint32_t seen = 0;
@@ -309,7 +309,7 @@ TEST(AddressIndex, AGeneratedChainMatchesTheReference) {
           &source, bench_default_community_uuid,
           [](const grdr_complete_transaction *tx, void *context) -> arnm_result {
             Fill &fill = *static_cast<Fill *>(context);
-            const arnm_result result = grdx_addresses_add(fill.index, tx);
+            const arnm_result result = grdb_addresses_add(fill.index, tx);
             if (ARNM_SUCCESS != result) { return result; }
             fill.max_tx = tx->tx_nr;
             ++fill.seen;
@@ -351,24 +351,24 @@ TEST(AddressIndex, AGeneratedChainMatchesTheReference) {
 
   ASSERT_GT(fill.seen, 0u);
   if (!source.path) { EXPECT_EQ(fill.seen, source.count); }
-  EXPECT_EQ(grdx_addresses_size(&index.index), reference.size());
+  EXPECT_EQ(grdb_addresses_size(&index.index), reference.size());
   for (const auto &entry : reference) {
     const Key &key = entry.first;
     const Address &address = entry.second;
     EXPECT_EQ(
-        grdx_addresses_type(&index.index, key.data()),
+        grdb_addresses_type(&index.index, key.data()),
         address.types.empty() ? GRDT_ADDRESS_NONE : address.types.back().second
     );
     for (uint64_t at : {uint64_t{0}, fill.max_tx / 3u, fill.max_tx}) {
       grdt_address want = GRDT_ADDRESS_NONE;
       const bool wanted = TypeAt(address, at, &want);
       grdt_address got = GRDT_ADDRESS_NONE;
-      const bool found = grdx_addresses_type_at(&index.index, key.data(), at, &got);
+      const bool found = grdb_addresses_type_at(&index.index, key.data(), at, &got);
       ASSERT_EQ(found, wanted) << "at " << at;
       if (found) { EXPECT_EQ(got, want) << "at " << at; }
     }
     uint64_t balance_tx = 0;
-    const bool has_balance = grdx_addresses_last_balance(&index.index, key.data(), &balance_tx);
+    const bool has_balance = grdb_addresses_last_balance(&index.index, key.data(), &balance_tx);
     EXPECT_EQ(has_balance, address.last_balance != 0);
     if (has_balance) { EXPECT_EQ(balance_tx, address.last_balance); }
   }
@@ -403,7 +403,7 @@ TEST(AddressIndex, ARealChainMatchesTheReference) {
         )) {
       continue;
     }
-    ASSERT_EQ(grdx_addresses_add(&index.index, &tx), ARNM_SUCCESS) << "tx " << tx.tx_nr;
+    ASSERT_EQ(grdb_addresses_add(&index.index, &tx), ARNM_SUCCESS) << "tx " << tx.tx_nr;
     max_tx = tx.tx_nr;
 
     auto note_type = [&](const uint8_t *key_bytes, grdt_address type) {
@@ -438,26 +438,26 @@ TEST(AddressIndex, ARealChainMatchesTheReference) {
   }
   fclose(file);
   ASSERT_GT(reference.size(), 100u) << "the file holds no transactions this build can read";
-  EXPECT_EQ(grdx_addresses_size(&index.index), reference.size());
+  EXPECT_EQ(grdb_addresses_size(&index.index), reference.size());
 
   // every address, asked at four points of the chain rather than at every number
   for (const auto &entry : reference) {
     const Key &key = entry.first;
     const Address &address = entry.second;
     EXPECT_EQ(
-        grdx_addresses_type(&index.index, key.data()),
+        grdb_addresses_type(&index.index, key.data()),
         address.types.empty() ? GRDT_ADDRESS_NONE : address.types.back().second
     );
     for (uint64_t at : {uint64_t{0}, max_tx / 3u, max_tx / 2u, max_tx}) {
       grdt_address want = GRDT_ADDRESS_NONE;
       const bool wanted = TypeAt(address, at, &want);
       grdt_address got = GRDT_ADDRESS_NONE;
-      const bool found = grdx_addresses_type_at(&index.index, key.data(), at, &got);
+      const bool found = grdb_addresses_type_at(&index.index, key.data(), at, &got);
       ASSERT_EQ(found, wanted) << "at " << at;
       if (found) { EXPECT_EQ(got, want) << "at " << at; }
     }
     uint64_t balance_tx = 0;
-    const bool has_balance = grdx_addresses_last_balance(&index.index, key.data(), &balance_tx);
+    const bool has_balance = grdb_addresses_last_balance(&index.index, key.data(), &balance_tx);
     EXPECT_EQ(has_balance, address.last_balance != 0);
     if (has_balance) { EXPECT_EQ(balance_tx, address.last_balance); }
   }

@@ -1,5 +1,5 @@
-#ifndef GRADIDO_BLOCKCHAIN_CORE_INDEX_ADDRESSES_H
-#define GRADIDO_BLOCKCHAIN_CORE_INDEX_ADDRESSES_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_ADDRESSES_H
+#define GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_ADDRESSES_H
 
 #include "arnm/bucket_vector.h"
 #include "arnm/key_map.h"
@@ -16,8 +16,8 @@ extern "C" {
 #endif
 
 /**
- * @defgroup grdx_addresses grdx_addresses
- * @ingroup index
+ * @defgroup grdb_addresses grdb_addresses
+ * @ingroup blockchain
  * @brief What a chain says about an address itself: what kind of account it is, since when, and
  *        when its balance last moved.
  *
@@ -34,7 +34,7 @@ extern "C" {
  *
  * Both are answered here without touching a set: the type from the transactions that set it,
  * kept newest first per address, and the last balance change as a single number per address.
- * @ref grdx_transactions answers everything that is a *filter* over many transactions; this
+ * @ref grdb_transactions answers everything that is a *filter* over many transactions; this
  * answers what is already decided about one address.
  *
  * ### What it holds
@@ -60,18 +60,18 @@ extern "C" {
  */
 
 /** @brief Shape of an address index. `{0}` is the default. */
-typedef struct grdx_addresses_options {
+typedef struct grdb_addresses_options {
   /** Addresses to make room for before the first add; 0 leaves the map to grow on its own. */
   uint32_t expected_addresses;
-} grdx_addresses_options;
+} grdb_addresses_options;
 
 /**
  * @brief What a chain knows about its addresses. Zeroed is not ready;
- *        @ref grdx_addresses_init() makes it so.
+ *        @ref grdb_addresses_init() makes it so.
  *
  * The fields are public to be read and measured, and written only by the calls below.
  */
-typedef struct grdx_addresses {
+typedef struct grdb_addresses {
   arnm *source;               /**< Where memory comes from; NULL is the host. */
   arnm_key_map keys;          /**< 32 byte public key -> dense address id. */
   arnm_bvec entries;          /**< One record per address, at its id. */
@@ -79,7 +79,7 @@ typedef struct grdx_addresses {
   uint64_t max_tx_nr;         /**< Largest transaction number added; 0 while empty. */
   uint32_t transaction_count; /**< Transactions that said anything about an address. */
   bool ready;                 /**< Init ran and release did not. */
-} grdx_addresses;
+} grdb_addresses;
 
 // ********** building *******************
 
@@ -95,21 +95,21 @@ typedef struct grdx_addresses {
  * @warning Calling this on an index that still holds memory leaks it. Release it first.
  * @whisper A register of names, still blank
  */
-arnm_result grdx_addresses_init(
-    grdx_addresses *index, const grdx_addresses_options *options, arnm *source
+arnm_result grdb_addresses_init(
+    grdb_addresses *index, const grdb_addresses_options *options, arnm *source
 );
 
 /**
  * @brief Give every byte back to @p source and leave the index as init found it.
  * @param[in,out] index Index to empty; NULL is a no-op.
  */
-void grdx_addresses_release(grdx_addresses *index);
+void grdb_addresses_release(grdb_addresses *index);
 
 /**
  * @brief Forget every address, keep the memory for the next fill.
  * @param[in,out] index Index to empty; NULL is a no-op.
  */
-void grdx_addresses_reset(grdx_addresses *index);
+void grdb_addresses_reset(grdb_addresses *index);
 
 /**
  * @brief Read what @p tx says about addresses: a type given, a balance moved.
@@ -139,7 +139,7 @@ void grdx_addresses_reset(grdx_addresses *index);
  *                                         Whatever the transaction had already written stays.
  * @whisper A name written in, or a date moved forward
  */
-arnm_result grdx_addresses_add(grdx_addresses *index, const grdr_complete_transaction *tx);
+arnm_result grdb_addresses_add(grdb_addresses *index, const grdr_complete_transaction *tx);
 
 // ********** asking *******************
 
@@ -152,7 +152,7 @@ arnm_result grdx_addresses_add(grdx_addresses *index, const grdr_complete_transa
  *         which is also the answer for an address that only ever sent and received.
  * @whisper What the register says today
  */
-grdt_address grdx_addresses_type(const grdx_addresses *index, const uint8_t *public_key);
+grdt_address grdb_addresses_type(const grdb_addresses *index, const uint8_t *public_key);
 
 /**
  * @brief The kind of account @p public_key was as of transaction @p at_tx_nr.
@@ -169,8 +169,8 @@ grdt_address grdx_addresses_type(const grdx_addresses *index, const uint8_t *pub
  * @return false when nothing at or below @p at_tx_nr gave this address a type.
  * @whisper The register as it read that day, not today
  */
-bool grdx_addresses_type_at(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t at_tx_nr, grdt_address *out
+bool grdb_addresses_type_at(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t at_tx_nr, grdt_address *out
 );
 
 /**
@@ -186,15 +186,15 @@ bool grdx_addresses_type_at(
  * @return How many were written, @p size or fewer.
  * @whisper Every day this name was written anew
  */
-uint32_t grdx_addresses_type_changes(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t *out, uint32_t size
+uint32_t grdb_addresses_type_changes(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t *out, uint32_t size
 );
 
 /**
  * @brief The last transaction that carried a balance entry for @p public_key.
  *
  * Where a balance calculation starts. For a number *before* the newest one, this index has
- * nothing to say -- ask @ref grdx_transactions_newest() with the balance changing role and an
+ * nothing to say -- ask @ref grdb_transactions_newest() with the balance changing role and an
  * upper bound, which reads one key of one set.
  *
  * @param[in]  index      Index to ask; may be NULL.
@@ -203,15 +203,15 @@ uint32_t grdx_addresses_type_changes(
  * @return false when no transaction ever moved this address's balance.
  * @whisper The last day the account was touched
  */
-bool grdx_addresses_last_balance(
-    const grdx_addresses *index, const uint8_t *public_key, uint64_t *out
+bool grdb_addresses_last_balance(
+    const grdb_addresses *index, const uint8_t *public_key, uint64_t *out
 );
 
 /** @brief Whether the index holds anything at all about @p public_key. */
-bool grdx_addresses_knows(const grdx_addresses *index, const uint8_t *public_key);
+bool grdb_addresses_knows(const grdb_addresses *index, const uint8_t *public_key);
 
 /** @brief Addresses the index holds something about. 0 for NULL or an empty index. */
-uint32_t grdx_addresses_size(const grdx_addresses *index);
+uint32_t grdb_addresses_size(const grdb_addresses *index);
 
 /** @} */
 
@@ -219,4 +219,4 @@ uint32_t grdx_addresses_size(const grdx_addresses *index);
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_CORE_INDEX_ADDRESSES_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_ADDRESSES_H

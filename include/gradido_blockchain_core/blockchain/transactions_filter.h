@@ -1,5 +1,5 @@
-#ifndef GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_FILTER_H
-#define GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_FILTER_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_FILTER_H
+#define GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_FILTER_H
 
 #include "arnm/converter.h"
 #include "gradido_blockchain_core/const.h"
@@ -14,10 +14,10 @@ extern "C" {
 #endif
 
 /**
- * @defgroup grdx_transactions_filter grdx_transactions_filter
- * @ingroup index
+ * @defgroup grdb_transactions_filter grdb_transactions_filter
+ * @ingroup blockchain
  * @brief What to look for in a chain: an address in a role, a type, a coin, a span of numbers,
- *        a span of days -- the question @ref grdx_transactions answers.
+ *        a span of days -- the question @ref grdb_transactions answers.
  *
  * A filter is a plain value. It is built, asked with, and forgotten; it holds no memory of its
  * own and points at nothing. A zeroed filter matches every transaction of a chain, and every
@@ -37,14 +37,14 @@ extern "C" {
  * validates as it goes:
  *
  * ```c
- * grdx_transactions_filter filter = {0};
- * grdx_transactions_filter_set_address(&filter, key, GRDX_ADDRESS_ROLE_INVOLVED);
- * grdx_transactions_filter_set_transaction_type(&filter, GRDT_TRANSACTION_TRANSFER);
+ * grdb_transactions_filter filter = {0};
+ * grdb_transactions_filter_set_address(&filter, key, GRDB_ADDRESS_ROLE_INVOLVED);
+ * grdb_transactions_filter_set_transaction_type(&filter, GRDT_TRANSACTION_TRANSFER);
  * ```
  *
  * Across an FFI boundary the setters are the whole interface: @ref
- * grdx_transactions_filter_create() allocates one, the setters fill it, @ref
- * grdx_transactions_filter_free() gives it back, and no host needs to know this struct's layout or
+ * grdb_transactions_filter_create() allocates one, the setters fill it, @ref
+ * grdb_transactions_filter_free() gives it back, and no host needs to know this struct's layout or
  * size.
  *
  * ### What "unset" is
@@ -60,11 +60,11 @@ extern "C" {
  */
 
 /** @brief How an address took part in a transaction. A filter names one, a transaction has any. */
-typedef enum grdx_address_role {
-  GRDX_ADDRESS_ROLE_NONE = 0, /**< No address named: the filter asks over the whole chain. */
-  GRDX_ADDRESS_ROLE_INVOLVED, /**< Any of the three: balance changed, signed, or only named. */
-  GRDX_ADDRESS_ROLE_BALANCE   /**< Only where the address's balance changed. */
-} grdx_address_role;
+typedef enum grdb_address_role {
+  GRDB_ADDRESS_ROLE_NONE = 0, /**< No address named: the filter asks over the whole chain. */
+  GRDB_ADDRESS_ROLE_INVOLVED, /**< Any of the three: balance changed, signed, or only named. */
+  GRDB_ADDRESS_ROLE_BALANCE   /**< Only where the address's balance changed. */
+} grdb_address_role;
 
 /**
  * @brief What to look for. `{0}` matches every transaction of the chain.
@@ -73,7 +73,7 @@ typedef enum grdx_address_role {
  * header; the calls below are the same thing with the checks, and the only way in for a host
  * that does not.
  */
-typedef struct grdx_transactions_filter {
+typedef struct grdb_transactions_filter {
   /** The address to look for; read only when @c role names one. All zero otherwise. */
   uint8_t public_key[SIGN_PUBLIC_KEY_SIZE];
   /**
@@ -83,7 +83,7 @@ typedef struct grdx_transactions_filter {
    */
   uint8_t coin_community_uuid[ARNM_UUID_BINARY_SIZE];
   /** Which of the address's three sets to read. */
-  grdx_address_role role;
+  grdb_address_role role;
   /** One type, or @ref GRDT_TRANSACTION_NONE for any. */
   grdt_transaction transaction_type;
   /** Smallest transaction number to match; 0 for no bound. */
@@ -94,7 +94,7 @@ typedef struct grdx_transactions_filter {
   int64_t from_seconds;
   /** Latest confirmation second to match, that second included; 0 for no bound. */
   int64_t to_seconds;
-} grdx_transactions_filter;
+} grdb_transactions_filter;
 
 // ********** a filter of one's own *******************
 
@@ -102,25 +102,25 @@ typedef struct grdx_transactions_filter {
  * @brief Make @p filter match everything. The same as zeroing it.
  * @param[out] filter Filter to empty; NULL is a no-op.
  */
-void grdx_transactions_filter_init(grdx_transactions_filter *filter);
+void grdb_transactions_filter_init(grdb_transactions_filter *filter);
 
 /**
  * @brief Allocate a filter that matches everything, for a caller that cannot place one itself.
  *
  * For FFI: the host holds the pointer and never needs this struct's size or layout. A C caller
- * writes `grdx_transactions_filter filter = {0};` instead and allocates nothing.
+ * writes `grdb_transactions_filter filter = {0};` instead and allocates nothing.
  *
  * @return The filter, or NULL when the allocation failed. Give it back with
- *         @ref grdx_transactions_filter_free().
+ *         @ref grdb_transactions_filter_free().
  * @whisper A blank sheet handed across the border
  */
-grdx_transactions_filter *grdx_transactions_filter_create(void);
+grdb_transactions_filter *grdb_transactions_filter_create(void);
 
 /**
- * @brief Free a filter @ref grdx_transactions_filter_create() handed out.
+ * @brief Free a filter @ref grdb_transactions_filter_create() handed out.
  * @param[in] filter Filter to free; NULL is a no-op.
  */
-void grdx_transactions_filter_free(grdx_transactions_filter *filter);
+void grdb_transactions_filter_free(grdb_transactions_filter *filter);
 
 // ********** what to look for *******************
 
@@ -130,16 +130,16 @@ void grdx_transactions_filter_free(grdx_transactions_filter *filter);
  * The 32 bytes are copied into the filter; @p public_key is not kept.
  *
  * @param[in,out] filter     Filter to narrow; not NULL.
- * @param[in]     public_key 32 bytes; NULL only together with @ref GRDX_ADDRESS_ROLE_NONE.
+ * @param[in]     public_key 32 bytes; NULL only together with @ref GRDB_ADDRESS_ROLE_NONE.
  * @param[in]     role       Which of the address's three sets to read.
- *                           @ref GRDX_ADDRESS_ROLE_NONE clears the address again.
+ *                           @ref GRDB_ADDRESS_ROLE_NONE clears the address again.
  * @retval ARNM_SUCCESS               Set.
  * @retval ARNM_ERROR_NULL_POINTER    @p filter is NULL, or @p public_key is NULL with a role.
- * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p role is not one of @ref grdx_address_role.
+ * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p role is not one of @ref grdb_address_role.
  * @whisper One name, and the part it played
  */
-arnm_result grdx_transactions_filter_set_address(
-    grdx_transactions_filter *filter, const uint8_t *public_key, grdx_address_role role
+arnm_result grdb_transactions_filter_set_address(
+    grdb_transactions_filter *filter, const uint8_t *public_key, grdb_address_role role
 );
 
 /**
@@ -151,8 +151,8 @@ arnm_result grdx_transactions_filter_set_address(
  * @retval ARNM_ERROR_NULL_POINTER      @p filter is NULL.
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE @p type is not one this library knows.
  */
-arnm_result grdx_transactions_filter_set_transaction_type(
-    grdx_transactions_filter *filter, grdt_transaction type
+arnm_result grdb_transactions_filter_set_transaction_type(
+    grdb_transactions_filter *filter, grdt_transaction type
 );
 
 /**
@@ -168,8 +168,8 @@ arnm_result grdx_transactions_filter_set_transaction_type(
  * @retval ARNM_ERROR_INVALID_PARAM  @p uuid is all zero, which names no community.
  * @whisper Which coin the balance was counted in
  */
-arnm_result grdx_transactions_filter_set_coin_community(
-    grdx_transactions_filter *filter, const uint8_t *uuid
+arnm_result grdb_transactions_filter_set_coin_community(
+    grdb_transactions_filter *filter, const uint8_t *uuid
 );
 
 /**
@@ -184,8 +184,8 @@ arnm_result grdx_transactions_filter_set_coin_community(
  * @retval ARNM_SUCCESS            Set.
  * @retval ARNM_ERROR_NULL_POINTER @p filter is NULL.
  */
-arnm_result grdx_transactions_filter_set_tx_range(
-    grdx_transactions_filter *filter, uint64_t min_tx_nr, uint64_t max_tx_nr
+arnm_result grdb_transactions_filter_set_tx_range(
+    grdb_transactions_filter *filter, uint64_t min_tx_nr, uint64_t max_tx_nr
 );
 
 /**
@@ -202,8 +202,8 @@ arnm_result grdx_transactions_filter_set_tx_range(
  * @retval ARNM_ERROR_NULL_POINTER @p filter is NULL.
  * @whisper The days the question is asked of
  */
-arnm_result grdx_transactions_filter_set_date_range(
-    grdx_transactions_filter *filter, int64_t from_seconds, int64_t to_seconds
+arnm_result grdb_transactions_filter_set_date_range(
+    grdb_transactions_filter *filter, int64_t from_seconds, int64_t to_seconds
 );
 
 // ********** reading one back *******************
@@ -213,14 +213,14 @@ arnm_result grdx_transactions_filter_set_date_range(
  * @param[in] filter Filter to read; may be NULL.
  * @return 32 bytes inside @p filter -- they live as long as it does -- or NULL.
  */
-const uint8_t *grdx_transactions_filter_address(const grdx_transactions_filter *filter);
+const uint8_t *grdb_transactions_filter_address(const grdb_transactions_filter *filter);
 
 /**
  * @brief The coin community the filter looks for, or NULL when it looks for any.
  * @param[in] filter Filter to read; may be NULL.
  * @return 16 bytes inside @p filter, or NULL.
  */
-const uint8_t *grdx_transactions_filter_coin_community(const grdx_transactions_filter *filter);
+const uint8_t *grdb_transactions_filter_coin_community(const grdb_transactions_filter *filter);
 
 /** @} */
 
@@ -228,4 +228,4 @@ const uint8_t *grdx_transactions_filter_coin_community(const grdx_transactions_f
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_FILTER_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_FILTER_H

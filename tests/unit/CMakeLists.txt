@@ -64,6 +64,23 @@ if (USE_SODIUM)
   target_link_libraries(test_index_addresses sodium)
 endif()
 
+# The store behind a chain: in memory, and a host answering across an FFI boundary.
+add_executable(test_blockchain_store src/test_blockchain_store.cpp)
+target_link_libraries(test_blockchain_store gradido_blockchain_core GTest::gtest_main)
+if (USE_SODIUM)
+  target_link_libraries(test_blockchain_store sodium)
+endif()
+
+# The chain over those indices: the same answers however the row of segments is cut.
+add_executable(test_blockchain_chain src/test_blockchain_chain.cpp
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_data.c
+               ${CMAKE_SOURCE_DIR}/benchmarks/src/bench_chain_synth.c)
+target_link_libraries(test_blockchain_chain gradido_blockchain_core GTest::gtest_main)
+target_include_directories(test_blockchain_chain PRIVATE ${CMAKE_SOURCE_DIR}/benchmarks/src)
+if (USE_SODIUM)
+  target_link_libraries(test_blockchain_chain sodium)
+endif()
+
 # The map prototypes behind bench_tx_index_map, every variant against a reference.
 add_executable(test_tx_index_proto src/test_tx_index_proto.cpp)
 target_link_libraries(test_tx_index_proto tx_index_proto GTest::gtest_main)
@@ -111,6 +128,8 @@ if(NOT CMAKE_CROSSCOMPILING OR (DEFINED CMAKE_CROSSCOMPILING_EMULATOR AND CMAKE_
   add_test(NAME test_chain_synth COMMAND test_chain_synth)
   add_test(NAME test_index_transactions_filter COMMAND test_index_transactions_filter)
   add_test(NAME test_index_transactions COMMAND test_index_transactions)
+  add_test(NAME test_blockchain_chain COMMAND test_blockchain_chain)
+  add_test(NAME test_blockchain_store COMMAND test_blockchain_store)
   add_test(NAME test_tx_index_proto COMMAND test_tx_index_proto)
   add_test(NAME test_tx_index_roaring COMMAND test_tx_index_roaring)
   if (USE_SODIUM)
