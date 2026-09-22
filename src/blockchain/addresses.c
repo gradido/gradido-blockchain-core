@@ -45,7 +45,12 @@ static arnm_result entry_for_key(grdb_addresses *index, const uint8_t *key, addr
   bool inserted = false;
   const arnm_result result = arnm_key_map_get_or_insert(&index->keys, key, &id, &inserted);
   if (ARNM_SUCCESS != result) { return result; }
-  if (inserted) {
+  (void)inserted;
+  // Grown up to the id, not by one. A key the map took while the vector found no room for its
+  // entry stays in the map; asked for again, it is not new, and a vector grown only for new keys
+  // would never reach it -- every later transaction naming it would be refused for good, room or
+  // not. Ids are handed out densely, so what is missing is only ever that last stretch.
+  while (arnm_bvec_size(&index->entries) <= id) {
     void *slot = NULL;
     const arnm_result grown = arnm_bvec_emplace(&index->entries, &slot);
     if (ARNM_SUCCESS != grown) { return grown; }
@@ -53,7 +58,6 @@ static arnm_result entry_for_key(grdb_addresses *index, const uint8_t *key, addr
     entry->last_balance_tx = 0;
     entry->last_change = ADDRESSES_NO_CHANGE;
   }
-  if (id >= arnm_bvec_size(&index->entries)) { return ARNM_ERROR_OUT_OF_MEMORY; }
   *out = entry_at(index, id);
   return ARNM_SUCCESS;
 }
@@ -82,6 +86,18 @@ static arnm_result note_type(
   address_entry *entry = NULL;
   const arnm_result result = entry_for_key(index, key, &entry);
   if (ARNM_SUCCESS != result) { return result; }
+
+  // An add that was refused part way leaves the records it had already written, and adding the
+  // transaction again comes back here. Numbers only grow, so this transaction's records are the
+  // newest of the key: one with this number and this type is this very record, written before,
+  // and a second would list the transaction twice among the key's type changes.
+  for (uint32_t at = entry->last_change; ADDRESSES_NO_CHANGE != at;) {
+    const type_change *known = change_at(index, at);
+    if (known->tx_nr != tx_nr) { break; }
+    if (known->type == (uint8_t)type) { return ARNM_SUCCESS; }
+    at = known->previous;
+  }
+
   void *slot = NULL;
   const arnm_result grown = arnm_bvec_emplace(&index->type_changes, &slot);
   if (ARNM_SUCCESS != grown) { return grown; }

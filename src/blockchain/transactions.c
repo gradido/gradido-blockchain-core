@@ -187,17 +187,17 @@ static arnm_result sets_for_key(
   bool inserted = false;
   const arnm_result result = arnm_key_map_get_or_insert(&index->addresses, key, &id, &inserted);
   if (ARNM_SUCCESS != result) { return result; }
-  if (inserted) {
+  (void)inserted;
+  // Grown up to the id, not by one. A key the map took while the vector found no room for its
+  // sets stays in the map; asked for again, it is not new, and a vector grown only for new keys
+  // would never reach it -- the address would be refused for good, room or not. Ids are handed
+  // out densely, so what is missing is only ever that last stretch.
+  while (arnm_bvec_size(&index->address_sets) <= id) {
     void *slot = NULL;
     const arnm_result grown = arnm_bvec_emplace(&index->address_sets, &slot);
-    if (ARNM_SUCCESS != grown) {
-      // the key stays in the map without sets; the next add for it finds the slot missing, so
-      // the vector is filled up to the map's size before anything reads it
-      return grown;
-    }
+    if (ARNM_SUCCESS != grown) { return grown; }
     memset(slot, 0, sizeof(grdb_address_sets));
   }
-  if (id >= arnm_bvec_size(&index->address_sets)) { return ARNM_ERROR_OUT_OF_MEMORY; }
   *out = sets_at(index, id);
   return ARNM_SUCCESS;
 }

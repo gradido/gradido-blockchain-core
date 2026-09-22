@@ -16,31 +16,35 @@ extern "C" {
 /**
  * @defgroup grdb_in_memory grdb_in_memory
  * @ingroup blockchain
- * @brief A chain that lives nowhere but here: the serialized transactions in a vector, handed
- *        back by number.
+ * @brief A chain that lives nowhere but here: decoded transactions in a vector, handed back by
+ *        number as the address they are kept at.
  *
- * The store for a test, a benchmark, and a chain small enough to hold whole. It keeps the bytes
- * it was appended -- one copy per transaction, drawn from the allocator it was given -- and
- * decodes them again on every fetch.
+ * The store for a test, a benchmark, and a chain small enough to hold whole. It keeps every
+ * transaction as a @ref grdr_complete_transaction, and a fetch is a lookup: no decode, no copy.
  *
  * ### It keeps them decoded
  *
  * Appending **moves** a transaction in -- @ref grdr_complete_transaction carries its own
- * allocator handle, so the struct travels and what it points at stays where it is -- and a
- * fetch hands back that address. Nothing is decoded again, and nothing is copied, because a
- * transaction cannot be copied and does not need to be.
+ * allocator handle, so the struct travels and what it points at stays where it is -- and the
+ * caller's struct is left empty. A fetch hands back the address of the kept one, which stays
+ * valid for as long as the store holds it. Nothing is copied, because a transaction cannot be
+ * copied and does not need to be.
  *
- * A caller that has bytes rather than an object gives them instead: the store decodes them once,
- * on the way in. Either way, reading is a lookup.
+ * A caller that has bytes rather than an object gives those instead: the store decodes them
+ * **once, during the append**, into the slot the transaction will live in. Either way a fetch is
+ * a lookup.
  *
  * ### Memory
  *
- * The record vector, every transaction's bytes, and the scratch the decoder works in all come
- * from the `arnm *` given at init. @ref grdb_in_memory_release() gives all of it back.
+ * The vector of transactions and the scratch a decode works in come from the `arnm *` given at
+ * init. The arrays of each transaction do not: they live in the transaction's own arena, which
+ * a moved in transaction brings with it and a decoded one opens from the host. The store owns
+ * both from the append on, and @ref grdb_in_memory_reset() and @ref grdb_in_memory_release()
+ * release every transaction before they give the vector and the scratch back.
  *
  * @note Not thread safe. Several threads may read a store that no thread is appending to.
  *
- * @whisper A chain held in the hand, weighed each time it is read
+ * @whisper A chain held in the hand, each page already open where it lies
  *
  * @{
  */
@@ -81,8 +85,11 @@ typedef struct grdb_in_memory {
  *                               Copied.
  * @param[in,out] source         Allocator for everything; NULL for the host.
  * @retval ARNM_SUCCESS             Ready and empty.
- * @retval ARNM_ERROR_NULL_POINTER  @p store or @p community_uuid is NULL.
- * @retval ARNM_ERROR_OUT_OF_MEMORY @p source had no room for the vector or the scratch.
+ * @retval ARNM_ERROR_NULL_POINTER        @p store or @p community_uuid is NULL.
+ * @retval ARNM_ERROR_ARITHMETIC_OVERFLOW @c scratch_bytes is above `UINT32_MAX - 7`, where the
+ *                                        rounding to a multiple of 8 would wrap. @p store is
+ *                                        left untouched.
+ * @retval ARNM_ERROR_OUT_OF_MEMORY       @p source had no room for the vector or the scratch.
  * @warning Calling this on a store that still holds memory leaks it. Release it first.
  * @whisper An empty ledger, and a desk to read it at
  */

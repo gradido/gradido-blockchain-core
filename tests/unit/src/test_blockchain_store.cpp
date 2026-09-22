@@ -137,7 +137,7 @@ public:
     for (uint32_t i = 0; i < count; ++i) {
       Own own;
       own.decode(source_, i);
-      EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped_, i + 1u, own.get(), nullptr));
+      EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped_, own.get()));
       EXPECT_TRUE(own.empty()) << "append takes the transaction; the caller is left empty";
     }
   }
@@ -199,7 +199,7 @@ TEST(InMemoryStore, TheMoveKeepsEverythingTheArenaHolds) {
   grdb_in_memory store;
   ASSERT_EQ(ARNM_SUCCESS, grdb_in_memory_init(&store, nullptr, kCommunityUuid, nullptr));
   grdb_chain_store wrapped = grdb_in_memory_as_store(&store);
-  ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped, 1, own.get(), nullptr));
+  ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped, own.get()));
   EXPECT_TRUE(own.empty());
 
   const grdr_complete_transaction *kept = grdb_in_memory_at(&store, 1);
@@ -246,7 +246,7 @@ TEST(InMemoryStore, BytesAreTheOtherWayInAndAreDecodedOnce) {
   for (uint32_t i = 0; i < 4; ++i) {
     const arnm_memory_block block = source.block(i);
     // no object to hand over, only bytes: the store decodes them on the way in
-    ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped, i + 1u, nullptr, &block));
+    ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append_serialized(&wrapped, i + 1u, &block));
   }
   EXPECT_EQ(4u, grdb_in_memory_size(&store));
 
@@ -272,18 +272,26 @@ TEST(InMemoryStore, ANumberItDoesNotHoldIsAnAnswerNotAFailure) {
 }
 
 TEST(InMemoryStore, KeepsARunOfNumbersWithoutGaps) {
+  // the store holds 1..3; the transactions offered carry 5, 3 and 4 as their own numbers
   Moved filled(3);
-  Own own;
-  own.decode(filled.source(), 0);
-  EXPECT_EQ(
-      ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append(&filled.as_store(), 5, own.get(), nullptr)
-  ) << "a number that skips one is refused";
-  EXPECT_FALSE(own.empty()) << "and a refusal leaves the transaction with its caller";
-  EXPECT_EQ(
-      ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append(&filled.as_store(), 3, own.get(), nullptr)
-  ) << "a number already kept is refused";
-  EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&filled.as_store(), 4, own.get(), nullptr));
+  Serialized more(5);
+
+  Own fifth;
+  fifth.decode(more, 4);
+  EXPECT_EQ(ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append(&filled.as_store(), fifth.get()))
+      << "a number that skips one is refused";
+  EXPECT_FALSE(fifth.empty()) << "and a refusal leaves the transaction with its caller";
+
+  Own third;
+  third.decode(more, 2);
+  EXPECT_EQ(ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append(&filled.as_store(), third.get()))
+      << "a number already kept is refused";
+
+  Own fourth;
+  fourth.decode(more, 3);
+  EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&filled.as_store(), fourth.get()));
   EXPECT_EQ(4u, grdb_in_memory_size(&filled.store()));
+  EXPECT_EQ(4u, grdb_in_memory_at(&filled.store(), 4)->tx_nr) << "kept under its own number";
 }
 
 TEST(InMemoryStore, ResetReleasesWhatItTookAndItFillsAgain) {
@@ -292,7 +300,7 @@ TEST(InMemoryStore, ResetReleasesWhatItTookAndItFillsAgain) {
   EXPECT_EQ(0u, grdb_in_memory_size(&filled.store()));
   Own own;
   own.decode(filled.source(), 0);
-  EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&filled.as_store(), 1, own.get(), nullptr));
+  EXPECT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&filled.as_store(), own.get()));
   EXPECT_EQ(1u, grdb_in_memory_size(&filled.store()));
 }
 
@@ -512,13 +520,13 @@ TEST(ChainFfi, TheHostsAnswersAreTranslatedNotGuessedAt) {
 
   EXPECT_FALSE(grdb_chain_store_is_writable(&store)) << "a host without a put is read only";
   const arnm_memory_block block = source.block(0);
-  EXPECT_EQ(ARNM_ERROR_INVALID_STATE, grdb_chain_store_append(&store, 4, nullptr, &block));
+  EXPECT_EQ(ARNM_ERROR_INVALID_STATE, grdb_chain_store_append_serialized(&store, 4, &block));
   EXPECT_EQ(0u, host.puts);
 
   grdb_chain_ffi_release(&adapter);
 }
 
-TEST(ChainFfi, AnAppendNeedsBytesAndKeepsTheObject) {
+TEST(ChainFfi, TheHostTakesBytesAndNoObjects) {
   Serialized source(2);
   Host host;
   host.source = &source;
@@ -533,24 +541,87 @@ TEST(ChainFfi, AnAppendNeedsBytesAndKeepsTheObject) {
       ARNM_SUCCESS, grdb_chain_ffi_init(&adapter, &callbacks, nullptr, kCommunityUuid, nullptr)
   );
   grdb_chain_store store = grdb_chain_ffi_as_store(&adapter);
+  EXPECT_TRUE(grdb_chain_store_is_writable(&store));
+  EXPECT_EQ(nullptr, store.append) << "a host that keeps rows has nowhere to put a C struct";
+  EXPECT_NE(nullptr, store.append_serialized);
 
   Own own;
   own.decode(source, 0);
-  EXPECT_EQ(ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append(&store, 1, own.get(), nullptr))
-      << "this store writes bytes down; an object alone is nothing it could keep";
-  EXPECT_FALSE(own.empty());
+  EXPECT_EQ(ARNM_ERROR_INVALID_STATE, grdb_chain_store_append(&store, own.get()));
+  EXPECT_FALSE(own.empty()) << "refused, so still the caller's";
 
   const arnm_memory_block block = source.block(0);
-  ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&store, 1, own.get(), &block));
-  EXPECT_TRUE(own.empty()) << "taken";
+  ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append_serialized(&store, 1, &block));
   EXPECT_EQ(1u, host.puts);
 
   const grdr_complete_transaction *back = nullptr;
   ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_fetch(&store, 1, &back));
   EXPECT_EQ(1u, back->tx_nr);
-  EXPECT_EQ(0u, host.gets) << "what was just written is read back without asking the host";
+  EXPECT_EQ(1u, host.gets) << "read back from the host, which is where it was written";
 
   grdb_chain_ffi_release(&adapter);
+}
+
+TEST(InMemoryStore, TakesBothFormsAndTheyMeetInOneRun) {
+  // objects and bytes interleaved: one run of numbers, whichever door each came through
+  Serialized source(4);
+  grdb_in_memory store;
+  ASSERT_EQ(ARNM_SUCCESS, grdb_in_memory_init(&store, nullptr, kCommunityUuid, nullptr));
+  grdb_chain_store wrapped = grdb_in_memory_as_store(&store);
+
+  for (uint32_t i = 0; i < 4; ++i) {
+    if (i % 2) {
+      const arnm_memory_block block = source.block(i);
+      ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append_serialized(&wrapped, i + 1u, &block));
+    } else {
+      Own own;
+      own.decode(source, i);
+      ASSERT_EQ(ARNM_SUCCESS, grdb_chain_store_append(&wrapped, own.get()));
+      EXPECT_TRUE(own.empty());
+    }
+  }
+  for (uint64_t number = 1; number <= 4; ++number) {
+    const grdr_complete_transaction *tx = grdb_in_memory_at(&store, number);
+    ASSERT_NE(nullptr, tx);
+    EXPECT_EQ(number, tx->tx_nr);
+  }
+
+  const arnm_memory_block block = source.block(0);
+  EXPECT_EQ(ARNM_ERROR_INVALID_PARAM, grdb_chain_store_append_serialized(&wrapped, 7, &block))
+      << "the bytes door keeps the same run of numbers as the other one";
+  grdb_in_memory_release(&store);
+}
+
+TEST(ChainStore, AScratchSizeTheRoundingWouldWrapIsRefusedAndTouchesNothing) {
+  // rounded up to a multiple of 8, a size within 7 of UINT32_MAX would wrap to a scratch of
+  // nothing and be refused only at the first decode; it is refused here, before anything is
+  // written. The sizes just below the bound would ask for 4 GB and are not tried.
+  for (const uint32_t bytes : {UINT32_MAX - 6u, UINT32_MAX}) {
+    grdb_in_memory_options memory_options = {};
+    memory_options.scratch_bytes = bytes;
+    grdb_in_memory store;
+    std::memset(&store, 0x5A, sizeof(store));
+    EXPECT_EQ(
+        ARNM_ERROR_ARITHMETIC_OVERFLOW,
+        grdb_in_memory_init(&store, &memory_options, kCommunityUuid, nullptr)
+    ) << bytes;
+    const std::vector<uint8_t> pattern(sizeof(store), 0x5A);
+    EXPECT_EQ(0, std::memcmp(&store, pattern.data(), sizeof(store))) << "left untouched";
+
+    grdb_chain_ffi_host callbacks = {};
+    callbacks.get = Host::Get;
+    grdb_chain_ffi_options ffi_options = {};
+    ffi_options.scratch_bytes = bytes;
+    grdb_chain_ffi adapter;
+    std::memset(&adapter, 0x5A, sizeof(adapter));
+    EXPECT_EQ(
+        ARNM_ERROR_ARITHMETIC_OVERFLOW,
+        grdb_chain_ffi_init(&adapter, &callbacks, &ffi_options, kCommunityUuid, nullptr)
+    ) << bytes;
+    const std::vector<uint8_t> adapter_pattern(sizeof(adapter), 0x5A);
+    EXPECT_EQ(0, std::memcmp(&adapter, adapter_pattern.data(), sizeof(adapter)))
+        << "left untouched";
+  }
 }
 
 TEST(ChainFfi, WhatItRefuses) {
@@ -576,7 +647,13 @@ TEST(ChainFfi, WhatItRefuses) {
   const grdr_complete_transaction *tx = nullptr;
   EXPECT_EQ(ARNM_ERROR_INVALID_STATE, grdb_chain_store_fetch(&empty, 1, &tx));
   EXPECT_EQ(ARNM_ERROR_NULL_POINTER, grdb_chain_store_fetch(&empty, 1, nullptr));
-  EXPECT_EQ(ARNM_ERROR_NULL_POINTER, grdb_chain_store_append(&empty, 1, nullptr, nullptr));
+  EXPECT_EQ(ARNM_ERROR_NULL_POINTER, grdb_chain_store_append(&empty, nullptr));
+  EXPECT_EQ(ARNM_ERROR_NULL_POINTER, grdb_chain_store_append_serialized(&empty, 1, nullptr));
+  const arnm_memory_block nothing = {nullptr, 0};
+  EXPECT_EQ(ARNM_ERROR_NULL_POINTER, grdb_chain_store_append_serialized(&empty, 1, &nothing));
+  Own spare;
+  EXPECT_EQ(ARNM_ERROR_INVALID_STATE, grdb_chain_store_append(&empty, spare.get()))
+      << "a store with no calls in it takes nothing";
 
   grdb_chain_ffi_release(nullptr);
   grdb_in_memory_release(nullptr);

@@ -6,6 +6,7 @@
 #include "bench_chain_synth.h"
 
 #include "memory_limit.h"
+#include "starved_arena.h"
 
 #include <algorithm>
 #include <array>
@@ -997,6 +998,79 @@ TEST(TransactionsIndex, WhatItRefuses) {
   grdb_transactions raw{};
   EXPECT_EQ(grdb_transactions_count(&raw, &filter, &count), ARNM_ERROR_INVALID_STATE);
   EXPECT_EQ(grdb_transactions_add(&raw, tx), ARNM_ERROR_INVALID_STATE);
+}
+
+/*
+ * An address the map took while the vector of sets found no room for it stays in the map. The
+ * next transaction naming it finds a key that is not new, and a vector grown only for new keys
+ * never reaches it: that address would be refused for good, room or not. The arena is run dry at
+ * exactly that step (starved_arena.h), given its room back, and the same transaction added again.
+ */
+TEST(TransactionsIndex, AnAddressTheMapTookWithoutItsSetsIsNotRefusedForGood) {
+  Starved memory(8u * 1024u * 1024u);
+  grdb_transactions index;
+  ASSERT_EQ(grdb_transactions_init(&index, nullptr, &memory.arena), ARNM_SUCCESS);
+
+  // the map gets its room up front, so the one allocation left to fail is the sets' bucket
+  const uint32_t per_bucket = 1u << index.address_sets.bucket_capacity_max_log2;
+  ASSERT_EQ(arnm_key_map_reserve(&index.addresses, 2u * per_bucket), ARNM_SUCCESS);
+
+  const Uuid chain_uuid = MakeUuid(9);
+  auto signed_by = [&](uint64_t tx_nr, uint32_t n, Transaction &transaction) {
+    grdr_complete_transaction *tx = &transaction.tx;
+    grdr_complete_transaction_init(tx);
+    tx->tx_nr = tx_nr;
+    // one day for all of them: the day table has its slot after the first and allocates no more
+    tx->confirmed_at.seconds = 1700000000 + static_cast<int64_t>(tx_nr);
+    tx->transaction_type = GRDT_TRANSACTION_TRANSFER;
+    memcpy(tx->tx_community_uuid, chain_uuid.data(), ARNM_UUID_BINARY_SIZE);
+    grdw_signature_pair pair{};
+    pair.public_key[0] = 0xB3;
+    pair.public_key[1] = static_cast<uint8_t>(n >> 16);
+    pair.public_key[2] = static_cast<uint8_t>(n >> 8);
+    pair.public_key[3] = static_cast<uint8_t>(n);
+    pair.public_key[31] = 0x11;
+    pair.signature[0] = 1;
+    transaction.signatures = {pair};
+    tx->signature_pairs = transaction.signatures.data();
+    tx->signature_pairs_count = transaction.signatures.size();
+  };
+
+  // one new signer per transaction until the newest bucket of address sets is full
+  uint64_t tx_nr = 0;
+  uint32_t signer = 0;
+  do {
+    Transaction transaction;
+    signed_by(++tx_nr, signer++, transaction);
+    ASSERT_EQ(grdb_transactions_add(&index, &transaction.tx), ARNM_SUCCESS) << "tx " << tx_nr;
+  } while (index.address_sets.tail_used != per_bucket);
+
+  Transaction fresh;
+  signed_by(++tx_nr, signer++, fresh);
+  memory.starve(8);
+  ASSERT_EQ(grdb_transactions_add(&index, &fresh.tx), ARNM_ERROR_OUT_OF_MEMORY);
+  ASSERT_EQ(grdb_transactions_address_count(&index), arnm_bvec_size(&index.address_sets) + 1u)
+      << "the state this test is about: an address in the map, no sets behind it";
+
+  memory.feed();
+  ASSERT_EQ(grdb_transactions_add(&index, &fresh.tx), ARNM_SUCCESS)
+      << "with room again, the address the map already holds gets its sets";
+  EXPECT_EQ(grdb_transactions_size(&index), static_cast<uint32_t>(tx_nr));
+
+  const grdb_address_sets *sets = grdb_transactions_address(&index, fresh.signatures[0].public_key);
+  ASSERT_NE(sets, nullptr);
+  grdb_transactions_filter filter{};
+  ASSERT_EQ(
+      grdb_transactions_filter_set_address(
+          &filter, fresh.signatures[0].public_key, GRDB_ADDRESS_ROLE_INVOLVED
+      ),
+      ARNM_SUCCESS
+  );
+  uint64_t newest = 0;
+  ASSERT_TRUE(grdb_transactions_newest(&index, &filter, &newest));
+  EXPECT_EQ(newest, tx_nr) << "and it signed the transaction that was added again";
+
+  grdb_transactions_release(&index);
 }
 
 TEST(TransactionsIndex, ResetKeepsTheMemoryAndForgetsTheChain) {

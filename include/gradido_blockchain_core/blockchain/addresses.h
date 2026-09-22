@@ -136,7 +136,11 @@ void grdb_addresses_reset(grdb_addresses *index);
  * @retval ARNM_ERROR_INVALID_ENUM_TYPE    The transaction or address type is not one this
  *                                         library knows.
  * @retval ARNM_ERROR_OUT_OF_MEMORY        The map, the entries or the records found no room.
- *                                         Whatever the transaction had already written stays.
+ *                                         Whatever the transaction had already written stays,
+ *                                         and the index still counts it as not added: add the
+ *                                         same transaction again once there is room and it is
+ *                                         finished, with no type change written twice and no
+ *                                         address left unable to take an entry.
  * @whisper A name written in, or a date moved forward
  */
 arnm_result grdb_addresses_add(grdb_addresses *index, const grdr_complete_transaction *tx);

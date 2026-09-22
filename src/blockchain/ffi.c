@@ -13,15 +13,17 @@ arnm_result grdb_chain_ffi_init(
   const grdb_chain_ffi_options empty = {0};
   if (!options) { options = &empty; }
 
+  const uint32_t wanted =
+      options->scratch_bytes ? options->scratch_bytes : GRDB_FFI_SCRATCH_DEFAULT;
+  // rounded up to the multiple of eight the decoder's arena wants -- which past this bound would
+  // wrap to a scratch of nothing, refused only at the first decode, far from its cause
+  if (wanted > UINT32_MAX - 7u) { return ARNM_ERROR_ARITHMETIC_OVERFLOW; }
+
   memset(adapter, 0, sizeof(*adapter));
   grdr_complete_transaction_init(&adapter->held);
   adapter->host = *host;
   adapter->source = source;
   memcpy(adapter->community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
-
-  const uint32_t wanted =
-      options->scratch_bytes ? options->scratch_bytes : GRDB_FFI_SCRATCH_DEFAULT;
-  // the decoder borrows the scratch as an arena, which wants a multiple of eight
   adapter->scratch_size = (wanted + 7u) & ~7u;
 
   const arnm_result result = arnm_alloc(&adapter->scratch, adapter->scratch_size, source);
@@ -79,31 +81,17 @@ static arnm_result ffi_fetch(
   return ARNM_SUCCESS;
 }
 
-static arnm_result ffi_append(
-    void *user_data,
-    uint64_t tx_nr,
-    grdr_complete_transaction *tx,
-    const arnm_memory_block *serialized
+static arnm_result ffi_append_serialized(
+    void *user_data, uint64_t tx_nr, const arnm_memory_block *serialized
 ) {
   grdb_chain_ffi *adapter = (grdb_chain_ffi *)user_data;
-  if (!adapter || !adapter->ready) { return ARNM_ERROR_NULL_POINTER; }
+  if (!adapter || !adapter->ready || !serialized) { return ARNM_ERROR_NULL_POINTER; }
   if (!adapter->host.put) { return ARNM_ERROR_INVALID_STATE; }
-  // this store writes bytes down; an object alone is nothing it could keep
-  if (!serialized || !serialized->data || !serialized->size) { return ARNM_ERROR_INVALID_PARAM; }
+  if (!serialized->data || !serialized->size) { return ARNM_ERROR_INVALID_PARAM; }
 
   const int answer =
       adapter->host.put(adapter->host.user_data, tx_nr, serialized->data, serialized->size);
-  if (GRDB_FFI_OK != answer) { return ARNM_ERROR_ENCODE_FAILED; }
-
-  // taken: kept where a decode would have put it, so reading it back costs nothing
-  adapter->held_tx_nr = 0;
-  grdr_complete_transaction_release(&adapter->held);
-  if (tx) {
-    adapter->held = *tx;
-    grdr_complete_transaction_init(tx);
-    adapter->held_tx_nr = tx_nr;
-  }
-  return ARNM_SUCCESS;
+  return GRDB_FFI_OK == answer ? ARNM_SUCCESS : ARNM_ERROR_ENCODE_FAILED;
 }
 
 grdb_chain_store grdb_chain_ffi_as_store(grdb_chain_ffi *adapter) {
@@ -112,7 +100,7 @@ grdb_chain_store grdb_chain_ffi_as_store(grdb_chain_ffi *adapter) {
   if (!adapter || !adapter->ready) { return wrapped; }
   wrapped.user_data = adapter;
   wrapped.fetch = ffi_fetch;
-  // a host without a put makes a chain that can be read and not written
-  wrapped.append = adapter->host.put ? ffi_append : NULL;
+  // the host keeps bytes, so bytes are the one form it takes -- and without a put, none at all
+  wrapped.append_serialized = adapter->host.put ? ffi_append_serialized : NULL;
   return wrapped;
 }

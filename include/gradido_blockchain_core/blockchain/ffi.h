@@ -43,8 +43,11 @@ extern "C" {
  * The **transaction** is the adapter's. It keeps one place to decode into and hands back its
  * address, so the pointer from a fetch is good until the next call on this store, exactly as
  * @ref grdb_chain_store says. Asking twice for the same number costs one decode, not two: the
- * second finds it already there. An append leaves the transaction it took in that same place,
- * so reading back what was just written costs nothing either.
+ * second finds it already there.
+ *
+ * Writing is bytes only: the store offers @ref grdb_chain_store::append_serialized, handed to
+ * @ref grdb_chain_ffi_host::put, and leaves @ref grdb_chain_store::append NULL -- a host that
+ * keeps rows has nowhere to put a C struct.
  *
  * @note Not thread safe, and neither is what it calls: one thread at a time per adapter.
  *
@@ -135,8 +138,11 @@ typedef struct grdb_chain_ffi {
  * @param[in]     community_uuid 16 bytes the decoded transactions carry; not NULL. Copied.
  * @param[in,out] source         Allocator for the scratch; NULL for the host allocator.
  * @retval ARNM_SUCCESS             Ready.
- * @retval ARNM_ERROR_NULL_POINTER  An argument is NULL, or @c host->get is.
- * @retval ARNM_ERROR_OUT_OF_MEMORY No room for the scratch.
+ * @retval ARNM_ERROR_NULL_POINTER        An argument is NULL, or @c host->get is.
+ * @retval ARNM_ERROR_ARITHMETIC_OVERFLOW @c scratch_bytes is above `UINT32_MAX - 7`, where the
+ *                                        rounding to a multiple of 8 would wrap. @p adapter is
+ *                                        left untouched.
+ * @retval ARNM_ERROR_OUT_OF_MEMORY       No room for the scratch.
  * @whisper A desk set up at the border crossing
  */
 arnm_result grdb_chain_ffi_init(

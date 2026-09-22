@@ -26,13 +26,15 @@ arnm_result grdb_in_memory_init(
   const grdb_in_memory_options empty = {0};
   if (!options) { options = &empty; }
 
+  const uint32_t wanted =
+      options->scratch_bytes ? options->scratch_bytes : GRDB_IN_MEMORY_SCRATCH_DEFAULT;
+  // rounded up to the multiple of eight a decode's arena wants -- which past this bound would
+  // wrap to a scratch of nothing, refused only at the first decode, far from its cause
+  if (wanted > UINT32_MAX - 7u) { return ARNM_ERROR_ARITHMETIC_OVERFLOW; }
+
   memset(store, 0, sizeof(*store));
   store->source = source;
   memcpy(store->community_uuid, community_uuid, ARNM_UUID_BINARY_SIZE);
-
-  const uint32_t wanted =
-      options->scratch_bytes ? options->scratch_bytes : GRDB_IN_MEMORY_SCRATCH_DEFAULT;
-  // a decode borrows the scratch as an arena, which wants a multiple of eight
   store->scratch_size = (wanted + 7u) & ~7u;
 
   arnm_result result = arnm_bvec_init(
@@ -101,45 +103,60 @@ static arnm_result in_memory_fetch(
   return ARNM_SUCCESS;
 }
 
-static arnm_result in_memory_append(
-    void *user_data,
-    uint64_t tx_nr,
-    grdr_complete_transaction *tx,
-    const arnm_memory_block *serialized
+/** Whether @p tx_nr may come next: not 0, and one above the largest once there is one. */
+static bool is_next(const grdb_in_memory *store, uint64_t tx_nr) {
+  // a store keeps a run of numbers without gaps, the way a chain hands them over
+  return tx_nr && (!store->first_tx_nr || tx_nr == store->max_tx_nr + 1u);
+}
+
+/** Counts in the transaction that was just put in the newest slot. */
+static void note_appended(grdb_in_memory *store, uint64_t tx_nr) {
+  if (!store->first_tx_nr) { store->first_tx_nr = tx_nr; }
+  store->max_tx_nr = tx_nr;
+}
+
+static arnm_result in_memory_append(void *user_data, grdr_complete_transaction *tx) {
+  grdb_in_memory *store = (grdb_in_memory *)user_data;
+  if (!store || !store->ready || !tx) { return ARNM_ERROR_NULL_POINTER; }
+  // the number is the transaction's own; read before the move leaves the caller's struct empty
+  const uint64_t tx_nr = tx->tx_nr;
+  if (!is_next(store, tx_nr)) { return ARNM_ERROR_INVALID_PARAM; }
+
+  void *slot = NULL;
+  const arnm_result result = arnm_bvec_emplace(&store->records, &slot);
+  if (ARNM_SUCCESS != result) { return result; }
+
+  // the move: the struct travels, its arena stays where it is, and the caller is left empty
+  *(grdr_complete_transaction *)slot = *tx;
+  grdr_complete_transaction_init(tx);
+  note_appended(store, tx_nr);
+  return ARNM_SUCCESS;
+}
+
+static arnm_result in_memory_append_serialized(
+    void *user_data, uint64_t tx_nr, const arnm_memory_block *serialized
 ) {
   grdb_in_memory *store = (grdb_in_memory *)user_data;
-  const bool has_bytes = serialized && serialized->data && serialized->size;
-  if (!store || !store->ready || (!tx && !has_bytes)) { return ARNM_ERROR_NULL_POINTER; }
-  if (!tx_nr) { return ARNM_ERROR_INVALID_PARAM; }
-  // a store keeps a run of numbers without gaps, the way a chain hands them over
-  if (store->first_tx_nr && tx_nr != store->max_tx_nr + 1u) { return ARNM_ERROR_INVALID_PARAM; }
+  if (!store || !store->ready || !serialized) { return ARNM_ERROR_NULL_POINTER; }
+  if (!serialized->data || !serialized->size) { return ARNM_ERROR_INVALID_PARAM; }
+  if (!is_next(store, tx_nr)) { return ARNM_ERROR_INVALID_PARAM; }
 
   void *slot = NULL;
   arnm_result result = arnm_bvec_emplace(&store->records, &slot);
   if (ARNM_SUCCESS != result) { return result; }
   grdr_complete_transaction *kept = (grdr_complete_transaction *)slot;
 
-  if (has_bytes) {
-    // bytes rather than an object: decoded once here, never again
-    grdr_complete_transaction_init(kept);
-    result = grdr_complete_transaction_init_from_protobuf(
-        kept, serialized->data, serialized->size, store->community_uuid, store->scratch,
-        store->scratch_size
-    );
-    if (ARNM_SUCCESS != result) {
-      arnm_bvec_pop(&store->records);
-      return result;
-    }
-    // a caller that handed over both is left empty all the same
-    if (tx) { grdr_complete_transaction_release(tx); }
-  } else {
-    // the move: the struct travels, its arena stays where it is, and the caller is left empty
-    *kept = *tx;
-    grdr_complete_transaction_init(tx);
+  // decoded once, here, into the slot it will live in -- and never again
+  grdr_complete_transaction_init(kept);
+  result = grdr_complete_transaction_init_from_protobuf(
+      kept, serialized->data, serialized->size, store->community_uuid, store->scratch,
+      store->scratch_size
+  );
+  if (ARNM_SUCCESS != result) {
+    arnm_bvec_pop(&store->records);
+    return result;
   }
-
-  if (!store->first_tx_nr) { store->first_tx_nr = tx_nr; }
-  store->max_tx_nr = tx_nr;
+  note_appended(store, tx_nr);
   return ARNM_SUCCESS;
 }
 
@@ -150,6 +167,7 @@ grdb_chain_store grdb_in_memory_as_store(grdb_in_memory *store) {
   wrapped.user_data = store;
   wrapped.fetch = in_memory_fetch;
   wrapped.append = in_memory_append;
+  wrapped.append_serialized = in_memory_append_serialized;
   return wrapped;
 }
 
