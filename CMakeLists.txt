@@ -131,7 +131,7 @@ FILE(GLOB DATA "src/data/*.c" "include/gradido_blockchain_core/data/*.h")
 FILE(GLOB DATA_PROTO_GRADIDO "src/data/proto/gradido/*.c" "include/gradido_blockchain_core/data/proto/gradido/*.h")
 FILE(GLOB DATA_RUNTIME "src/data/runtime/*.c" "include/gradido_blockchain_core/data/runtime/*.h")
 FILE(GLOB DATA_WIRE "src/data/wire/*.c" "include/gradido_blockchain_core/data/wire/*.h")
-FILE(GLOB INDEX "src/index/*.c" "include/gradido_blockchain_core/index/*.h")
+FILE(GLOB BLOCKCHAIN "src/blockchain/*.c" "include/gradido_blockchain_core/blockchain/*.h")
 FILE(GLOB MAPPING "src/mapping/*.c" "include/gradido_blockchain_core/mapping/*.h")
 FILE(GLOB SRC "src/*.c" "include/gradido_blockchain_core/*.h")
 FILE(GLOB TYPES "src/types/*.c" "include/gradido_blockchain_core/types/*.h")
@@ -148,7 +148,7 @@ set(GRADIDO_BLOCKCHAIN_CORE_SRC
   ${DATA_PROTO_GRADIDO}
   ${DATA_RUNTIME}
   ${DATA_WIRE}
-  ${INDEX}
+  ${BLOCKCHAIN}
   ${INTERACTION_VALIDATE}
   ${MAPPING}
   ${SRC}
@@ -174,7 +174,7 @@ endif()
     source_group("data/runtime" FILES  ${DATA_RUNTIME} )
     source_group("data/wire" FILES ${DATA_WIRE} )
     source_group("data" FILES ${DATA} )
-    source_group("index" FILES ${INDEX})
+    source_group("blockchain" FILES ${BLOCKCHAIN})
     source_group("interactions/validate" FILES ${INTERACTION_VALIDATE})
     source_group("mapping" FILES ${MAPPING} )
     source_group("types" FILES ${TYPES})

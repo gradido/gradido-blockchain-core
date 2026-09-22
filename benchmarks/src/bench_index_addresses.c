@@ -1,7 +1,7 @@
 #include "arnm/mono_timer.h"
 #include "bench_chain_synth.h"
 #include "bench_report.h"
-#include "gradido_blockchain_core/index/addresses.h"
+#include "gradido_blockchain_core/blockchain/addresses.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,8 +25,8 @@
 static uint64_t g_sink;
 
 typedef struct fill_context {
-  grdx_addresses *index;
-  uint64_t nanos; /**< time inside grdx_addresses_add() */
+  grdb_addresses *index;
+  uint64_t nanos; /**< time inside grdb_addresses_add() */
   uint8_t typed[SAMPLE_KEYS][SIGN_PUBLIC_KEY_SIZE];
   uint32_t typed_count; /**< addresses a transaction gave a type */
   uint8_t moved[SAMPLE_KEYS][SIGN_PUBLIC_KEY_SIZE];
@@ -38,7 +38,7 @@ static arnm_result feed(const grdr_complete_transaction *tx, void *context) {
   fill_context *fill = (fill_context *)context;
   arnm_mono_timer timer;
   arnm_mono_timer_reset(&timer);
-  const arnm_result result = grdx_addresses_add(fill->index, tx);
+  const arnm_result result = grdb_addresses_add(fill->index, tx);
   fill->nanos += (uint64_t)arnm_mono_timer_nanos(timer);
   if (ARNM_SUCCESS != result) { return result; }
   fill->max_tx_nr = tx->tx_nr;
@@ -57,7 +57,7 @@ static arnm_result feed(const grdr_complete_transaction *tx, void *context) {
 
 /** One question asked of every address of a sample, fastest of @ref ROUNDS runs. */
 static double time_rows(
-    const grdx_addresses *index,
+    const grdb_addresses *index,
     const uint8_t keys[SAMPLE_KEYS][SIGN_PUBLIC_KEY_SIZE],
     uint32_t count,
     uint64_t at_tx_nr,
@@ -72,15 +72,15 @@ static double time_rows(
       switch (question) {
       case 0: {
         grdt_address type = GRDT_ADDRESS_NONE;
-        g_sink += grdx_addresses_type_at(index, keys[k], at_tx_nr, &type) + (uint64_t)type;
+        g_sink += grdb_addresses_type_at(index, keys[k], at_tx_nr, &type) + (uint64_t)type;
         break;
       }
       case 1:
-        g_sink += (uint64_t)grdx_addresses_type(index, keys[k]);
+        g_sink += (uint64_t)grdb_addresses_type(index, keys[k]);
         break;
       default: {
         uint64_t last = 0;
-        g_sink += grdx_addresses_last_balance(index, keys[k], &last) + last;
+        g_sink += grdb_addresses_last_balance(index, keys[k], &last) + last;
         break;
       }
       }
@@ -103,10 +103,10 @@ int main(int argc, char **argv) {
                                                                 0x4a, 0x61, 0x8d, 0x2b, 0x6c, 0x05,
                                                                 0x9f, 0x77, 0xe3, 0x12};
 
-  grdx_addresses index;
-  grdx_addresses_options options = {0};
+  grdb_addresses index;
+  grdb_addresses_options options = {0};
   options.expected_addresses = 20000;
-  if (ARNM_SUCCESS != grdx_addresses_init(&index, &options, NULL)) {
+  if (ARNM_SUCCESS != grdb_addresses_init(&index, &options, NULL)) {
     printf("no memory for the index\n");
     return 1;
   }
@@ -123,14 +123,14 @@ int main(int argc, char **argv) {
         "no chain at %s -- pass a file as the first argument, or none to generate one\n",
         source.path ? source.path : "(generated)"
     );
-    grdx_addresses_release(&index);
+    grdb_addresses_release(&index);
     return 1;
   }
 
   bench_chain_source_print(&source);
   printf(
       "  %u transactions, %u addresses, fill %.2f ms (%.1f ns per transaction)\n", transactions,
-      grdx_addresses_size(&index), (double)fill.nanos / 1e6,
+      grdb_addresses_size(&index), (double)fill.nanos / 1e6,
       (double)fill.nanos / (double)transactions
   );
 
@@ -153,6 +153,6 @@ int main(int argc, char **argv) {
   );
 
   bench_total(whole, (int)transactions, "transaction");
-  grdx_addresses_release(&index);
+  grdb_addresses_release(&index);
   return (int)(g_sink & 0u);
 }

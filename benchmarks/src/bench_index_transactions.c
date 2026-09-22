@@ -1,7 +1,7 @@
 #include "arnm/mono_timer.h"
 #include "bench_chain_synth.h"
 #include "bench_report.h"
-#include "gradido_blockchain_core/index/transactions.h"
+#include "gradido_blockchain_core/blockchain/transactions.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,8 +36,8 @@ typedef struct sample {
 
 /** What the walk over the chain fills while it reads. */
 typedef struct fill_context {
-  grdx_transactions *index;
-  uint64_t nanos; /**< time inside grdx_transactions_add() */
+  grdb_transactions *index;
+  uint64_t nanos; /**< time inside grdb_transactions_add() */
   sample *signers;
   sample *receivers;
   uint32_t seen;
@@ -48,7 +48,7 @@ static arnm_result feed(const grdr_complete_transaction *tx, void *context) {
   fill_context *fill = (fill_context *)context;
   arnm_mono_timer timer;
   arnm_mono_timer_reset(&timer);
-  const arnm_result result = grdx_transactions_add(fill->index, tx);
+  const arnm_result result = grdb_transactions_add(fill->index, tx);
   fill->nanos += (uint64_t)arnm_mono_timer_nanos(timer);
   if (ARNM_SUCCESS != result) { return result; }
 
@@ -72,9 +72,9 @@ static arnm_result feed(const grdr_complete_transaction *tx, void *context) {
 
 /** One question asked of every address of @p keys, fastest of @ref ROUNDS runs. */
 static double time_rows(
-    const grdx_transactions *index,
+    const grdb_transactions *index,
     const sample *keys,
-    const grdx_transactions_filter *shape,
+    const grdb_transactions_filter *shape,
     uint32_t skip,
     uint32_t size,
     bool newest_only
@@ -85,18 +85,18 @@ static double time_rows(
     arnm_mono_timer timer;
     arnm_mono_timer_reset(&timer);
     for (uint32_t k = 0; k < keys->count; ++k) {
-      grdx_transactions_filter filter = *shape;
+      grdb_transactions_filter filter = *shape;
       memcpy(filter.public_key, keys->keys[k], SIGN_PUBLIC_KEY_SIZE);
       if (newest_only) {
         uint64_t newest = 0;
-        g_sink += grdx_transactions_newest(index, &filter, &newest) + newest;
+        g_sink += grdb_transactions_newest(index, &filter, &newest) + newest;
         continue;
       }
       uint64_t page[PAGE];
       uint64_t count = 0;
       uint32_t written = 0;
       if (ARNM_SUCCESS ==
-          grdx_transactions_listing(index, &filter, skip, size, true, page, &written, &count)) {
+          grdb_transactions_listing(index, &filter, skip, size, true, page, &written, &count)) {
         g_sink += count + written + (written ? page[0] : 0u);
       }
     }
@@ -106,18 +106,18 @@ static double time_rows(
   return (double)best / (double)keys->count;
 }
 
-static void report(const grdx_transactions *index, const char *title, const sample *keys) {
+static void report(const grdb_transactions *index, const char *title, const sample *keys) {
   bench_section(title);
-  grdx_transactions_filter involved = {0};
-  involved.role = GRDX_ADDRESS_ROLE_INVOLVED;
-  grdx_transactions_filter balance = {0};
-  balance.role = GRDX_ADDRESS_ROLE_BALANCE;
-  grdx_transactions_filter transfers = involved;
+  grdb_transactions_filter involved = {0};
+  involved.role = GRDB_ADDRESS_ROLE_INVOLVED;
+  grdb_transactions_filter balance = {0};
+  balance.role = GRDB_ADDRESS_ROLE_BALANCE;
+  grdb_transactions_filter transfers = involved;
   transfers.transaction_type = GRDT_TRANSACTION_TRANSFER;
 
   const struct {
     const char *name;
-    const grdx_transactions_filter *filter;
+    const grdb_transactions_filter *filter;
     uint32_t skip;
     bool newest_only;
   } rows[] = {
@@ -141,10 +141,10 @@ int main(int argc, char **argv) {
   static const uint8_t community_uuid[ARNM_UUID_BINARY_SIZE] = {0x3a, 0x3d, 0x7b, 0x4c, 0x1f, 0x9e,
                                                                 0x4a, 0x61, 0x8d, 0x2b, 0x6c, 0x05,
                                                                 0x9f, 0x77, 0xe3, 0x12};
-  grdx_transactions index;
-  grdx_transactions_options options = {0};
+  grdb_transactions index;
+  grdb_transactions_options options = {0};
   options.expected_addresses = 20000;
-  if (ARNM_SUCCESS != grdx_transactions_init(&index, &options, NULL)) {
+  if (ARNM_SUCCESS != grdb_transactions_init(&index, &options, NULL)) {
     printf("no memory for the index\n");
     return 1;
   }
@@ -166,14 +166,14 @@ int main(int argc, char **argv) {
         "no chain at %s -- pass a file as the first argument, or none to generate one\n",
         source.path ? source.path : "(generated)"
     );
-    grdx_transactions_release(&index);
+    grdb_transactions_release(&index);
     return 1;
   }
 
   bench_chain_source_print(&source);
   printf(
       "  %u transactions, %u addresses, fill %.2f ms (%.1f ns per transaction)\n", transactions,
-      grdx_transactions_address_count(&index), (double)fill.nanos / 1e6,
+      grdb_transactions_address_count(&index), (double)fill.nanos / 1e6,
       (double)fill.nanos / (double)transactions
   );
   printf(
@@ -185,6 +185,6 @@ int main(int argc, char **argv) {
   report(&index, "addresses whose balance moves (ordinary)", &receivers);
   bench_total(whole, (int)transactions, "transaction");
 
-  grdx_transactions_release(&index);
+  grdb_transactions_release(&index);
   return (int)(g_sink & 0u);
 }

@@ -1,4 +1,4 @@
-#include "gradido_blockchain_core/index/transactions.h"
+#include "gradido_blockchain_core/blockchain/transactions.h"
 
 #include <string.h>
 
@@ -15,6 +15,8 @@
 #define INDEX_SETS_BUCKET_LOG2 9u
 /** Days per bucket: 1024 days, 4 KiB a bucket -- near three years in one. */
 #define INDEX_DAYS_BUCKET_LOG2 10u
+/** Foreign coin communities per bucket: 64. A chain meets few of them, then perhaps many. */
+#define INDEX_COINS_BUCKET_LOG2 6u
 /** Seconds in a day, the step the day table counts in. */
 #define INDEX_SECONDS_PER_DAY 86400
 
@@ -35,15 +37,19 @@ static bool is_zero_key(const uint8_t *key) {
 }
 
 /** The sets of @p id, which the map handed out and the vector holds. */
-static grdx_address_sets *sets_at(const grdx_transactions *index, uint32_t id) {
-  return (grdx_address_sets *)arnm_bvec_get(&index->address_sets, id);
+static grdb_address_sets *sets_at(const grdb_transactions *index, uint32_t id) {
+  return (grdb_address_sets *)arnm_bvec_get(&index->address_sets, id);
+}
+
+static arnm_roaring_bitmap *coin_set_at(const grdb_transactions *index, uint32_t id) {
+  return (arnm_roaring_bitmap *)arnm_bvec_get(&index->coin_sets, id);
 }
 
 /**
  * The entry a day holds: the largest offset confirmed that day, counted from one so that a
  * zero stays "no transaction this day" even for the very first transaction of a chain.
  */
-static uint32_t *day_slot(const grdx_transactions *index, uint32_t day_index) {
+static uint32_t *day_slot(const grdb_transactions *index, uint32_t day_index) {
   return (uint32_t *)arnm_bvec_get(&index->day_max_tx, day_index);
 }
 
@@ -55,11 +61,11 @@ static bool set_ends_at(const arnm_roaring_bitmap *set, uint32_t offset) {
 
 // ********** building *******************
 
-arnm_result grdx_transactions_init(
-    grdx_transactions *index, const grdx_transactions_options *options, arnm *source
+arnm_result grdb_transactions_init(
+    grdb_transactions *index, const grdb_transactions_options *options, arnm *source
 ) {
   if (!index) { return ARNM_ERROR_NULL_POINTER; }
-  const grdx_transactions_options empty = {0};
+  const grdb_transactions_options empty = {0};
   if (!options) { options = &empty; }
 
   memset(index, 0, sizeof(*index));
@@ -75,12 +81,22 @@ arnm_result grdx_transactions_init(
   if (ARNM_SUCCESS != result) { goto fail_pool; }
 
   result = arnm_bvec_init(
-      &index->address_sets, INDEX_SETS_BUCKET_LOG2, 0, sizeof(grdx_address_sets), source
+      &index->address_sets, INDEX_SETS_BUCKET_LOG2, 0, sizeof(grdb_address_sets), source
   );
   if (ARNM_SUCCESS != result) { goto fail_map; }
 
   result = arnm_bvec_init(&index->day_max_tx, INDEX_DAYS_BUCKET_LOG2, 0, sizeof(uint32_t), source);
   if (ARNM_SUCCESS != result) { goto fail_sets; }
+
+  result = arnm_key_map_init(
+      &index->coin_communities, ARNM_UUID_BINARY_SIZE, INDEX_COINS_BUCKET_LOG2, source
+  );
+  if (ARNM_SUCCESS != result) { goto fail_days_only; }
+
+  result = arnm_bvec_init(
+      &index->coin_sets, INDEX_COINS_BUCKET_LOG2, 0, sizeof(arnm_roaring_bitmap), source
+  );
+  if (ARNM_SUCCESS != result) { goto fail_coin_map; }
 
   if (options->expected_addresses) {
     result = arnm_key_map_reserve(&index->addresses, options->expected_addresses);
@@ -98,6 +114,10 @@ arnm_result grdx_transactions_init(
   return ARNM_SUCCESS;
 
 fail_days:
+  arnm_bvec_free(&index->coin_sets);
+fail_coin_map:
+  arnm_key_map_free(&index->coin_communities);
+fail_days_only:
   arnm_bvec_free(&index->day_max_tx);
 fail_sets:
   arnm_bvec_free(&index->address_sets);
@@ -110,10 +130,10 @@ fail_pool:
 }
 
 /** Gives every set of every address back, and the type and coin sets with them. */
-static void free_sets(grdx_transactions *index) {
+static void free_sets(grdb_transactions *index) {
   const uint32_t addresses = arnm_bvec_size(&index->address_sets);
   for (uint32_t id = 0; id < addresses; ++id) {
-    grdx_address_sets *sets = sets_at(index, id);
+    grdb_address_sets *sets = sets_at(index, id);
     arnm_roaring_free(&sets->balance, &index->pool);
     arnm_roaring_free(&sets->signed_, &index->pool);
     arnm_roaring_free(&sets->other, &index->pool);
@@ -121,15 +141,19 @@ static void free_sets(grdx_transactions *index) {
   for (uint32_t type = 0; type < GRDT_TRANSACTION_COUNT; ++type) {
     arnm_roaring_free(&index->per_type[type], &index->pool);
   }
-  for (uint32_t coin = 0; coin < index->coin_community_count; ++coin) {
-    arnm_roaring_free(&index->coin_community[coin], &index->pool);
+  const uint32_t coins = arnm_bvec_size(&index->coin_sets);
+  for (uint32_t id = 0; id < coins; ++id) {
+    arnm_roaring_free(coin_set_at(index, id), &index->pool);
   }
+  arnm_roaring_free(&index->foreign, &index->pool);
 }
 
-void grdx_transactions_release(grdx_transactions *index) {
+void grdb_transactions_release(grdb_transactions *index) {
   if (!index || !index->ready) { return; }
   arnm *source = index->source;
   free_sets(index);
+  arnm_bvec_free(&index->coin_sets);
+  arnm_key_map_free(&index->coin_communities);
   arnm_bvec_free(&index->day_max_tx);
   arnm_bvec_free(&index->address_sets);
   arnm_key_map_free(&index->addresses);
@@ -137,15 +161,15 @@ void grdx_transactions_release(grdx_transactions *index) {
   memset(index, 0, sizeof(*index));
 }
 
-void grdx_transactions_reset(grdx_transactions *index) {
+void grdb_transactions_reset(grdb_transactions *index) {
   if (!index || !index->ready) { return; }
   // the sets go back to the pool, which keeps their blocks for the next fill
   free_sets(index);
   memset(index->per_type, 0, sizeof(index->per_type));
-  memset(index->coin_community, 0, sizeof(index->coin_community));
-  memset(index->coin_community_uuid, 0, sizeof(index->coin_community_uuid));
+  memset(&index->foreign, 0, sizeof(index->foreign));
   memset(index->chain_community_uuid, 0, sizeof(index->chain_community_uuid));
-  index->coin_community_count = 0;
+  arnm_key_map_clear(&index->coin_communities);
+  arnm_bvec_clear(&index->coin_sets);
   arnm_key_map_clear(&index->addresses);
   arnm_bvec_clear(&index->address_sets);
   arnm_bvec_clear(&index->day_max_tx);
@@ -157,48 +181,55 @@ void grdx_transactions_reset(grdx_transactions *index) {
 
 /** The address's sets, opened on first sight of the key. */
 static arnm_result sets_for_key(
-    grdx_transactions *index, const uint8_t *key, grdx_address_sets **out
+    grdb_transactions *index, const uint8_t *key, grdb_address_sets **out
 ) {
   uint32_t id = 0;
   bool inserted = false;
   const arnm_result result = arnm_key_map_get_or_insert(&index->addresses, key, &id, &inserted);
   if (ARNM_SUCCESS != result) { return result; }
-  if (inserted) {
+  (void)inserted;
+  // Grown up to the id, not by one. A key the map took while the vector found no room for its
+  // sets stays in the map; asked for again, it is not new, and a vector grown only for new keys
+  // would never reach it -- the address would be refused for good, room or not. Ids are handed
+  // out densely, so what is missing is only ever that last stretch.
+  while (arnm_bvec_size(&index->address_sets) <= id) {
     void *slot = NULL;
     const arnm_result grown = arnm_bvec_emplace(&index->address_sets, &slot);
-    if (ARNM_SUCCESS != grown) {
-      // the key stays in the map without sets; the next add for it finds the slot missing, so
-      // the vector is filled up to the map's size before anything reads it
-      return grown;
-    }
-    memset(slot, 0, sizeof(grdx_address_sets));
+    if (ARNM_SUCCESS != grown) { return grown; }
+    memset(slot, 0, sizeof(grdb_address_sets));
   }
-  if (id >= arnm_bvec_size(&index->address_sets)) { return ARNM_ERROR_OUT_OF_MEMORY; }
   *out = sets_at(index, id);
   return ARNM_SUCCESS;
 }
 
-/** The set of a foreign coin community, opened on first sight of its uuid. */
+/**
+ * The set of a foreign coin community, opened on first sight of its uuid.
+ *
+ * No limit on how many: which communities trade with which is not something a chain can know
+ * in advance, and a community that has been running for years may pair with all of them.
+ */
 static arnm_result coin_set_for_uuid(
-    grdx_transactions *index, const uint8_t *uuid, arnm_roaring_bitmap **out
+    grdb_transactions *index, const uint8_t *uuid, arnm_roaring_bitmap **out
 ) {
-  for (uint32_t i = 0; i < index->coin_community_count; ++i) {
-    if (0 == memcmp(index->coin_community_uuid[i], uuid, ARNM_UUID_BINARY_SIZE)) {
-      *out = &index->coin_community[i];
-      return ARNM_SUCCESS;
-    }
+  uint32_t id = 0;
+  bool inserted = false;
+  const arnm_result result =
+      arnm_key_map_get_or_insert(&index->coin_communities, uuid, &id, &inserted);
+  if (ARNM_SUCCESS != result) { return result; }
+  // grown up to the id rather than by one, so a key left without its set by an earlier refusal
+  // finds it on the next try instead of reading past the vector
+  while (arnm_bvec_size(&index->coin_sets) <= id) {
+    void *slot = NULL;
+    const arnm_result grown = arnm_bvec_emplace(&index->coin_sets, &slot);
+    if (ARNM_SUCCESS != grown) { return grown; }
+    memset(slot, 0, sizeof(arnm_roaring_bitmap));
   }
-  if (index->coin_community_count == GRDX_COIN_COMMUNITY_MAX) {
-    return ARNM_ERROR_RESOURCE_EXHAUSTED;
-  }
-  const uint32_t slot = index->coin_community_count++;
-  memcpy(index->coin_community_uuid[slot], uuid, ARNM_UUID_BINARY_SIZE);
-  *out = &index->coin_community[slot];
+  *out = coin_set_at(index, id);
   return ARNM_SUCCESS;
 }
 
 /** Writes the day's largest offset, growing the table to reach the day. */
-static arnm_result note_day(grdx_transactions *index, int64_t seconds, uint32_t offset) {
+static arnm_result note_day(grdb_transactions *index, int64_t seconds, uint32_t offset) {
   const int64_t day = day_of_second(seconds);
   if (!index->transaction_count) { index->first_day = day; }
   if (day < index->first_day) { return ARNM_ERROR_INVALID_PARAM; }
@@ -216,7 +247,7 @@ static arnm_result note_day(grdx_transactions *index, int64_t seconds, uint32_t 
   return ARNM_SUCCESS;
 }
 
-arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_transaction *tx) {
+arnm_result grdb_transactions_add(grdb_transactions *index, const grdr_complete_transaction *tx) {
   if (!index || !tx) { return ARNM_ERROR_NULL_POINTER; }
   if (!index->ready) { return ARNM_ERROR_INVALID_STATE; }
   if (tx->tx_nr < index->base_tx_nr) { return ARNM_ERROR_INVALID_PARAM; }
@@ -248,7 +279,7 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
   for (size_t i = 0; i < tx->signature_pairs_count; ++i) {
     const uint8_t *key = tx->signature_pairs[i].public_key;
     if (is_zero_key(key)) { continue; }
-    grdx_address_sets *sets = NULL;
+    grdb_address_sets *sets = NULL;
     result = sets_for_key(index, key, &sets);
     if (ARNM_SUCCESS != result) { return result; }
     result = arnm_roaring_add(&sets->signed_, offset, &index->pool);
@@ -259,7 +290,7 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
   for (size_t i = 0; i < tx->account_balances_count; ++i) {
     const grdw_account_balance *balance = &tx->account_balances[i];
     if (!is_zero_key(balance->pubkey)) {
-      grdx_address_sets *sets = NULL;
+      grdb_address_sets *sets = NULL;
       result = sets_for_key(index, balance->pubkey, &sets);
       if (ARNM_SUCCESS != result) { return result; }
       result = arnm_roaring_add(&sets->balance, offset, &index->pool);
@@ -270,6 +301,9 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
       result = coin_set_for_uuid(index, balance->community_uuid, &coin);
       if (ARNM_SUCCESS != result) { return result; }
       result = arnm_roaring_add(coin, offset, &index->pool);
+      if (ARNM_SUCCESS != result) { return result; }
+      // and into the union, which is what "this chain's coin only" excludes
+      result = arnm_roaring_add(&index->foreign, offset, &index->pool);
       if (ARNM_SUCCESS != result) { return result; }
     }
   }
@@ -298,7 +332,7 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
   }
   for (uint32_t i = 0; i < 3; ++i) {
     if (!named[i] || is_zero_key(named[i])) { continue; }
-    grdx_address_sets *sets = NULL;
+    grdb_address_sets *sets = NULL;
     result = sets_for_key(index, named[i], &sets);
     if (ARNM_SUCCESS != result) { return result; }
     // the third role is what is left: neither a signature nor a balance entry named this key
@@ -317,8 +351,8 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
 
 // ********** asking *******************
 
-bool grdx_transactions_range_of_days(
-    const grdx_transactions *index,
+bool grdb_transactions_range_of_days(
+    const grdb_transactions *index,
     int64_t from_second,
     int64_t to_second,
     uint64_t *min,
@@ -358,8 +392,8 @@ bool grdx_transactions_range_of_days(
 
 /** The sets a filter reads, gathered into a query over offsets; false when nothing can match. */
 static bool query_of_filter(
-    const grdx_transactions *index,
-    const grdx_transactions_filter *filter,
+    const grdb_transactions *index,
+    const grdb_transactions_filter *filter,
     arnm_roaring_query *query,
     const arnm_roaring_bitmap *all[ARNM_ROARING_QUERY_MAX],
     const arnm_roaring_bitmap *any[ARNM_ROARING_QUERY_MAX],
@@ -371,14 +405,14 @@ static bool query_of_filter(
   query->any = any;
   query->none = none;
 
-  if (GRDX_ADDRESS_ROLE_NONE != filter->role) {
+  if (GRDB_ADDRESS_ROLE_NONE != filter->role) {
     uint32_t id = 0;
     if (!arnm_key_map_find(&index->addresses, filter->public_key, &id) ||
         id >= arnm_bvec_size(&index->address_sets)) {
       return false;
     }
-    const grdx_address_sets *sets = sets_at(index, id);
-    if (GRDX_ADDRESS_ROLE_BALANCE == filter->role) {
+    const grdb_address_sets *sets = sets_at(index, id);
+    if (GRDB_ADDRESS_ROLE_BALANCE == filter->role) {
       all[query->all_count++] = &sets->balance;
     } else {
       // involved: in any of the three, which is a union the query reads without building it
@@ -393,24 +427,19 @@ static bool query_of_filter(
     all[query->all_count++] = &index->per_type[filter->transaction_type];
   }
 
-  const uint8_t *coin_community_uuid = grdx_transactions_filter_coin_community(filter);
+  const uint8_t *coin_community_uuid = grdb_transactions_filter_coin_community(filter);
   if (coin_community_uuid) {
     if (0 == memcmp(coin_community_uuid, index->chain_community_uuid, ARNM_UUID_BINARY_SIZE)) {
-      // the chain's own coin: every transaction that carries no foreign balance
-      for (uint32_t i = 0; i < index->coin_community_count; ++i) {
-        none[query->none_count++] = &index->coin_community[i];
-      }
+      // the chain's own coin: every transaction outside the union of the foreign ones -- one
+      // set to exclude, however many foreign coins the chain has met
+      none[query->none_count++] = &index->foreign;
     } else {
-      uint32_t found = index->coin_community_count;
-      for (uint32_t i = 0; i < index->coin_community_count; ++i) {
-        if (0 ==
-            memcmp(index->coin_community_uuid[i], coin_community_uuid, ARNM_UUID_BINARY_SIZE)) {
-          found = i;
-          break;
-        }
+      uint32_t id = 0;
+      if (!arnm_key_map_find(&index->coin_communities, coin_community_uuid, &id) ||
+          id >= arnm_bvec_size(&index->coin_sets)) {
+        return false;
       }
-      if (found == index->coin_community_count) { return false; }
-      all[query->all_count++] = &index->coin_community[found];
+      all[query->all_count++] = coin_set_at(index, id);
     }
   }
 
@@ -419,7 +448,7 @@ static bool query_of_filter(
   uint64_t max_tx = filter->max_tx_nr ? filter->max_tx_nr : index->max_tx_nr;
   if (filter->from_seconds || filter->to_seconds) {
     uint64_t day_min = 0, day_max = 0;
-    if (!grdx_transactions_range_of_days(
+    if (!grdb_transactions_range_of_days(
             index, filter->from_seconds, filter->to_seconds, &day_min, &day_max
         )) {
       return false;
@@ -427,6 +456,11 @@ static bool query_of_filter(
     if (day_min > min_tx) { min_tx = day_min; }
     if (day_max < max_tx) { max_tx = day_max; }
   }
+  // a span can only hold what the index holds. A bound reaching past either end names numbers
+  // that are no transactions, and a filter naming no set is answered from the span itself --
+  // it would count and page those numbers as if they were.
+  if (min_tx < index->min_tx_nr) { min_tx = index->min_tx_nr; }
+  if (max_tx > index->max_tx_nr) { max_tx = index->max_tx_nr; }
   if (min_tx < index->base_tx_nr) { min_tx = index->base_tx_nr; }
   if (max_tx < min_tx) { return false; }
   if (max_tx - index->base_tx_nr > (uint64_t)UINT32_MAX) {
@@ -500,8 +534,8 @@ static uint32_t span_page(
   return written;
 }
 
-arnm_result grdx_transactions_count(
-    const grdx_transactions *index, const grdx_transactions_filter *filter, uint64_t *out
+arnm_result grdb_transactions_count(
+    const grdb_transactions *index, const grdb_transactions_filter *filter, uint64_t *out
 ) {
   if (!index || !filter || !out) { return ARNM_ERROR_NULL_POINTER; }
   if (!index->ready) { return ARNM_ERROR_INVALID_STATE; }
@@ -517,9 +551,9 @@ arnm_result grdx_transactions_count(
   return arnm_roaring_query_cardinality(&query, out);
 }
 
-arnm_result grdx_transactions_listing(
-    const grdx_transactions *index,
-    const grdx_transactions_filter *filter,
+arnm_result grdb_transactions_listing(
+    const grdb_transactions *index,
+    const grdb_transactions_filter *filter,
     uint32_t skip,
     uint32_t size,
     bool descending,
@@ -529,7 +563,7 @@ arnm_result grdx_transactions_listing(
 ) {
   if (!index || !filter || !written || !count || (size && !out)) { return ARNM_ERROR_NULL_POINTER; }
   if (!index->ready) { return ARNM_ERROR_INVALID_STATE; }
-  if (size > GRDX_PAGE_MAX) { return ARNM_ERROR_INVALID_PARAM; }
+  if (size > GRDB_PAGE_MAX) { return ARNM_ERROR_INVALID_PARAM; }
 
   arnm_roaring_query query;
   const arnm_roaring_bitmap *all[ARNM_ROARING_QUERY_MAX];
@@ -541,7 +575,7 @@ arnm_result grdx_transactions_listing(
     return ARNM_SUCCESS;
   }
 
-  uint32_t offsets[GRDX_PAGE_MAX];
+  uint32_t offsets[GRDB_PAGE_MAX];
   uint32_t taken = 0;
   uint64_t matches = 0;
   arnm_result result = ARNM_SUCCESS;
@@ -560,8 +594,8 @@ arnm_result grdx_transactions_listing(
   return ARNM_SUCCESS;
 }
 
-bool grdx_transactions_newest(
-    const grdx_transactions *index, const grdx_transactions_filter *filter, uint64_t *out
+bool grdb_transactions_newest(
+    const grdb_transactions *index, const grdb_transactions_filter *filter, uint64_t *out
 ) {
   if (!index || !filter || !out || !index->ready) { return false; }
   arnm_roaring_query query;
@@ -583,12 +617,16 @@ bool grdx_transactions_newest(
 
 // ********** reading what is in it *******************
 
-uint32_t grdx_transactions_address_count(const grdx_transactions *index) {
+uint32_t grdb_transactions_address_count(const grdb_transactions *index) {
   return index && index->ready ? arnm_key_map_size(&index->addresses) : 0u;
 }
 
-const grdx_address_sets *grdx_transactions_address(
-    const grdx_transactions *index, const uint8_t *public_key
+uint32_t grdb_transactions_coin_community_count(const grdb_transactions *index) {
+  return index && index->ready ? arnm_key_map_size(&index->coin_communities) : 0u;
+}
+
+const grdb_address_sets *grdb_transactions_address(
+    const grdb_transactions *index, const uint8_t *public_key
 ) {
   uint32_t id = 0;
   if (!index || !index->ready || !public_key) { return NULL; }
