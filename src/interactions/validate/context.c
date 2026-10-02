@@ -1,6 +1,7 @@
 #include "gradido_blockchain_core/interactions/validate/context.h"
 #include "arnm/memory.h"
 #include "gradido_blockchain_core/const.h"
+#include "gradido_blockchain_core/crypto/validation.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
 #include "gradido_blockchain_core/error_details.h"
@@ -19,12 +20,6 @@
 
 #include <stddef.h>
 #include <string.h>
-
-static const uint8_t zeros_x64[64] = {0};
-#define IS_EMPTY_UUID(arr) (memcmp(arr, zeros_x64, 16) == 0)
-#define IS_EMPTY_PUBLIC_KEY(arr) (memcmp(arr, zeros_x64, 32) == 0)
-#define IS_EMPTY_GENERIC_HASH(arr) (memcmp(arr, zeros_x64, 32) == 0)
-#define IS_EMPTY_SIGNATURE(arr) (memcmp(arr, zeros_x64, 64) == 0)
 
 // all checks which don't need other transactions
 static grdi_validate_result_type validateCommon(
@@ -50,7 +45,7 @@ static grdi_validate_result_type validateCommon(
   }
 
   // check if community id index is valid, therefore an entry exist in Community Id Dictionary
-  if (IS_EMPTY_UUID(input_tx->tx_community_uuid)) {
+  if (grdc_is_empty(input_tx->tx_community_uuid, ARNM_UUID_BINARY_SIZE)) {
     grd_error_details_fill(error_details, "empty community uuid", NULL, NULL);
     return GRDI_VALIDATE_INVALID_FIELD;
   }
@@ -109,11 +104,11 @@ static grdi_validate_result_type validateCommon(
   if (input_tx->signature_pairs_count) {
     for (size_t i = 0; i < input_tx->signature_pairs_count; i++) {
       grdw_signature_pair *sigPair = &input_tx->signature_pairs[i];
-      if (IS_EMPTY_PUBLIC_KEY(sigPair->public_key)) {
+      if (grdc_is_empty(sigPair->public_key, SIGN_PUBLIC_KEY_SIZE)) {
         grd_error_details_fill(error_details, "empty public key in signature map", NULL, NULL);
         return GRDI_VALIDATE_INVALID_FIELD;
       }
-      if (IS_EMPTY_SIGNATURE(sigPair->signature)) {
+      if (grdc_is_empty(sigPair->signature, SIGN_SIGNATURE_SIZE)) {
         grd_error_details_fill(error_details, "empty signature in signature map", NULL, NULL);
         return GRDI_VALIDATE_INVALID_FIELD;
       }

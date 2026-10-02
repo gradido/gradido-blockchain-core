@@ -39,7 +39,8 @@ fail; benchmarks always show their output, because their output *is* the result.
 
 The CMake build exists for MSVC and for AddressSanitizer
 (`-DENABLE_TESTS=ON -DENABLE_SANITIZERS=ON`). Keep both build files in sync when you add a
-source file — CMake globs, `build.zig` lists test binaries by name.
+source file — CMake globs `src/`, but **both** name every test and benchmark binary, CMake in
+`tests/unit/CMakeLists.txt` twice over (`add_executable` and `add_test`).
 
 **Tests cap their own memory.** `tests/unit/src/memory_limit.h` sets `RLIMIT_AS` to 2048 MB on
 Linux, skipped under sanitizers. Raise it with `GRD_TEST_MEMORY_LIMIT_MB=8192`, disable with
@@ -107,7 +108,7 @@ allocation path. The invariants:
   read none, so uninitialised storage is a valid input.
 
 Prefixes: `grd_` core · `grdu_` utils · `grdd_` data · `grdt_` types · `grdw_` wire ·
-`grdr_` runtime · `grdm_` mapping · `grdi_` interactions · `grdc_` crypto · `grdx_` index.
+`grdr_` runtime · `grdm_` mapping · `grdi_` interactions · `grdc_` crypto · `grdb_` blockchain.
 
 ----------
 

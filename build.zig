@@ -336,6 +336,10 @@ pub fn build(b: *std.Build) void {
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions", .srcs = &.{"test_index_transactions.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_addresses", .srcs = &.{"test_index_addresses.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_index_transactions_filter", .srcs = &.{"test_index_transactions_filter.cpp"} }, path);
+        // the store behind a chain: in memory, and a host answering across an FFI boundary
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_blockchain_store", .srcs = &.{"test_blockchain_store.cpp"} }, path);
+        // the chain over those indices: the same answers however the row of segments is cut
+        processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_blockchain_chain", .srcs = &.{"test_blockchain_chain.cpp"}, .extra_srcs = &.{ "benchmarks/src/bench_chain_data.c", "benchmarks/src/bench_chain_synth.c" }, .bench_includes = true }, path);
         processBuildTarget(&context, .{ .link_googletest = true, .link_sodium = enable_sodium, .name = "test_chain_synth", .srcs = &.{"test_chain_synth.cpp"}, .extra_srcs = &.{"benchmarks/src/bench_chain_synth.c"}, .bench_includes = true }, path);
         // the prototypes behind bench_tx_index_map: every map variant against the others
         processBuildTarget(&context, .{

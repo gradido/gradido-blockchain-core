@@ -1,5 +1,5 @@
-#ifndef GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_H
-#define GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_H
+#ifndef GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_H
+#define GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_H
 
 #include "arnm/bucket_vector.h"
 #include "arnm/converter.h"
@@ -7,9 +7,9 @@
 #include "arnm/key_map.h"
 #include "arnm/roaring_bitmap.h"
 #include "arnm/roaring_query.h"
+#include "gradido_blockchain_core/blockchain/transactions_filter.h"
 #include "gradido_blockchain_core/const.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
-#include "gradido_blockchain_core/index/transactions_filter.h"
 #include "gradido_blockchain_core/result.h"
 #include "gradido_blockchain_core/types/transaction.h"
 
@@ -20,11 +20,11 @@
 extern "C" {
 #endif
 
-/** @defgroup index Indices over a chain */
+/** @defgroup blockchain A chain and the indices over it */
 
 /**
- * @defgroup grdx_transactions grdx_transactions
- * @ingroup index
+ * @defgroup grdb_transactions grdb_transactions
+ * @ingroup blockchain
  * @brief Which transactions of a chain match a filter, answered from sets of transaction
  *        numbers instead of from the transactions themselves.
  *
@@ -36,11 +36,11 @@ extern "C" {
  * - three sets per address -- the transactions that **changed its balance**, that it **signed**,
  *   and that **named it** without either;
  * - one set per transaction type;
- * - one set per foreign coin community, holding the transactions that carry a balance in a coin
- *   that is not the chain's own;
+ * - one set per foreign coin community, holding the transactions that carry a balance in that
+ *   coin, and one more holding every transaction that carries any coin not the chain's own;
  * - the largest transaction number of every day, so a span of dates becomes a span of numbers.
  *
- * A @ref grdx_transactions_filter is answered by intersecting the sets it names inside that
+ * A @ref grdb_transactions_filter is answered by intersecting the sets it names inside that
  * span of numbers, counted and paged without a result set ever being built
  * (@ref arnm_roaring_query). Nothing here reads a transaction again: the answer is transaction
  * numbers, and fetching those is the caller's.
@@ -70,8 +70,8 @@ extern "C" {
  *
  * Everything comes from the `arnm *` given at init: the address map, the per address sets, and
  * the pool the set blocks are cut from. Pass NULL for the host allocator, or an arena chain to
- * keep the whole index inside it. @ref grdx_transactions_release() gives every block back;
- * @ref grdx_transactions_reset() empties the index and keeps the memory for the next fill.
+ * keep the whole index inside it. @ref grdb_transactions_release() gives every block back;
+ * @ref grdb_transactions_reset() empties the index and keeps the memory for the next fill.
  *
  * @note Nothing here is thread safe. Several threads may ask an index that no thread is filling.
  *
@@ -81,60 +81,59 @@ extern "C" {
  * @{
  */
 
-/**
- * @brief Largest number of foreign coin communities one index keeps a set for.
- *
- * Eight, because a filter for "this chain's own coin only" asks for a transaction in **none** of
- * the foreign sets, and @ref ARNM_ROARING_QUERY_MAX is how many sets one list of a query holds.
- * A chain pairing with more than eight foreign coins would need that filter answered another
- * way; until one does, a ninth is refused where it would be silently dropped.
- */
-#define GRDX_COIN_COMMUNITY_MAX 8u
-
 /** @brief Most transaction numbers one call writes into a page. */
-#define GRDX_PAGE_MAX 1000u
+#define GRDB_PAGE_MAX 1000u
 
 /** @brief Shape of an index. `{0}` is the default: base 0, defaults for everything else. */
-typedef struct grdx_transactions_options {
+typedef struct grdb_transactions_options {
   /** First transaction number the index can hold. A smaller number is refused. */
   uint64_t base_tx_nr;
   /** Addresses to make room for before the first add; 0 leaves the map to grow on its own. */
   uint32_t expected_addresses;
   /** Days to make room for; 0 leaves the day table to grow. One entry is 4 bytes. */
   uint32_t expected_days;
-} grdx_transactions_options;
+} grdb_transactions_options;
 
 /** @brief The three sets of one address. Read through the calls below, never written directly. */
-typedef struct grdx_address_sets {
+typedef struct grdb_address_sets {
   arnm_roaring_bitmap balance; /**< Transactions that changed this address's balance. */
   arnm_roaring_bitmap signed_; /**< Transactions this address signed. */
   arnm_roaring_bitmap other;   /**< Transactions that named it without either. */
-} grdx_address_sets;
+} grdb_address_sets;
 
 /**
- * @brief One chain's index. Zeroed is not ready; @ref grdx_transactions_init() makes it so.
+ * @brief One chain's index. Zeroed is not ready; @ref grdb_transactions_init() makes it so.
  *
  * The fields are public because the containers behind them are, and because a caller may want
  * to measure them. They are written only by the calls below.
  */
-typedef struct grdx_transactions {
+typedef struct grdb_transactions {
   arnm *source;                /**< Where memory comes from; NULL is the host. */
   arnm_graded_block_pool pool; /**< The blocks every set is built from. */
   arnm_key_map addresses;      /**< 32 byte public key -> dense address id. */
-  arnm_bvec address_sets;      /**< @ref grdx_address_sets at that id. */
+  arnm_bvec address_sets;      /**< @ref grdb_address_sets at that id. */
   arnm_bvec day_max_tx;        /**< uint32_t per day since @c first_day, 0 for a day without. */
-  arnm_roaring_bitmap per_type[GRDT_TRANSACTION_COUNT];        /**< Transactions of each type. */
-  arnm_roaring_bitmap coin_community[GRDX_COIN_COMMUNITY_MAX]; /**< Per foreign coin community. */
-  uint8_t coin_community_uuid[GRDX_COIN_COMMUNITY_MAX][ARNM_UUID_BINARY_SIZE]; /**< Their uuids. */
+  arnm_roaring_bitmap per_type[GRDT_TRANSACTION_COUNT]; /**< Transactions of each type. */
+  /**
+   * 16 byte uuid of a foreign coin community -> dense id. As many as the chain ever meets:
+   * which communities trade with which is not something a chain can know in advance.
+   */
+  arnm_key_map coin_communities;
+  arnm_bvec coin_sets; /**< @c arnm_roaring_bitmap at that id: the transactions in that coin. */
+  /**
+   * Every transaction that carries any coin not the chain's own -- the union of @c coin_sets,
+   * kept as a set of its own so that "this chain's coin only" is a single set to exclude,
+   * however many foreign coins there are.
+   */
+  arnm_roaring_bitmap foreign;
   uint8_t chain_community_uuid[ARNM_UUID_BINARY_SIZE]; /**< The chain's own, from the first tx. */
-  uint32_t coin_community_count;                       /**< Foreign coin communities seen. */
   uint64_t base_tx_nr;                                 /**< Transaction number stored as 0. */
   uint64_t min_tx_nr;         /**< Smallest transaction number indexed; 0 while empty. */
   uint64_t max_tx_nr;         /**< Largest transaction number indexed; 0 while empty. */
   int64_t first_day;          /**< Day of the first transaction, in days since the epoch. */
   uint32_t transaction_count; /**< Transactions added. */
   bool ready;                 /**< Init ran and release did not. */
-} grdx_transactions;
+} grdb_transactions;
 
 // ********** building *******************
 
@@ -150,27 +149,27 @@ typedef struct grdx_transactions {
  * @warning Calling this on an index that still holds memory leaks it. Release it first.
  * @whisper An empty register, its columns already ruled
  */
-arnm_result grdx_transactions_init(
-    grdx_transactions *index, const grdx_transactions_options *options, arnm *source
+arnm_result grdb_transactions_init(
+    grdb_transactions *index, const grdb_transactions_options *options, arnm *source
 );
 
 /**
  * @brief Give every block back to @p source and leave the index as init found it.
  * @param[in,out] index Index to empty; NULL is a no-op.
  */
-void grdx_transactions_release(grdx_transactions *index);
+void grdb_transactions_release(grdb_transactions *index);
 
 /**
  * @brief Forget every transaction, keep the memory for the next fill.
  *
- * What @ref grdx_transactions_release() and @ref grdx_transactions_init() together
+ * What @ref grdb_transactions_release() and @ref grdb_transactions_init() together
  * would do, without giving the blocks back: the sets empty, the address map clears, the day
  * table empties, and the next add starts a fresh chain at the same base.
  *
  * @param[in,out] index Index to empty; NULL is a no-op.
  * @whisper The register wiped clean, its paper kept
  */
-void grdx_transactions_reset(grdx_transactions *index);
+void grdb_transactions_reset(grdb_transactions *index);
 
 /**
  * @brief Add one confirmed transaction: its addresses in their roles, its type, its foreign
@@ -194,8 +193,6 @@ void grdx_transactions_reset(grdx_transactions *index);
  *                                           after the last one added, or the day is before the
  *                                           first transaction's day.
  * @retval ARNM_ERROR_RESOURCE_SIZE_EXCEED    @c tx_nr is past `base + UINT32_MAX`.
- * @retval ARNM_ERROR_RESOURCE_EXHAUSTED      A ninth foreign coin community appeared; see
- *                                           @ref GRDX_COIN_COMMUNITY_MAX.
  * @retval ARNM_ERROR_OUT_OF_MEMORY           A set, the map or the day table found no block. The
  *                                           index keeps every transaction added before, and the
  *                                           sets this one had already entered keep it -- add it
@@ -203,7 +200,7 @@ void grdx_transactions_reset(grdx_transactions *index);
  *                                           no-op, since a number already the largest is one.
  * @whisper Three marks pressed into the register, and the day noted at the margin
  */
-arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_transaction *tx);
+arnm_result grdb_transactions_add(grdb_transactions *index, const grdr_complete_transaction *tx);
 
 // ********** asking *******************
 
@@ -218,8 +215,8 @@ arnm_result grdx_transactions_add(grdx_transactions *index, const grdr_complete_
  * @retval ARNM_ERROR_INVALID_STATE @p index is not initialised.
  * @whisper Counted without reading a single entry
  */
-arnm_result grdx_transactions_count(
-    const grdx_transactions *index, const grdx_transactions_filter *filter, uint64_t *out
+arnm_result grdb_transactions_count(
+    const grdb_transactions *index, const grdb_transactions_filter *filter, uint64_t *out
 );
 
 /**
@@ -232,7 +229,7 @@ arnm_result grdx_transactions_count(
  * @param[in]  index      Index to ask; not NULL and initialised.
  * @param[in]  filter     What to look for; not NULL.
  * @param[in]  skip       Matches to pass over first, from the end the page starts at.
- * @param[in]  size       Most numbers to write, up to @ref GRDX_PAGE_MAX.
+ * @param[in]  size       Most numbers to write, up to @ref GRDB_PAGE_MAX.
  * @param[in]  descending Start at the newest match and go back.
  * @param[out] out        Room for @p size numbers; not NULL unless @p size is 0.
  * @param[out] written    Receives how many were written; not NULL. Untouched on failure.
@@ -241,13 +238,13 @@ arnm_result grdx_transactions_count(
  * @retval ARNM_SUCCESS              Answered; @p *written may be 0 with a @p *count above it when
  *                                  the page starts past the last match.
  * @retval ARNM_ERROR_NULL_POINTER   An argument is NULL.
- * @retval ARNM_ERROR_INVALID_PARAM  @p size is above @ref GRDX_PAGE_MAX.
+ * @retval ARNM_ERROR_INVALID_PARAM  @p size is above @ref GRDB_PAGE_MAX.
  * @retval ARNM_ERROR_INVALID_STATE  @p index is not initialised.
  * @whisper A page torn from the middle, and the thickness of the book in the same glance
  */
-arnm_result grdx_transactions_listing(
-    const grdx_transactions *index,
-    const grdx_transactions_filter *filter,
+arnm_result grdb_transactions_listing(
+    const grdb_transactions *index,
+    const grdb_transactions_filter *filter,
     uint32_t skip,
     uint32_t size,
     bool descending,
@@ -269,19 +266,22 @@ arnm_result grdx_transactions_listing(
  *         initialised -- a question a caller answers the same way in each case.
  * @whisper The last entry that still bears this name
  */
-bool grdx_transactions_newest(
-    const grdx_transactions *index, const grdx_transactions_filter *filter, uint64_t *out
+bool grdb_transactions_newest(
+    const grdb_transactions *index, const grdb_transactions_filter *filter, uint64_t *out
 );
 
 // ********** reading what is in it *******************
 
 /** @brief Transactions added. 0 for NULL or an empty index. */
-static inline uint32_t grdx_transactions_size(const grdx_transactions *index) {
+static inline uint32_t grdb_transactions_size(const grdb_transactions *index) {
   return index ? index->transaction_count : 0u;
 }
 
 /** @brief Addresses seen. 0 for NULL or an empty index. */
-uint32_t grdx_transactions_address_count(const grdx_transactions *index);
+uint32_t grdb_transactions_address_count(const grdb_transactions *index);
+
+/** @brief Foreign coin communities seen, the chain's own not counted. 0 for NULL or empty. */
+uint32_t grdb_transactions_coin_community_count(const grdb_transactions *index);
 
 /**
  * @brief The three sets of @p public_key, or NULL when the index never saw it.
@@ -293,15 +293,15 @@ uint32_t grdx_transactions_address_count(const grdx_transactions *index);
  * @param[in] public_key 32 bytes; may be NULL.
  * @whisper The three columns kept under one name
  */
-const grdx_address_sets *grdx_transactions_address(
-    const grdx_transactions *index, const uint8_t *public_key
+const grdb_address_sets *grdb_transactions_address(
+    const grdb_transactions *index, const uint8_t *public_key
 );
 
 /**
  * @brief The span of transaction numbers confirmed inside `[from_seconds, to_seconds]`.
  *
  * The day table asked directly: every transaction of those days lies inside the span, and the
- * span holds nothing from before or after them. What @ref grdx_transactions_count() and
+ * span holds nothing from before or after them. What @ref grdb_transactions_count() and
  * its siblings apply to a filter that names dates.
  *
  * @param[in]  index       Index to read; not NULL.
@@ -312,8 +312,8 @@ const grdx_address_sets *grdx_transactions_address(
  * @return false when no transaction was confirmed in that span, leaving both untouched.
  * @whisper Days named, and the register answers with the pages they cover
  */
-bool grdx_transactions_range_of_days(
-    const grdx_transactions *index,
+bool grdb_transactions_range_of_days(
+    const grdb_transactions *index,
     int64_t from_second,
     int64_t to_second,
     uint64_t *min,
@@ -326,4 +326,4 @@ bool grdx_transactions_range_of_days(
 }
 #endif
 
-#endif // GRADIDO_BLOCKCHAIN_CORE_INDEX_TRANSACTIONS_H
+#endif // GRADIDO_BLOCKCHAIN_CORE_BLOCKCHAIN_TRANSACTIONS_H
