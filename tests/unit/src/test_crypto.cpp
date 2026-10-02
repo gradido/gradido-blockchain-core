@@ -1,11 +1,14 @@
 #include "gradido_blockchain_core/crypto/sign.h"
+#include "gradido_blockchain_core/crypto/validation.h"
 #include "gradido_blockchain_core/utils/converter.h"
 
 #include "utils.h"
 #include "gtest/gtest.h"
 
 #include "memory_limit.h"
+#include <cstdint>
 #include <string>
+#include <vector>
 
 /*
  *arnm_result grdc_sign_key_pair_copy_slip10_public_key(
@@ -324,4 +327,56 @@ TEST(SignContract, SeedSizeRangeIsEnforced) {
   );
   // the size the rest of the project derives with sits inside the range
   EXPECT_EQ(grdc_sign_key_pair_generate_from_seed(&keyPair, seed, SIGN_SEED_SIZE), ARNM_SUCCESS);
+}
+
+// ********** grdc_is_empty *******************
+
+/*
+ * grdc_is_empty() compares in chunks, so the places it can go wrong are the edges of a chunk: a
+ * single nonzero byte just before one, on it, or just after. Every position of every length
+ * around one and two chunks is tried, with nothing but that one byte set.
+ */
+
+TEST(CryptoValidation, AnEmptyRunIsEmptyAndIsNotRead) {
+  EXPECT_TRUE(grdc_is_empty(nullptr, 0)) << "no bytes to look at, and none looked at";
+  const uint8_t one = 7;
+  EXPECT_TRUE(grdc_is_empty(&one, 0)) << "length 0 reads nothing, whatever is there";
+}
+
+TEST(CryptoValidation, EveryLengthOfZerosIsEmpty) {
+  const std::vector<uint8_t> zeros(3u * GRDC_EMPTY_CHUNK_SIZE + 5u, 0u);
+  for (uint32_t size = 1; size <= zeros.size(); ++size) {
+    EXPECT_TRUE(grdc_is_empty(zeros.data(), size)) << "size " << size;
+  }
+}
+
+TEST(CryptoValidation, OneByteAnywhereMakesItNotEmpty) {
+  const uint32_t chunk = GRDC_EMPTY_CHUNK_SIZE;
+  for (const uint32_t size :
+       {1u, 15u, 16u, 17u, chunk - 1u, chunk, chunk + 1u, 2u * chunk - 1u, 2u * chunk,
+        2u * chunk + 1u, 3u * chunk + 5u}) {
+    for (uint32_t at = 0; at < size; ++at) {
+      std::vector<uint8_t> bytes(size, 0u);
+      bytes[at] = 0x80; // the high bit alone, so an or that loses it cannot pass
+      EXPECT_FALSE(grdc_is_empty(bytes.data(), size)) << "size " << size << ", byte " << at;
+    }
+  }
+}
+
+TEST(CryptoValidation, ABytePastTheLengthIsNotLookedAt) {
+  // the run ends where the length says, however many zeros or not follow it
+  std::vector<uint8_t> bytes(2u * GRDC_EMPTY_CHUNK_SIZE, 0u);
+  bytes[SIGN_PUBLIC_KEY_SIZE] = 1;
+  EXPECT_TRUE(grdc_is_empty(bytes.data(), SIGN_PUBLIC_KEY_SIZE));
+  EXPECT_FALSE(grdc_is_empty(bytes.data(), SIGN_PUBLIC_KEY_SIZE + 1u));
+}
+
+TEST(CryptoValidation, TheSizesItIsAskedFor) {
+  const std::vector<uint8_t> zeros(SIGN_SIGNATURE_SIZE, 0u);
+  EXPECT_TRUE(grdc_is_empty(zeros.data(), ARNM_UUID_BINARY_SIZE));
+  EXPECT_TRUE(grdc_is_empty(zeros.data(), SIGN_PUBLIC_KEY_SIZE));
+  EXPECT_TRUE(grdc_is_empty(zeros.data(), SIGN_SIGNATURE_SIZE));
+  std::vector<uint8_t> signature(SIGN_SIGNATURE_SIZE, 0u);
+  signature[SIGN_SIGNATURE_SIZE - 1u] = 1; // the last byte, in the second chunk
+  EXPECT_FALSE(grdc_is_empty(signature.data(), SIGN_SIGNATURE_SIZE));
 }

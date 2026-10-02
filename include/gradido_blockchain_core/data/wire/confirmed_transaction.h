@@ -8,6 +8,8 @@
 #include "gradido_transaction.h"
 #include "ledger_anchor.h"
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -109,6 +111,34 @@ arnm_result grdw_confirmed_transaction_copy_account_balance(
 arnm_result grdw_confirmed_transaction_decode(
     grdw_confirmed_transaction *tx, const arnm_memory_block *binary_src, arnm *allocator
 );
+
+/**
+ * @brief Read the transaction number out of a serialized confirmed transaction, and nothing else.
+ *
+ * `id` is field 1 of `ConfirmedTransaction`, a single varint at the top level. Finding it takes
+ * a walk over the top level fields -- each one's tag, and its length where it has one -- without
+ * entering any of them: the gradido transaction, its body, the signatures and the balances are
+ * stepped over as the byte runs they are. A store that writes bytes down and keys them by number
+ * learns the number this way, instead of from a caller who might pass another.
+ *
+ * The walk does not assume field 1 comes first, although encoders put it there: it looks at
+ * every top level field, and where `id` appears more than once the last one counts, as the
+ * protobuf rules for a singular field have it.
+ *
+ * @param[in]  serialized The `ConfirmedTransaction` bytes; not NULL. An empty block is a message
+ *                        with every field at its default.
+ * @param[out] out        Receives the number, 0 when the message carries none -- proto3 leaves
+ *                        a 0 out, and 0 is no transaction number, so a caller refuses it.
+ *                        Untouched on failure.
+ * @retval ARNM_SUCCESS             Read, or absent and reported as 0.
+ * @retval ARNM_ERROR_NULL_POINTER  An argument is NULL, or @p serialized has a size and no data.
+ * @retval ARNM_ERROR_DECODE_FAILED The top level is not well formed: a varint cut off or longer
+ *                                  than 64 bits, a length reaching past the end, field number 0,
+ *                                  a group or reserved wire type, or field 1 as something other
+ *                                  than a varint.
+ * @whisper The number read from the spine, the pages left closed
+ */
+arnm_result grdw_confirmed_transaction_peek_id(const arnm_memory_block *serialized, uint64_t *out);
 
 /**
  * @brief Encode a confirmed transaction into binary wire format.

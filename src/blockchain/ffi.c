@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/blockchain/ffi.h"
+#include "gradido_blockchain_core/data/wire/confirmed_transaction.h"
 
 #include <string.h>
 
@@ -81,13 +82,17 @@ static arnm_result ffi_fetch(
   return ARNM_SUCCESS;
 }
 
-static arnm_result ffi_append_serialized(
-    void *user_data, uint64_t tx_nr, const arnm_memory_block *serialized
-) {
+static arnm_result ffi_append_serialized(void *user_data, const arnm_memory_block *serialized) {
   grdb_chain_ffi *adapter = (grdb_chain_ffi *)user_data;
   if (!adapter || !adapter->ready || !serialized) { return ARNM_ERROR_NULL_POINTER; }
   if (!adapter->host.put) { return ARNM_ERROR_INVALID_STATE; }
   if (!serialized->data || !serialized->size) { return ARNM_ERROR_INVALID_PARAM; }
+
+  // the host keys its rows by number; it gets the one the bytes carry, read without a decode
+  uint64_t tx_nr = 0;
+  const arnm_result peeked = grdw_confirmed_transaction_peek_id(serialized, &tx_nr);
+  if (ARNM_SUCCESS != peeked) { return peeked; }
+  if (!tx_nr) { return ARNM_ERROR_INVALID_PARAM; }
 
   const int answer =
       adapter->host.put(adapter->host.user_data, tx_nr, serialized->data, serialized->size);

@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/blockchain/transactions.h"
+#include "gradido_blockchain_core/crypto/validation.h"
 
 #include <string.h>
 
@@ -26,14 +27,6 @@
 static int64_t day_of_second(int64_t seconds) {
   return seconds >= 0 ? seconds / INDEX_SECONDS_PER_DAY
                       : -(((-seconds) + INDEX_SECONDS_PER_DAY - 1) / INDEX_SECONDS_PER_DAY);
-}
-
-/** Whether every byte of a 32 byte public key is zero -- the sender a creation does not have. */
-static bool is_zero_key(const uint8_t *key) {
-  for (uint32_t i = 0; i < SIGN_PUBLIC_KEY_SIZE; ++i) {
-    if (key[i]) { return false; }
-  }
-  return true;
 }
 
 /** The sets of @p id, which the map handed out and the vector holds. */
@@ -278,7 +271,7 @@ arnm_result grdb_transactions_add(grdb_transactions *index, const grdr_complete_
   // the signatures: whoever signed
   for (size_t i = 0; i < tx->signature_pairs_count; ++i) {
     const uint8_t *key = tx->signature_pairs[i].public_key;
-    if (is_zero_key(key)) { continue; }
+    if (grdc_is_empty(key, SIGN_PUBLIC_KEY_SIZE)) { continue; }
     grdb_address_sets *sets = NULL;
     result = sets_for_key(index, key, &sets);
     if (ARNM_SUCCESS != result) { return result; }
@@ -289,7 +282,7 @@ arnm_result grdb_transactions_add(grdb_transactions *index, const grdr_complete_
   // the account balances: whose balance the transaction moved, and in which coin
   for (size_t i = 0; i < tx->account_balances_count; ++i) {
     const grdw_account_balance *balance = &tx->account_balances[i];
-    if (!is_zero_key(balance->pubkey)) {
+    if (!grdc_is_empty(balance->pubkey, SIGN_PUBLIC_KEY_SIZE)) {
       grdb_address_sets *sets = NULL;
       result = sets_for_key(index, balance->pubkey, &sets);
       if (ARNM_SUCCESS != result) { return result; }
@@ -331,7 +324,7 @@ arnm_result grdb_transactions_add(grdb_transactions *index, const grdr_complete_
     break;
   }
   for (uint32_t i = 0; i < 3; ++i) {
-    if (!named[i] || is_zero_key(named[i])) { continue; }
+    if (!named[i] || grdc_is_empty(named[i], SIGN_PUBLIC_KEY_SIZE)) { continue; }
     grdb_address_sets *sets = NULL;
     result = sets_for_key(index, named[i], &sets);
     if (ARNM_SUCCESS != result) { return result; }

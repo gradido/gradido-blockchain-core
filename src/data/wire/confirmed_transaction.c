@@ -7,6 +7,8 @@
 #include "gradido_blockchain_core/mapping/wire_from_pbtools.h"
 #include "gradido_blockchain_core/result.h"
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 void grdw_confirmed_transaction_init(grdw_confirmed_transaction *tx) {
@@ -110,4 +112,90 @@ void grdw_confirmed_transaction_free(grdw_confirmed_transaction *tx, arnm *alloc
       allocator
   );
   grdw_confirmed_transaction_init(tx);
+}
+
+// ********** the number alone *******************
+
+/** Field 1 of ConfirmedTransaction, the transaction number. */
+#define PEEK_ID_FIELD 1u
+/** Protobuf wire types a top level field of this message can have. */
+#define PEEK_WIRE_VARINT 0u
+#define PEEK_WIRE_FIXED64 1u
+#define PEEK_WIRE_LENGTH 2u
+#define PEEK_WIRE_FIXED32 5u
+
+/**
+ * One varint at @p *pos, which moves past it. False when it runs off the end or needs more than
+ * 64 bits: ten bytes at most, and the tenth may carry only the highest bit.
+ */
+static bool peek_varint(const uint8_t *data, uint32_t size, uint32_t *pos, uint64_t *out) {
+  uint64_t value = 0;
+  for (uint32_t shift = 0; shift < 64u; shift += 7u) {
+    if (*pos >= size) { return false; }
+    const uint8_t byte = data[(*pos)++];
+    if (63u == shift && byte > 1u) { return false; }
+    value |= (uint64_t)(byte & 0x7Fu) << shift;
+    if (!(byte & 0x80u)) {
+      *out = value;
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Steps @p *pos over @p count bytes, false when fewer are left. */
+static bool peek_skip(uint32_t size, uint32_t *pos, uint64_t count) {
+  if ((uint64_t)(size - *pos) < count) { return false; }
+  *pos += (uint32_t)count;
+  return true;
+}
+
+arnm_result grdw_confirmed_transaction_peek_id(const arnm_memory_block *serialized, uint64_t *out) {
+  if (!serialized || !out || (serialized->size && !serialized->data)) {
+    return ARNM_ERROR_NULL_POINTER;
+  }
+  const uint8_t *data = serialized->data;
+  const uint32_t size = serialized->size;
+  uint32_t pos = 0;
+  uint64_t id = 0;
+
+  while (pos < size) {
+    uint64_t tag = 0;
+    if (!peek_varint(data, size, &pos, &tag)) { return ARNM_ERROR_DECODE_FAILED; }
+    const uint64_t field = tag >> 3;
+    const uint32_t wire = (uint32_t)(tag & 7u);
+    if (!field) { return ARNM_ERROR_DECODE_FAILED; }
+
+    if (PEEK_ID_FIELD == field) {
+      // the number itself; a later one replaces an earlier, as for any singular field
+      if (PEEK_WIRE_VARINT != wire) { return ARNM_ERROR_DECODE_FAILED; }
+      if (!peek_varint(data, size, &pos, &id)) { return ARNM_ERROR_DECODE_FAILED; }
+      continue;
+    }
+
+    // any other field is stepped over as what its wire type says it is, never entered
+    uint64_t length = 0;
+    bool stepped = false;
+    switch (wire) {
+    case PEEK_WIRE_VARINT:
+      stepped = peek_varint(data, size, &pos, &length);
+      break;
+    case PEEK_WIRE_FIXED64:
+      stepped = peek_skip(size, &pos, 8u);
+      break;
+    case PEEK_WIRE_LENGTH:
+      stepped = peek_varint(data, size, &pos, &length) && peek_skip(size, &pos, length);
+      break;
+    case PEEK_WIRE_FIXED32:
+      stepped = peek_skip(size, &pos, 4u);
+      break;
+    default:
+      stepped = false;
+      break; // groups and reserved types have no place in this message
+    }
+    if (!stepped) { return ARNM_ERROR_DECODE_FAILED; }
+  }
+
+  *out = id;
+  return ARNM_SUCCESS;
 }

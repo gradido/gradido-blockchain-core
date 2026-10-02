@@ -134,29 +134,34 @@ static arnm_result in_memory_append(void *user_data, grdr_complete_transaction *
 }
 
 static arnm_result in_memory_append_serialized(
-    void *user_data, uint64_t tx_nr, const arnm_memory_block *serialized
+    void *user_data, const arnm_memory_block *serialized
 ) {
   grdb_in_memory *store = (grdb_in_memory *)user_data;
   if (!store || !store->ready || !serialized) { return ARNM_ERROR_NULL_POINTER; }
   if (!serialized->data || !serialized->size) { return ARNM_ERROR_INVALID_PARAM; }
-  if (!is_next(store, tx_nr)) { return ARNM_ERROR_INVALID_PARAM; }
 
   void *slot = NULL;
   arnm_result result = arnm_bvec_emplace(&store->records, &slot);
   if (ARNM_SUCCESS != result) { return result; }
   grdr_complete_transaction *kept = (grdr_complete_transaction *)slot;
 
-  // decoded once, here, into the slot it will live in -- and never again
+  // decoded once, here, into the slot it will live in -- and never again. The number is read
+  // from what the decode produced: this store decodes anyway, so there is one reading of it.
   grdr_complete_transaction_init(kept);
   result = grdr_complete_transaction_init_from_protobuf(
       kept, serialized->data, serialized->size, store->community_uuid, store->scratch,
       store->scratch_size
   );
+  if (ARNM_SUCCESS == result && !is_next(store, kept->tx_nr)) {
+    // decoded and not the next one: it already holds an arena of its own, which goes back
+    grdr_complete_transaction_release(kept);
+    result = ARNM_ERROR_INVALID_PARAM;
+  }
   if (ARNM_SUCCESS != result) {
     arnm_bvec_pop(&store->records);
     return result;
   }
-  note_appended(store, tx_nr);
+  note_appended(store, kept->tx_nr);
   return ARNM_SUCCESS;
 }
 

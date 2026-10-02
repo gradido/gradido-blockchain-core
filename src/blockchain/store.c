@@ -15,9 +15,9 @@ arnm_result grdb_chain_store_append(const grdb_chain_store *store, grdr_complete
 }
 
 arnm_result grdb_chain_store_append_serialized(
-    const grdb_chain_store *store, uint64_t tx_nr, const arnm_memory_block *serialized
+    const grdb_chain_store *store, const arnm_memory_block *serialized
 ) {
   if (!serialized || !serialized->data || !serialized->size) { return ARNM_ERROR_NULL_POINTER; }
   if (!store || !store->append_serialized) { return ARNM_ERROR_INVALID_STATE; }
-  return store->append_serialized(store->user_data, tx_nr, serialized);
+  return store->append_serialized(store->user_data, serialized);
 }

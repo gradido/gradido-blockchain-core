@@ -1,4 +1,5 @@
 #include "gradido_blockchain_core/blockchain/addresses.h"
+#include "gradido_blockchain_core/crypto/validation.h"
 
 #include <string.h>
 
@@ -75,10 +76,8 @@ static const address_entry *entry_of_key(const grdb_addresses *index, const uint
 static arnm_result note_type(
     grdb_addresses *index, const uint8_t *key, uint64_t tx_nr, grdt_address type
 ) {
-  if (!key) { return ARNM_SUCCESS; }
-  bool zero = true;
-  for (uint32_t i = 0; i < SIGN_PUBLIC_KEY_SIZE && zero; ++i) { zero = !key[i]; }
-  if (zero) { return ARNM_SUCCESS; }
+  // a blank key is no address: the sender a creation leaves empty
+  if (!key || grdc_is_empty(key, SIGN_PUBLIC_KEY_SIZE)) { return ARNM_SUCCESS; }
   if ((uint32_t)type > (uint32_t)GRDT_ADDRESS_DEFERRED_TRANSFER) {
     return ARNM_ERROR_INVALID_ENUM_TYPE;
   }
@@ -211,9 +210,7 @@ arnm_result grdb_addresses_add(grdb_addresses *index, const grdr_complete_transa
 
   for (size_t i = 0; i < tx->account_balances_count; ++i) {
     const uint8_t *key = tx->account_balances[i].pubkey;
-    bool zero = true;
-    for (uint32_t b = 0; b < SIGN_PUBLIC_KEY_SIZE && zero; ++b) { zero = !key[b]; }
-    if (zero) { continue; }
+    if (grdc_is_empty(key, SIGN_PUBLIC_KEY_SIZE)) { continue; }
     address_entry *entry = NULL;
     result = entry_for_key(index, key, &entry);
     if (ARNM_SUCCESS != result) { return result; }

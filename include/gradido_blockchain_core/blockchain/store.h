@@ -116,23 +116,24 @@ typedef struct grdb_chain_store {
   arnm_result (*append)(void *user_data, grdr_complete_transaction *tx);
 
   /**
-   * @brief Keep @p serialized as transaction @p tx_nr. NULL when this store takes no bytes.
+   * @brief Keep @p serialized. NULL when this store takes no bytes.
    *
-   * The number is passed beside the bytes although they carry it too: reading it out of them is
-   * a decode, and a store that writes bytes down -- keyed by that number -- has no other reason
-   * to decode at all.
+   * The number it is kept under is the one the bytes carry, field 1: there is no second number
+   * to pass and none to disagree with it. A store that decodes anyway reads it from what the
+   * decode produced; one that writes bytes down has no other reason to decode and reads that
+   * one field alone, with @ref grdw_confirmed_transaction_peek_id().
    *
    * @param[in,out] user_data  As given in this struct.
-   * @param[in]     tx_nr      The number to keep it under; one above the store's largest.
-   * @param[in]     serialized The `ConfirmedTransaction` bytes; not NULL and not empty. Read
-   *                           before the call returns and not kept.
+   * @param[in]     serialized The `ConfirmedTransaction` bytes; not NULL and not empty, their
+   *                           number one above the store's largest. Read before the call returns
+   *                           and not kept.
    * @retval ARNM_SUCCESS             Kept.
-   * @retval ARNM_ERROR_INVALID_PARAM @p tx_nr is not the number after the store's largest.
+   * @retval ARNM_ERROR_INVALID_PARAM The number the bytes carry is 0 or not the one after the
+   *                                  store's largest.
+   * @retval ARNM_ERROR_DECODE_FAILED The bytes are no well formed message.
    * @return Anything else when the write or a decode on the way in failed; nothing was kept.
    */
-  arnm_result (*append_serialized)(
-      void *user_data, uint64_t tx_nr, const arnm_memory_block *serialized
-  );
+  arnm_result (*append_serialized)(void *user_data, const arnm_memory_block *serialized);
 } grdb_chain_store;
 
 /** @brief Whether @p store can be written to at all, in either form. */
@@ -175,14 +176,13 @@ arnm_result grdb_chain_store_append(const grdb_chain_store *store, grdr_complete
  * @brief @ref grdb_chain_store::append_serialized with the checks.
  *
  * @param[in] store      Store to write to; may be NULL.
- * @param[in] tx_nr      The number to keep it under.
- * @param[in] serialized The bytes; not NULL and not empty.
+ * @param[in] serialized The bytes; not NULL and not empty, kept under the number they carry.
  * @retval ARNM_ERROR_NULL_POINTER  @p serialized is NULL or holds nothing.
  * @retval ARNM_ERROR_INVALID_STATE @p store is NULL or takes no bytes.
  * @return Otherwise whatever the store answered.
  */
 arnm_result grdb_chain_store_append_serialized(
-    const grdb_chain_store *store, uint64_t tx_nr, const arnm_memory_block *serialized
+    const grdb_chain_store *store, const arnm_memory_block *serialized
 );
 
 /** @} */

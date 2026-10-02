@@ -99,6 +99,9 @@ typedef struct grdb_chain_ffi_host {
   /**
    * @brief Keep @p data as transaction @p tx_nr. NULL makes the chain read only.
    *
+   * @p tx_nr is not the caller's word for it: the adapter reads it out of @p data, field 1, so
+   * the key the host files the row under is the number the row itself carries.
+   *
    * @retval GRDB_FFI_OK Kept; the bytes need not outlive the call.
    * @return Any other value when the write failed; the chain answers @c ARNM_ERROR_ENCODE_FAILED.
    */
