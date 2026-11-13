@@ -4,6 +4,7 @@
 #include "gradido_blockchain_core/crypto/validation.h"
 #include "gradido_blockchain_core/data/runtime/complete_transaction.h"
 #include "gradido_blockchain_core/data/wire/basic_types.h"
+#include "gradido_blockchain_core/data/wire/transaction_body.h"
 #include "gradido_blockchain_core/error_details.h"
 #include "gradido_blockchain_core/interactions/validate/options.h"
 #include "gradido_blockchain_core/interactions/validate/result_type.h"
@@ -21,6 +22,17 @@
 #include <stddef.h>
 #include <string.h>
 
+static grdi_validate_result_type validateBodyBytes(
+  const grdr_complete_transaction *input_tx,
+  const grdi_validate_options *options,
+  grd_error_details *error_details
+) {
+  if (!options->enable_parse_body_bytes) {
+    return GRDI_VALIDATE_SUCCESS;
+  }
+  grdw_transaction_body body;
+}
+
 // all checks which don't need other transactions
 static grdi_validate_result_type validateCommon(
     const grdr_complete_transaction *input_tx,
@@ -35,6 +47,9 @@ static grdi_validate_result_type validateCommon(
     grd_error_details_fill(error_details, "empty body bytes", NULL, NULL);
     return GRDI_VALIDATE_INVALID_FIELD;
   }
+  grdi_validate_result_type result = validateBodyBytes(input_tx, options, error_details);
+  if (GRDI_VALIDATE_SUCCESS != result) return result;
+    
   // 946681200 = 01.01.2000
   if (input_tx->confirmed_at.seconds < 946681200) {
     grd_error_details_fill_actual_is_number(
@@ -175,8 +190,8 @@ grdi_validate_result_type grdi_validate_complete_transaction(
 }
 
 grdi_validate_result_type grdi_validate_complete_transaction_flat_options(
-    const grdr_complete_transaction *input_tx, bool enable_verify, grd_error_details *error_details
+    const grdr_complete_transaction *input_tx, bool enable_verify, bool enable_parse_body_bytes, grd_error_details *error_details
 ) {
-  grdi_validate_options options = {.enable_verify = enable_verify};
+  grdi_validate_options options = {.enable_verify = enable_verify, .enable_parse_body_bytes = enable_parse_body_bytes};
   return grdi_validate_complete_transaction(input_tx, &options, error_details);
 }

@@ -9,6 +9,7 @@ extern "C" {
 
 typedef struct grdi_validate_options {
   bool enable_verify;
+  bool enable_parse_body_bytes;
 } grdi_validate_options;
 
 #ifdef __cplusplus

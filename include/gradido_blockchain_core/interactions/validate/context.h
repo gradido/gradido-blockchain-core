@@ -14,7 +14,7 @@ typedef struct grdr_complete_transaction grdr_complete_transaction;
 typedef struct grd_error_details grd_error_details;
 
 grdi_validate_result_type grdi_validate_complete_transaction_flat_options(
-    const grdr_complete_transaction *input_tx, bool enable_verify, grd_error_details *error_details
+    const grdr_complete_transaction *input_tx, bool enable_verify, bool enable_parse_body_bytes, grd_error_details *error_details
 );
 
 //! \param error_details only used if not set to null
